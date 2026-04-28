@@ -1,21 +1,27 @@
-/* Minimal reactive store — avoids Zustand/Redux dependency for a prototype.
- * Each slice is a plain object + subscribe/notify pattern.
- * Swap for a proper state library before production.
+/* Reactive store — publish/subscribe pattern.
+ *
+ * When VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set, the store
+ * initializes from the live database and subscribes to realtime updates.
+ * Without those env vars it falls back to local seed data so the demo
+ * works with zero backend setup.
  */
 
-import type { Ticket } from '../data/types'
+import type { Ticket, User } from '../data/types'
 import {
   NOTIFICATIONS as SEED_NOTIFS,
   TICKETS as SEED_TICKETS,
   USERS,
 } from '../data/seed'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { fetchTickets } from '../api/tickets'
+import { fetchNotifications, markNotificationRead, markAllNotificationsRead, subscribeToNotifications } from '../api/notifications'
+import { apiGetSession, apiSignOut, onAuthStateChange } from '../api/auth'
 
 type Listener = () => void
 
 function createStore<T extends object>(initial: T) {
   let state = { ...initial }
   const listeners = new Set<Listener>()
-
   function getState(): T { return state }
   function setState(partial: Partial<T>) {
     state = { ...state, ...partial }
@@ -28,28 +34,60 @@ function createStore<T extends object>(initial: T) {
   return { getState, setState, subscribe }
 }
 
-// ─── Auth store ─────────────────────────────────────────────────────────────
+// ─── Auth store ──────────────────────────────────────────────────────────────
 
-const DEMO_USERS = USERS
 const ACTIVE_USER_KEY = 'pdpl_active_user'
 const savedUserId = sessionStorage.getItem(ACTIVE_USER_KEY)
-const defaultUser = DEMO_USERS.find((u) => u.id === savedUserId) ?? DEMO_USERS.find((u) => u.role === 'data_management')!
+const defaultDemoUser = USERS.find((u) => u.id === savedUserId) ?? USERS.find((u) => u.role === 'data_management')!
 
 export const authStore = createStore({
-  user: defaultUser,
+  user: defaultDemoUser,
   isSignedIn: !!savedUserId,
+  loading: isSupabaseConfigured,    // true while session check is in-flight
 })
 
+// Demo mode (no Supabase): persona switcher
 export function signIn(userId: string) {
-  const user = DEMO_USERS.find((u) => u.id === userId)
+  if (isSupabaseConfigured) return  // use apiSignIn from auth.ts instead
+  const user = USERS.find((u) => u.id === userId)
   if (!user) return
   sessionStorage.setItem(ACTIVE_USER_KEY, userId)
   authStore.setState({ user, isSignedIn: true })
+  void loadUserData(user)
 }
 
 export function signOut() {
+  if (isSupabaseConfigured) {
+    void apiSignOut().then(() => {
+      sessionStorage.removeItem(ACTIVE_USER_KEY)
+      authStore.setState({ user: USERS.find((u) => u.role === 'requester')!, isSignedIn: false })
+    })
+    return
+  }
   sessionStorage.removeItem(ACTIVE_USER_KEY)
-  authStore.setState({ user: DEMO_USERS.find((u) => u.role === 'requester')!, isSignedIn: false })
+  authStore.setState({ user: USERS.find((u) => u.role === 'requester')!, isSignedIn: false })
+}
+
+// When Supabase is configured, restore session on page load
+if (isSupabaseConfigured) {
+  void apiGetSession().then((user) => {
+    if (user) {
+      authStore.setState({ user, isSignedIn: true, loading: false })
+      void loadUserData(user)
+    } else {
+      authStore.setState({ loading: false })
+    }
+  })
+
+  // Subscribe to auth state changes (sign in / sign out from another tab)
+  onAuthStateChange((user) => {
+    if (user) {
+      authStore.setState({ user, isSignedIn: true })
+      void loadUserData(user)
+    } else {
+      authStore.setState({ user: defaultDemoUser, isSignedIn: false })
+    }
+  })
 }
 
 // ─── Notification store ──────────────────────────────────────────────────────
@@ -64,6 +102,7 @@ export function markNotifRead(id: string) {
       n.id === id ? { ...n, read: true } : n
     ),
   })
+  if (isSupabaseConfigured) void markNotificationRead(id)
 }
 
 export function markAllRead(userId: string) {
@@ -72,16 +111,18 @@ export function markAllRead(userId: string) {
       n.userId === userId ? { ...n, read: true } : n
     ),
   })
+  if (isSupabaseConfigured) void markAllNotificationsRead(userId)
 }
 
 export function unreadCount(userId: string): number {
   return notifStore.getState().items.filter((n) => n.userId === userId && !n.read).length
 }
 
-// ─── Ticket store ─────────────────────────────────────────────────────────────
+// ─── Ticket store ────────────────────────────────────────────────────────────
 
 export const ticketStore = createStore({
-  tickets: [...SEED_TICKETS],
+  tickets: isSupabaseConfigured ? [] as Ticket[] : [...SEED_TICKETS],
+  loading: isSupabaseConfigured,
 })
 
 export function updateTicket(id: string, partial: Partial<Ticket>) {
@@ -92,7 +133,48 @@ export function updateTicket(id: string, partial: Partial<Ticket>) {
   })
 }
 
-// Draft persistence — autosave draft wizard state to sessionStorage
+export async function refreshTickets() {
+  if (!isSupabaseConfigured) return
+  ticketStore.setState({ loading: true })
+  try {
+    const tickets = await fetchTickets()
+    ticketStore.setState({ tickets, loading: false })
+  } catch {
+    ticketStore.setState({ loading: false })
+  }
+}
+
+// ─── Load user data (tickets + notifications) ────────────────────────────────
+
+let _notifUnsubscribe: (() => void) | null = null
+
+async function loadUserData(user: User) {
+  if (!isSupabaseConfigured || !supabase) return
+
+  // Tickets
+  ticketStore.setState({ loading: true })
+  try {
+    const tickets = await fetchTickets()
+    ticketStore.setState({ tickets, loading: false })
+  } catch {
+    ticketStore.setState({ loading: false })
+  }
+
+  // Notifications
+  try {
+    const items = await fetchNotifications(user.id)
+    notifStore.setState({ items })
+  } catch { /* noop */ }
+
+  // Realtime notification subscription
+  _notifUnsubscribe?.()
+  _notifUnsubscribe = subscribeToNotifications(user.id, (n) => {
+    notifStore.setState({ items: [n, ...notifStore.getState().items] })
+  })
+}
+
+// ─── Draft persistence ───────────────────────────────────────────────────────
+
 const DRAFT_KEY = 'pdpl_wizard_draft'
 export function saveDraft(data: object) {
   try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data)) } catch { /* noop */ }
@@ -124,7 +206,7 @@ export function showToast(message: string, kind: ToastItem['kind'] = 'default') 
   }, 4000)
 }
 
-// ─── AI state ─────────────────────────────────────────────────────────────────
+// ─── AI stream store ─────────────────────────────────────────────────────────
 
 export interface AIStreamState {
   streaming: boolean
@@ -134,10 +216,7 @@ export interface AIStreamState {
 }
 
 export const aiStreamStore = createStore<AIStreamState>({
-  streaming: false,
-  tokens: [],
-  done: false,
-  error: null,
+  streaming: false, tokens: [], done: false, error: null,
 })
 
 export function resetAIStream() {
