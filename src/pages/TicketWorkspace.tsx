@@ -273,7 +273,7 @@ export default function TicketWorkspace() {
                   cannedKey="reviewer_copilot_vendor_check"
                   citations={generation.citations}
                   confidence={generation.confidence}
-                  feature="reviewer"
+                  feature="copilot"
                   context={ticket.title}
                 />
               </aside>

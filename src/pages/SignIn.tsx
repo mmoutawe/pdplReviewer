@@ -1,14 +1,139 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authStore, signIn } from '../store'
 import { useStore } from '../hooks/useStore'
 import { USERS, ROLE_LABELS } from '../data/seed'
 import { Avatar } from '../components/primitives'
 import Logo from '../components/Logo'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { apiSignIn } from '../api/auth'
 
 const PERSONAS = USERS.filter((u) => u.role !== 'external_recipient')
 
-export default function SignIn() {
+// ── Real auth form (Supabase mode) ────────────────────────
+
+function SupabaseSignIn() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
+  const { isSignedIn } = useStore(authStore)
+
+  useEffect(() => {
+    if (isSignedIn) navigate('/dashboard')
+  }, [isSignedIn, navigate])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+    try {
+      await apiSignIn(email, password)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: 'var(--surface-1)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '24px 16px',
+    }}>
+      <div className="card" style={{ width: '100%', maxWidth: 420, padding: '40px 36px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <Logo size="lg" />
+          <p style={{ marginTop: 16, color: 'var(--ink-500)', fontSize: 14, lineHeight: 1.6 }}>
+            AI-powered PDPL compliance platform.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label htmlFor="email" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+              WORK EMAIL
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              style={{
+                width: '100%', padding: '9px 12px', fontSize: 14,
+                border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+                background: 'var(--surface-0)', color: 'var(--ink-900)',
+                outline: 'none', boxSizing: 'border-box',
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+              PASSWORD
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              style={{
+                width: '100%', padding: '9px 12px', fontSize: 14,
+                border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+                background: 'var(--surface-0)', color: 'var(--ink-900)',
+                outline: 'none', boxSizing: 'border-box',
+              }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }}
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              padding: '8px 12px', borderRadius: 'var(--r-sm)',
+              background: '#FEF2F2', border: '1px solid #FECACA',
+              fontSize: 13, color: '#B91C1C',
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              marginTop: 4, padding: '10px 0', borderRadius: 'var(--r-sm)',
+              background: loading ? 'var(--brand-300)' : 'var(--brand-700)',
+              color: '#fff', fontSize: 14, fontWeight: 600,
+              border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background var(--t-fast)',
+            }}>
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+
+        <p style={{ marginTop: 24, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
+          PDPL Reviewer — Saudi FinTech privacy compliance under Royal Decree M/19, 2021.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Demo persona switcher (no-backend mode) ───────────────
+
+function DemoSignIn() {
   useEffect(() => { document.title = 'Sign In — PDPL Reviewer' }, [])
   const { isSignedIn, user } = useStore(authStore)
   const navigate = useNavigate()
@@ -28,7 +153,6 @@ export default function SignIn() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '24px 16px',
     }}>
-      {/* Card */}
       <div className="card" style={{ width: '100%', maxWidth: 460, padding: '40px 36px' }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <Logo size="lg" />
@@ -38,7 +162,6 @@ export default function SignIn() {
           </p>
         </div>
 
-        {/* Compliance badge */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--brand-50)', border: '1px solid #BFDBFE',
@@ -95,4 +218,9 @@ export default function SignIn() {
       </div>
     </div>
   )
+}
+
+export default function SignIn() {
+  useEffect(() => { document.title = 'Sign In — PDPL Reviewer' }, [])
+  return isSupabaseConfigured ? <SupabaseSignIn /> : <DemoSignIn />
 }

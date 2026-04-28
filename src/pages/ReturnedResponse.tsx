@@ -71,7 +71,7 @@ export default function ReturnedResponse() {
           title="AI Evaluate Reply"
           cannedKey="evaluate_reply_high"
           initialText="Write your reply and click 'Submit' — the AI will score it for completeness, specificity, and evidentiary support."
-          feature="reviewer"
+          feature="copilot"
           context={`Return thread — ${ticket.id}`}
         />
       </aside>

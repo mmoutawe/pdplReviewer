@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Citation } from '../data/types'
 import { ConfidenceBadge } from './primitives'
-import { AI_CANNED, runAIStream } from '../lib/mockAi'
-import { aiStreamStore } from '../store'
+import { AI_CANNED } from '../lib/mockAi'
+import { streamAI } from '../api/ai'
+import { aiStreamStore, resetAIStream } from '../store'
 import { useStore } from '../hooks/useStore'
 
 // ─── Citation chip ────────────────────────────────────────────────────────────
@@ -40,7 +41,8 @@ interface CopilotProps {
   confidence?: number
   initialText?: string
   context?: string
-  feature?: 'reviewer' | 'policy_chat' | 'document_chat' | 'request_builder'
+  ticketId?: string
+  feature?: 'copilot' | 'policy_chat' | 'document_chat' | 'request_builder' | 'pre_assessment' | 'evaluate_reply'
 }
 
 export function AICoPilotPanel({
@@ -50,7 +52,8 @@ export function AICoPilotPanel({
   confidence,
   initialText,
   context,
-  feature = 'reviewer',
+  ticketId,
+  feature = 'copilot',
 }: CopilotProps) {
   const { streaming, tokens, done, error } = useStore(aiStreamStore)
   const [started, setStarted] = useState(false)
@@ -62,9 +65,10 @@ export function AICoPilotPanel({
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
   }, [tokens, chatHistory])
 
-  async function triggerStream(text: string) {
+  async function triggerStream(fallbackText: string) {
     setStarted(true)
-    await runAIStream(text)
+    resetAIStream()
+    await streamAI({ feature, message: fallbackText, ticketId })
   }
 
   async function sendQuery() {
@@ -72,14 +76,9 @@ export function AICoPilotPanel({
     const q = query.trim()
     setQuery('')
     setChatHistory((h) => [...h, { role: 'user', text: q }])
-    const lower = q.toLowerCase()
-    const responseKey = lower.includes('transfer') || lower.includes('border') ? 'policy_chat_pdpl29'
-      : lower.includes('dpa') || lower.includes('data processing') ? 'policy_chat_dpa'
-      : lower.includes('vendor') ? 'reviewer_copilot_vendor_check'
-      : cannedKey ?? 'reviewer_copilot_vendor_check'
-    const text = AI_CANNED[responseKey] ?? AI_CANNED.reviewer_copilot_vendor_check
-    await runAIStream(text)
-    setChatHistory((h) => [...h, { role: 'ai', text }])
+    resetAIStream()
+    const responseText = await streamAI({ feature, message: q, ticketId })
+    setChatHistory((h) => [...h, { role: 'ai', text: responseText }])
   }
 
   const isPolicyOrDocChat = feature === 'policy_chat' || feature === 'document_chat'
@@ -144,8 +143,11 @@ export function AICoPilotPanel({
         {streaming && <AIStreamingMessage tokens={tokens} done={done} error={error} />}
 
         {/* Auto-trigger button */}
-        {!started && !initialText && !isPolicyOrDocChat && cannedKey && (
-          <button className="btn btn-ai btn-sm" onClick={() => triggerStream(AI_CANNED[cannedKey] ?? '')}>
+        {!started && !initialText && !isPolicyOrDocChat && (
+          <button className="btn btn-ai btn-sm"
+            onClick={() => triggerStream(
+              cannedKey ? (AI_CANNED[cannedKey] ?? 'Analyze this request for PDPL compliance.') : 'Analyze this request for PDPL compliance.'
+            )}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
               <path d="M6 1l1 2.5L9.5 4 7.5 6l.5 2.5L6 7.2 3.5 8.5 4 6 2 4l2.5-.5L6 1z" fill="white" />
             </svg>
