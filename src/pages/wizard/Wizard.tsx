@@ -6,8 +6,10 @@ import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
 import { ConfidenceBadge } from '../../components/primitives'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket } from '../../store'
 import { useStore } from '../../hooks/useStore'
+import { isSupabaseConfigured } from '../../lib/supabase'
+import { createTicket, submitTicket } from '../../api/tickets'
 
 type Method = 'manual' | 'ai'
 
@@ -53,6 +55,7 @@ export default function Wizard() {
   const [form, setForm] = useState<WizardState>(() => loadDraft<WizardState>() ?? { ...empty })
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   const requestType = type as RequestType
   const stepIndex = StepIndex(currentStep)
@@ -94,11 +97,55 @@ export default function Wizard() {
     else navigate(`/requests/new`)
   }
 
-  function submit() {
+  async function submit() {
     if (!validate('confirm')) return
-    clearDraft()
-    setSubmitted(true)
-    showToast('Request submitted successfully.', 'success')
+    if (submitting) return
+    setSubmitting(true)
+    try {
+      if (isSupabaseConfigured) {
+        const sensitive = ['biometric', 'health', 'national_id']
+        const financial  = ['iban', 'transaction_history']
+        const ticket = await createTicket({
+          type: requestType,
+          title: form.title,
+          description: form.description,
+          payload: {
+            vendorName: form.vendorName || undefined,
+            vendorJurisdiction: form.vendorJurisdiction || undefined,
+            hasDPA: form.hasDPA,
+          },
+          dataDeclaration: {
+            containsPII: form.dataCategories.length > 0,
+            piiCategories: form.dataCategories,
+            containsSensitive: form.dataCategories.some((c) => sensitive.includes(c)),
+            sensitiveCategories: form.dataCategories.filter((c) => sensitive.includes(c)),
+            containsFinancial: form.dataCategories.some((c) => financial.includes(c)),
+            financialCategories: form.dataCategories.filter((c) => financial.includes(c)),
+            affectedDataSubjectGroups: ['customers'],
+            estimatedSubjectCount: Number(form.estimatedSubjects) || 0,
+            retentionPeriodDays: Number(form.retentionDays) || 90,
+            encryptionState: 'both',
+            crossBorderInvolved: form.crossBorder,
+            consentObtained: form.consentObtained,
+            consentMechanism: form.consentObtained ? 'explicit' : undefined,
+          },
+          tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        })
+        const ready = await submitTicket(ticket.id)
+        updateTicket(ready.id, ready)
+        clearDraft()
+        showToast('Request submitted successfully.', 'success')
+        navigate(`/requests/${ready.id}`)
+      } else {
+        clearDraft()
+        setSubmitted(true)
+        showToast('Request submitted successfully.', 'success')
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Submission failed.', 'error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   // Demo assessment — use Zenith if vendor type, otherwise Sahab
@@ -395,7 +442,9 @@ export default function Wizard() {
                 Save draft
               </button>
               {currentStep === 'confirm' ? (
-                <button className="btn btn-primary btn-lg" onClick={submit}>Submit request</button>
+                <button className="btn btn-primary btn-lg" onClick={() => void submit()} disabled={submitting}>
+                  {submitting ? 'Submitting…' : 'Submit request'}
+                </button>
               ) : (
                 <button className="btn btn-primary" onClick={next}>Continue →</button>
               )}

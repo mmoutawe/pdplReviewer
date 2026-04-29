@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ticketStore, authStore, showToast } from '../store'
+import { ticketStore, authStore, showToast, updateTicket, refreshTickets } from '../store'
 import { useStore } from '../hooks/useStore'
 import {
   userById, vendorById, projectById, REQUEST_TYPE_LABELS,
@@ -13,7 +13,9 @@ import { AICoPilotPanel, CitationChip } from '../components/AICoPilotPanel'
 import { AuditTimeline } from '../components/AuditTimeline'
 import { CommentThread } from '../components/CommentThread'
 import { formatDate, formatDateTime } from '../lib/utils'
-import type { ReviewSlot } from '../data/types'
+import type { ReviewSlot, TicketState } from '../data/types'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { saveReviewDecision, transitionTicket, addReturnComment } from '../api/tickets'
 
 type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit'
 
@@ -319,7 +321,23 @@ export default function TicketWorkspace() {
         {activeTab === 'returns' && (
           <div style={{ maxWidth: 640 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Return thread</h2>
-            <CommentThread entries={ticket.returnThread} readOnly />
+            <CommentThread
+              entries={ticket.returnThread}
+              readOnly={ticket.state === 'approved' || ticket.state === 'rejected' || ticket.state === 'archived'}
+              onReply={async (msg) => {
+                if (isSupabaseConfigured) {
+                  try {
+                    await addReturnComment(ticket.id, msg)
+                    await refreshTickets()
+                    showToast('Comment added.', 'success')
+                  } catch (err) {
+                    showToast(err instanceof Error ? err.message : 'Failed to add comment.', 'error')
+                  }
+                } else {
+                  showToast('Comment added (demo mode).', 'success')
+                }
+              }}
+            />
           </div>
         )}
 
@@ -357,18 +375,91 @@ function ReviewerRow({ slot }: { slot: ReviewSlot }) {
   )
 }
 
-function ReviewActions(_props: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security' }) {
+function ReviewActions({ ticket, role }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security' }) {
   const navigate = useNavigate()
-  function decide(verdict: 'approve' | 'return' | 'reject') {
-    showToast(`Decision recorded: ${verdict}`, 'success')
-    navigate('/requests')
+  const [pending, setPending] = useState<'approve' | 'return' | 'reject' | null>(null)
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  function nextState(verdict: 'approve' | 'return' | 'reject'): TicketState {
+    if (verdict === 'return') return 'returned_to_requester'
+    if (verdict === 'reject') return 'rejected'
+    if (role === 'data_management') return 'in_legal_review'
+    if (role === 'legal') return 'in_security_review'
+    return 'approved'
+  }
+
+  async function confirmDecision() {
+    if (!pending) return
+    if (pending === 'return' && !notes.trim()) return
+    setSaving(true)
+    try {
+      if (isSupabaseConfigured) {
+        await saveReviewDecision(ticket.id, role, pending, notes || undefined)
+        const updated = await transitionTicket(ticket.id, nextState(pending), notes || undefined)
+        updateTicket(ticket.id, updated)
+      }
+      showToast(`Decision recorded: ${pending}`, 'success')
+      navigate('/requests')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to save decision.', 'error')
+    } finally {
+      setSaving(false)
+      setPending(null)
+      setNotes('')
+    }
   }
 
   return (
     <>
-      <button className="btn" onClick={() => decide('return')}>Return to requester</button>
-      <button className="btn btn-danger" onClick={() => decide('reject')}>Reject</button>
-      <button className="btn btn-primary" onClick={() => decide('approve')}>Approve</button>
+      <button className="btn" onClick={() => { setPending('return'); setNotes('') }}>Return to requester</button>
+      <button className="btn btn-danger" onClick={() => { setPending('reject'); setNotes('') }}>Reject</button>
+      <button className="btn btn-primary" onClick={() => { setPending('approve'); setNotes('') }}>Approve</button>
+
+      {/* Decision confirmation modal */}
+      {pending && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }} onClick={(e) => { if (e.target === e.currentTarget) setPending(null) }}>
+          <div style={{
+            background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px',
+            width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>
+              {pending === 'approve' ? 'Confirm approval' : pending === 'return' ? 'Return to requester' : 'Reject request'}
+            </h2>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 18, lineHeight: 1.6 }}>
+              {pending === 'approve'
+                ? `Approving will advance the ticket to ${nextState('approve').replace(/_/g, ' ')}.`
+                : pending === 'return'
+                ? 'Provide clear instructions so the requester knows what to address.'
+                : 'This decision is final and will be recorded in the audit log.'}
+            </p>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+                {pending === 'return' ? 'RETURN INSTRUCTIONS *' : 'NOTES (OPTIONAL)'}
+              </label>
+              <textarea
+                className="textarea"
+                rows={4}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={pending === 'return' ? 'Explain what needs to be corrected or provided…' : 'Add any notes for the audit record…'}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => { setPending(null); setNotes('') }} disabled={saving}>Cancel</button>
+              <button
+                className={`btn ${pending === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+                onClick={() => void confirmDecision()}
+                disabled={saving || (pending === 'return' && !notes.trim())}>
+                {saving ? 'Saving…' : pending === 'approve' ? 'Confirm approval' : pending === 'return' ? 'Send return' : 'Confirm rejection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

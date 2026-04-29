@@ -5,6 +5,8 @@ import Logo from '../components/Logo'
 import { StatusPill } from '../components/primitives'
 import { REQUEST_TYPE_LABELS } from '../data/seed'
 import { formatDate, formatDateTime } from '../lib/utils'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { submitExternalDecision } from '../api/ai'
 
 type Decision = 'approved' | 'rejected' | null
 
@@ -19,7 +21,9 @@ export default function ExternalApproval() {
   const [decision, setDecision] = useState<Decision>(null)
   const [comments, setComments] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [signatureName, setSignatureName] = useState('')
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   if (!link || !ticket) {
     return (
@@ -33,9 +37,20 @@ export default function ExternalApproval() {
     )
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!decision || !signatureName.trim()) return
-    setSubmitted(true)
+    setSubmitError(null)
+    setSubmitting(true)
+    try {
+      if (isSupabaseConfigured && token) {
+        await submitExternalDecision(token, decision === 'approved' ? 'approve' : 'reject', comments || undefined)
+      }
+      setSubmitted(true)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Submission failed. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (submitted) {
@@ -157,13 +172,19 @@ export default function ExternalApproval() {
         />
       </div>
 
+      {submitError && (
+        <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 'var(--r-sm)', background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 13, color: '#B91C1C' }}>
+          {submitError}
+        </div>
+      )}
+
       <button
         className={`btn ${decision === 'approved' ? 'btn-primary' : decision === 'rejected' ? 'btn-danger' : 'btn-primary'}`}
         style={{ width: '100%' }}
-        onClick={handleSubmit}
-        disabled={!decision || !signatureName.trim() || (decision === 'rejected' && !comments.trim())}
+        onClick={() => void handleSubmit()}
+        disabled={submitting || !decision || !signatureName.trim() || (decision === 'rejected' && !comments.trim())}
       >
-        {decision === 'approved' ? 'Confirm approval' : decision === 'rejected' ? 'Confirm rejection' : 'Select a decision'}
+        {submitting ? 'Submitting…' : decision === 'approved' ? 'Confirm approval' : decision === 'rejected' ? 'Confirm rejection' : 'Select a decision'}
       </button>
 
       <p style={{ fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', marginTop: 10 }}>
