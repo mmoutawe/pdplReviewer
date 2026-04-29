@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets } from '../store'
 import { useStore } from '../hooks/useStore'
 import {
-  userById, vendorById, projectById, REQUEST_TYPE_LABELS,
+  vendorById, projectById, REQUEST_TYPE_LABELS,
   AI_GENERATIONS, PRE_ASSESSMENTS, AUDIT,
 } from '../data/seed'
 import type { Attachment } from '../data/types'
@@ -16,7 +16,8 @@ import { CommentThread } from '../components/CommentThread'
 import { formatDate, formatDateTime } from '../lib/utils'
 import type { ReviewSlot, TicketState } from '../data/types'
 import { isSupabaseConfigured } from '../lib/supabase'
-import { saveReviewDecision, transitionTicket, addReturnComment } from '../api/tickets'
+import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket } from '../api/tickets'
+import { getCachedUser } from '../lib/userCache'
 
 type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit'
 
@@ -41,12 +42,18 @@ export default function TicketWorkspace() {
     document.title = ticket ? `${ticket.id} — PDPL Reviewer` : 'Ticket — PDPL Reviewer'
   }, [ticket])
 
+  // Live ticket updates via Supabase Realtime
+  useEffect(() => {
+    if (!isSupabaseConfigured || !id) return
+    return subscribeToTicket(id, (updated) => updateTicket(updated.id, updated))
+  }, [id])
+
   if (!ticket) {
     return <EmptyState title="Ticket not found" body={`No ticket with ID "${id}" exists.`} icon="🔍"
       action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back to requests</button>} />
   }
 
-  const requester = userById(ticket.requesterId)
+  const requester = getCachedUser(ticket.requesterId)
   const vendor = ticket.vendorId ? vendorById(ticket.vendorId) : null
   const project = ticket.projectId ? projectById(ticket.projectId) : null
   const [attachments, setAttachments] = useState<Attachment[]>(ticket.attachments)
@@ -299,7 +306,7 @@ export default function TicketWorkspace() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {ticket.reviews.map((r) => {
-                  const reviewer = r.reviewerId ? userById(r.reviewerId) : null
+                  const reviewer = r.reviewerId ? getCachedUser(r.reviewerId) : null
                   return (
                     <div key={r.role} className="card" style={{ padding: '14px 18px' }}>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: r.notes ? 8 : 0 }}>
@@ -365,7 +372,7 @@ export default function TicketWorkspace() {
 }
 
 function ReviewerRow({ slot }: { slot: ReviewSlot }) {
-  const reviewer = slot.reviewerId ? userById(slot.reviewerId) : null
+  const reviewer = slot.reviewerId ? getCachedUser(slot.reviewerId) : null
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--line-soft)' }}>
       {reviewer

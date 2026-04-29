@@ -1,5 +1,6 @@
 import { supabase, toTicket, toAttachment } from '../lib/supabase'
 import type { Ticket, TicketState, RequestType, DataDeclaration } from '../data/types'
+import { cacheUsers } from '../lib/userCache'
 
 const ATTACHMENT_BUCKET = 'ticket-attachments'
 const SIGNED_URL_TTL = 3600
@@ -43,6 +44,24 @@ export async function fetchTickets(filters?: {
     (signedUrls.data ?? []).map((u) => [u.path, u.signedUrl])
   )
 
+  // Populate user cache for requester + thread participant display
+  const userIds = [...new Set([
+    ...tickets.map((t) => t.requester_id as string),
+    ...(thread ?? []).map((e) => e.by_user_id as string),
+  ])]
+  if (userIds.length) {
+    const { data: userRows } = await supabase
+      .from('users').select('id, full_name, initials, avatar_color').in('id', userIds)
+    if (userRows) {
+      cacheUsers(userRows.map((u) => ({
+        id: u.id as string,
+        fullName: u.full_name as string,
+        initials: u.initials as string,
+        avatarColor: u.avatar_color as string,
+      })))
+    }
+  }
+
   return tickets.map((t) => {
     const tAtts = (attRows ?? [])
       .filter((r) => r.ticket_id === t.id)
@@ -75,6 +94,22 @@ export async function fetchTicketById(id: string): Promise<Ticket | null> {
 
   const urlMap = new Map((signedUrls.data ?? []).map((u) => [u.path, u.signedUrl]))
   const attachments = (attRows ?? []).map((r) => toAttachment(r, urlMap.get(r.storage_path) ?? undefined))
+
+  // Populate user cache
+  const userIds = [...new Set([
+    ticket.requester_id as string,
+    ...(thread ?? []).map((e) => e.by_user_id as string),
+  ])]
+  const { data: userRows } = await supabase
+    .from('users').select('id, full_name, initials, avatar_color').in('id', userIds)
+  if (userRows) {
+    cacheUsers(userRows.map((u) => ({
+      id: u.id as string,
+      fullName: u.full_name as string,
+      initials: u.initials as string,
+      avatarColor: u.avatar_color as string,
+    })))
+  }
 
   return toTicket(ticket, slots ?? [], thread ?? [], attachments)
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReturnThreadEntry } from '../data/types'
-import { userById } from '../data/seed'
+import { getCachedUser } from '../lib/userCache'
 import { Avatar, RoleBadge } from './primitives'
 import { timeAgo } from '../lib/utils'
 
@@ -20,7 +20,7 @@ export function CommentThread({ entries, onReply, readOnly = false }: ThreadProp
       )}
       <ul style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {entries.map((e) => {
-          const user = userById(e.by)
+          const user = getCachedUser(e.by)
           return (
             <li key={e.id} style={{
               background: 'var(--surface-0)', border: '1px solid var(--line)',
