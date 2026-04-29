@@ -106,6 +106,8 @@ export interface Attachment {
   uploadedBy: string
   uploadedAt: string
   storageBucket: string
+  storagePath: string
+  signedUrl?: string              // populated at fetch time, valid ~1 hour
   signedUrlExpiry?: string
   scanStatus: 'pending' | 'clean' | 'flagged'
   classification: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted'
@@ -169,7 +171,7 @@ export interface Ticket {
 
   reviews: ReviewSlot[]
   sla: SLA
-  attachments: string[]            // Attachment ids
+  attachments: Attachment[]
   returnThread: ReturnThreadEntry[]
   preAssessmentGenerationId?: string
   parentTicketId?: string          // For split tickets

@@ -108,7 +108,7 @@ export function toUser(r: DbUser): User {
   }
 }
 
-export function toTicket(r: DbTicket, slots: DbReviewSlot[], thread: DbReturnThreadEntry[]): Ticket {
+export function toTicket(r: DbTicket, slots: DbReviewSlot[], thread: DbReturnThreadEntry[], attachments: import('../data/types').Attachment[] = []): Ticket {
   return {
     id: r.id,
     type: r.type as Ticket['type'],
@@ -133,7 +133,7 @@ export function toTicket(r: DbTicket, slots: DbReviewSlot[], thread: DbReturnThr
     },
     reviews: slots.map(toReviewSlot),
     returnThread: thread.map(toReturnThreadEntry),
-    attachments: [],
+    attachments,
     preAssessmentGenerationId: r.pre_assessment_generation_id ?? undefined,
     parentTicketId: r.parent_ticket_id ?? undefined,
     submittedAt: r.submitted_at ?? undefined,
@@ -232,12 +232,14 @@ export function toAuditEvent(r: DbAuditEvent): AuditEvent {
   }
 }
 
-export function toAttachment(r: DbAttachment): Attachment {
+export function toAttachment(r: DbAttachment, signedUrl?: string): Attachment {
   return {
     id: r.id, ticketId: r.ticket_id, filename: r.filename,
     sizeBytes: r.size_bytes, contentType: r.content_type,
     uploadedBy: r.uploaded_by, uploadedAt: r.uploaded_at,
     storageBucket: r.storage_bucket,
+    storagePath: r.storage_path,
+    signedUrl,
     signedUrlExpiry: r.signed_url_expiry ?? undefined,
     scanStatus: r.scan_status as Attachment['scanStatus'],
     classification: r.classification as Attachment['classification'],

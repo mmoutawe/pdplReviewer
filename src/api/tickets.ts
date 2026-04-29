@@ -1,5 +1,8 @@
-import { supabase, toTicket } from '../lib/supabase'
+import { supabase, toTicket, toAttachment } from '../lib/supabase'
 import type { Ticket, TicketState, RequestType, DataDeclaration } from '../data/types'
+
+const ATTACHMENT_BUCKET = 'ticket-attachments'
+const SIGNED_URL_TTL = 3600
 
 // ── Fetch ─────────────────────────────────────────────────
 
@@ -21,34 +24,59 @@ export async function fetchTickets(filters?: {
   const { data: tickets, error } = await q.order('created_at', { ascending: false })
   if (error) throw error
 
-  // Fetch review slots and return threads for all tickets in one query
   const ticketIds = tickets.map((t) => t.id)
 
-  const [{ data: slots }, { data: thread }] = await Promise.all([
+  // Fetch slots, threads, and attachments in parallel
+  const [{ data: slots }, { data: thread }, { data: attRows }] = await Promise.all([
     supabase.from('review_slots').select('*').in('ticket_id', ticketIds),
     supabase.from('return_thread_entries').select('*').in('ticket_id', ticketIds).order('created_at'),
+    supabase.from('attachments').select('*').in('ticket_id', ticketIds).order('uploaded_at'),
   ])
 
-  return tickets.map((t) =>
-    toTicket(
+  // Batch signed URLs for all attachments
+  const paths = (attRows ?? []).map((r) => r.storage_path as string)
+  const signedUrls = paths.length
+    ? await supabase.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, SIGNED_URL_TTL)
+    : { data: [] }
+
+  const urlMap = new Map(
+    (signedUrls.data ?? []).map((u) => [u.path, u.signedUrl])
+  )
+
+  return tickets.map((t) => {
+    const tAtts = (attRows ?? [])
+      .filter((r) => r.ticket_id === t.id)
+      .map((r) => toAttachment(r, urlMap.get(r.storage_path) ?? undefined))
+    return toTicket(
       t,
       (slots ?? []).filter((s) => s.ticket_id === t.id),
       (thread ?? []).filter((e) => e.ticket_id === t.id),
+      tAtts,
     )
-  )
+  })
 }
 
 export async function fetchTicketById(id: string): Promise<Ticket | null> {
   if (!supabase) throw new Error('Supabase not configured')
 
-  const [{ data: ticket }, { data: slots }, { data: thread }] = await Promise.all([
+  const [{ data: ticket }, { data: slots }, { data: thread }, { data: attRows }] = await Promise.all([
     supabase.from('tickets').select('*').eq('id', id).single(),
     supabase.from('review_slots').select('*').eq('ticket_id', id),
     supabase.from('return_thread_entries').select('*').eq('ticket_id', id).order('created_at'),
+    supabase.from('attachments').select('*').eq('ticket_id', id).order('uploaded_at'),
   ])
 
   if (!ticket) return null
-  return toTicket(ticket, slots ?? [], thread ?? [])
+
+  const paths = (attRows ?? []).map((r) => r.storage_path as string)
+  const signedUrls = paths.length
+    ? await supabase.storage.from(ATTACHMENT_BUCKET).createSignedUrls(paths, SIGNED_URL_TTL)
+    : { data: [] }
+
+  const urlMap = new Map((signedUrls.data ?? []).map((u) => [u.path, u.signedUrl]))
+  const attachments = (attRows ?? []).map((r) => toAttachment(r, urlMap.get(r.storage_path) ?? undefined))
+
+  return toTicket(ticket, slots ?? [], thread ?? [], attachments)
 }
 
 // ── Create / Update ───────────────────────────────────────

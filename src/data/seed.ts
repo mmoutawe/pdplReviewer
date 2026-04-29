@@ -63,14 +63,18 @@ export const PROJECTS: Project[] = [
 
 // ─────────── Attachments ───────────
 export const ATTACHMENTS: Attachment[] = [
-  { id: 'att-001', ticketId: 'PDPL-2026-0042', filename: 'Sahab_DPA_signed_v3.pdf',           sizeBytes: 1843200, contentType: 'application/pdf', uploadedBy: 'u-rana',   uploadedAt: '2026-04-15T08:22:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',   classification: 'restricted',  category: 'dpa',         extractedSummary: 'Data Processing Agreement between PDPL Reviewer and Sahab Cloud. Outlines processor obligations, sub-processor flow-down, breach notification (24h), and Saudi-residency commitment.' },
-  { id: 'att-002', ticketId: 'PDPL-2026-0042', filename: 'Sahab_SOC2_2025.pdf',                sizeBytes: 4218372, contentType: 'application/pdf', uploadedBy: 'u-rana',   uploadedAt: '2026-04-15T08:24:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',   classification: 'confidential', category: 'soc2',        extractedSummary: 'SOC 2 Type II report covering Sahab Cloud Riyadh and Jeddah regions. No qualifications. Period: Apr 2025 – Mar 2026.' },
-  { id: 'att-003', ticketId: 'PDPL-2026-0042', filename: 'Subprocessor_list.xlsx',             sizeBytes: 38492,   contentType: 'application/vnd.ms-excel', uploadedBy: 'u-rana', uploadedAt: '2026-04-15T08:25:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean', classification: 'internal', category: 'evidence', extractedSummary: 'Eight sub-processors enumerated. Six are KSA-resident; two are GCC-resident with adequacy.' },
-  { id: 'att-004', ticketId: 'PDPL-2026-0044', filename: 'Q1-cohort-spec.pdf',                  sizeBytes: 524288,  contentType: 'application/pdf', uploadedBy: 'u-noura',  uploadedAt: '2026-04-18T11:02:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',   classification: 'confidential', category: 'evidence',    extractedSummary: 'Quarterly retention cohort specification for marketing analytics data sharing.' },
-  { id: 'att-005', ticketId: 'PDPL-2026-0048', filename: 'Zenith_proposal.pdf',                 sizeBytes: 2048000, contentType: 'application/pdf', uploadedBy: 'u-faisal', uploadedAt: '2026-04-21T09:15:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',   classification: 'internal',     category: 'contract',    extractedSummary: 'Zenith CRM commercial proposal. US-based hosting; no KSA region available.' },
-  { id: 'att-006', ticketId: 'PDPL-2026-0050', filename: 'XBorder_request_memo.pdf',            sizeBytes: 312456,  contentType: 'application/pdf', uploadedBy: 'u-rana',   uploadedAt: '2026-04-22T14:30:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',   classification: 'restricted',  category: 'evidence',    extractedSummary: 'Internal memo requesting cross-border transfer of anonymized transaction data to UAE-based fraud-intel partner.' },
-  { id: 'att-007', ticketId: 'PDPL-2026-0050', filename: 'SCC_v2.docx',                          sizeBytes: 184320,  contentType: 'application/msword', uploadedBy: 'u-rana', uploadedAt: '2026-04-23T08:00:00Z', storageBucket: 'evidence-restricted', scanStatus: 'clean',  classification: 'restricted',  category: 'contract',    extractedSummary: 'Standard Contractual Clauses draft, modeled on EU Module 1 (controller-to-controller).' },
+  { id: 'att-001', ticketId: 'PDPL-2026-0042', filename: 'Sahab_DPA_signed_v3.pdf',    sizeBytes: 1843200, contentType: 'application/pdf',                                           uploadedBy: 'u-rana',   uploadedAt: '2026-04-15T08:22:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0042/att-001-Sahab_DPA_signed_v3.pdf',    scanStatus: 'clean',   classification: 'restricted',   category: 'dpa',      extractedSummary: 'Data Processing Agreement between PDPL Reviewer and Sahab Cloud. Outlines processor obligations, sub-processor flow-down, breach notification (24h), and Saudi-residency commitment.' },
+  { id: 'att-002', ticketId: 'PDPL-2026-0042', filename: 'Sahab_SOC2_2025.pdf',         sizeBytes: 4218372, contentType: 'application/pdf',                                           uploadedBy: 'u-rana',   uploadedAt: '2026-04-15T08:24:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0042/att-002-Sahab_SOC2_2025.pdf',         scanStatus: 'clean',   classification: 'confidential', category: 'soc2',     extractedSummary: 'SOC 2 Type II report covering Sahab Cloud Riyadh and Jeddah regions. No qualifications. Period: Apr 2025 – Mar 2026.' },
+  { id: 'att-003', ticketId: 'PDPL-2026-0042', filename: 'Subprocessor_list.xlsx',      sizeBytes: 38492,   contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', uploadedBy: 'u-rana', uploadedAt: '2026-04-15T08:25:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0042/att-003-Subprocessor_list.xlsx', scanStatus: 'clean',   classification: 'internal',     category: 'evidence', extractedSummary: 'Eight sub-processors enumerated. Six are KSA-resident; two are GCC-resident with adequacy.' },
+  { id: 'att-004', ticketId: 'PDPL-2026-0044', filename: 'Q1-cohort-spec.pdf',          sizeBytes: 524288,  contentType: 'application/pdf',                                           uploadedBy: 'u-noura',  uploadedAt: '2026-04-18T11:02:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0044/att-004-Q1-cohort-spec.pdf',          scanStatus: 'clean',   classification: 'confidential', category: 'evidence', extractedSummary: 'Quarterly retention cohort specification for marketing analytics data sharing.' },
+  { id: 'att-005', ticketId: 'PDPL-2026-0048', filename: 'Zenith_proposal.pdf',         sizeBytes: 2048000, contentType: 'application/pdf',                                           uploadedBy: 'u-faisal', uploadedAt: '2026-04-21T09:15:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0048/att-005-Zenith_proposal.pdf',         scanStatus: 'clean',   classification: 'internal',     category: 'contract', extractedSummary: 'Zenith CRM commercial proposal. US-based hosting; no KSA region available.' },
+  { id: 'att-006', ticketId: 'PDPL-2026-0050', filename: 'XBorder_request_memo.pdf',    sizeBytes: 312456,  contentType: 'application/pdf',                                           uploadedBy: 'u-rana',   uploadedAt: '2026-04-22T14:30:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0050/att-006-XBorder_request_memo.pdf',    scanStatus: 'clean',   classification: 'restricted',   category: 'evidence', extractedSummary: 'Internal memo requesting cross-border transfer of anonymized transaction data to UAE-based fraud-intel partner.' },
+  { id: 'att-007', ticketId: 'PDPL-2026-0050', filename: 'SCC_v2.docx',                 sizeBytes: 184320,  contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', uploadedBy: 'u-rana', uploadedAt: '2026-04-23T08:00:00Z', storageBucket: 'ticket-attachments', storagePath: 'PDPL-2026-0050/att-007-SCC_v2.docx', scanStatus: 'clean', classification: 'restricted', category: 'contract', extractedSummary: 'Standard Contractual Clauses draft, modeled on EU Module 1 (controller-to-controller).' },
 ]
+
+function ticketAtts(ticketId: string): Attachment[] {
+  return ATTACHMENTS.filter((a) => a.ticketId === ticketId)
+}
 
 // ─────────── PDPL citations reused across tickets ───────────
 const c = pdplCitation
@@ -139,7 +143,7 @@ export const TICKETS: Ticket[] = [
       { role: 'security',        reviewerId: 'u-yousef',   verdict: 'pending' },
     ],
     sla: sla(11, 4, 72),
-    attachments: ['att-001', 'att-002', 'att-003'],
+    attachments: ticketAtts('PDPL-2026-0042'),
     returnThread: [],
     preAssessmentGenerationId: 'gen-001',
     tags: ['restricted-data', 'tier-1-vendor'],
@@ -189,7 +193,7 @@ export const TICKETS: Ticket[] = [
       { role: 'security',        reviewerId: 'u-yousef',  verdict: 'pending' },
     ],
     sla: sla(7, 4, 96),
-    attachments: ['att-006', 'att-007'],
+    attachments: ticketAtts('PDPL-2026-0050'),
     returnThread: [
       { id: 'rt-001', by: 'u-aisha', byRole: 'data_management', message: 'Please confirm whether the SCC includes a Module 1 controller-to-controller obligation on MADA to honor data-subject rights requests within 30 days.', createdAt: '2026-04-21T10:30:00Z', resolvedAt: '2026-04-22T09:15:00Z', resolvedBy: 'u-rana' },
       { id: 'rt-002', by: 'u-rana',  byRole: 'requester',        message: 'Confirmed — Module 1 + 30-day SLA included. SCC v2.docx attached.', createdAt: '2026-04-22T09:15:00Z', attachmentIds: ['att-007'], aiScore: { score: 87, reasoning: 'Response directly addresses the question, includes verifiable contractual reference, attaches supporting document.' } },
@@ -288,7 +292,7 @@ export const TICKETS: Ticket[] = [
       { role: 'legal',           reviewerId: null, verdict: 'pending' },
     ],
     sla: sla(8, 4, 48),
-    attachments: ['att-004'],
+    attachments: ticketAtts('PDPL-2026-0044'),
     returnThread: [],
     tags: ['document-share', 'low-risk'],
   },
@@ -339,7 +343,7 @@ export const TICKETS: Ticket[] = [
       { role: 'security',        reviewerId: null,         verdict: 'pending' },
     ],
     sla: sla(6, 4, 72, false),
-    attachments: ['att-005'],
+    attachments: ticketAtts('PDPL-2026-0048'),
     returnThread: [
       { id: 'rt-101', by: 'u-mohammed', byRole: 'data_management', message: 'Three blocking issues: (1) No signed DPA. (2) US jurisdiction triggers PDPL Article 29 evaluation — please provide the proposed transfer mechanism (SCCs, BCRs, or adequacy assertion). (3) Sub-processor list incomplete — Zenith Hosting and Zenith Email need due-diligence packets.', createdAt: '2026-04-23T15:30:00Z' },
     ],

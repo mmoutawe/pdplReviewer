@@ -4,8 +4,9 @@ import { ticketStore, authStore, showToast, updateTicket, refreshTickets } from 
 import { useStore } from '../hooks/useStore'
 import {
   userById, vendorById, projectById, REQUEST_TYPE_LABELS,
-  ATTACHMENTS, AI_GENERATIONS, PRE_ASSESSMENTS, AUDIT,
+  AI_GENERATIONS, PRE_ASSESSMENTS, AUDIT,
 } from '../data/seed'
+import type { Attachment } from '../data/types'
 import { StatusPill, SLAIndicator, Avatar, RoleBadge, ConfidenceBadge, EmptyState } from '../components/primitives'
 import { Tabs } from '../components/overlays'
 import { EvidenceUploader } from '../components/forms'
@@ -48,7 +49,7 @@ export default function TicketWorkspace() {
   const requester = userById(ticket.requesterId)
   const vendor = ticket.vendorId ? vendorById(ticket.vendorId) : null
   const project = ticket.projectId ? projectById(ticket.projectId) : null
-  const attachments = ticket.attachments.map((aid) => ATTACHMENTS.find((a) => a.id === aid)).filter(Boolean) as typeof ATTACHMENTS
+  const [attachments, setAttachments] = useState<Attachment[]>(ticket.attachments)
   const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === ticket.id)
   const generation = assessment ? AI_GENERATIONS.find((g) => g.id === assessment.generationId) : null
   const auditEvents = AUDIT.filter((e) => e.targetId === ticket.id)
@@ -212,8 +213,14 @@ export default function TicketWorkspace() {
         {activeTab === 'evidence' && (
           <div style={{ maxWidth: 640 }}>
             <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Evidence & attachments</h2>
-            <EvidenceUploader attachmentIds={ticket.attachments} readOnly />
-            {attachments.map((a) => a.extractedSummary && (
+            <EvidenceUploader
+              attachments={attachments}
+              ticketId={ticket.id}
+              readOnly={['approved', 'rejected', 'archived'].includes(ticket.state)}
+              onUploaded={(a) => setAttachments((prev) => [...prev, a])}
+              onRemove={(id) => setAttachments((prev) => prev.filter((a) => a.id !== id))}
+            />
+            {attachments.filter((a) => a.extractedSummary).map((a) => (
               <div key={a.id} className="card" style={{ padding: '12px 16px', marginTop: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 4 }}>
                   Extracted summary — {a.filename}

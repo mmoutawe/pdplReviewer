@@ -4,6 +4,7 @@ import { ticketStore, showToast, refreshTickets } from '../store'
 import { useStore } from '../hooks/useStore'
 import { CommentThread } from '../components/CommentThread'
 import { EvidenceUploader } from '../components/forms'
+import type { Attachment } from '../data/types'
 import { EmptyState } from '../components/primitives'
 import { AICoPilotPanel } from '../components/AICoPilotPanel'
 import { isSupabaseConfigured } from '../lib/supabase'
@@ -18,6 +19,7 @@ export default function ReturnedResponse() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [lastReply, setLastReply] = useState('')
+  const [newAttachments, setNewAttachments] = useState<Attachment[]>([])
 
   const ticket = tickets.find((t) => t.id === id)
   useEffect(() => { document.title = `Respond — ${id} — PDPL Reviewer` }, [id])
@@ -97,7 +99,12 @@ export default function ReturnedResponse() {
 
         <section aria-labelledby="evidence-heading" style={{ marginBottom: 28 }}>
           <h2 id="evidence-heading" style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Attach supporting evidence</h2>
-          <EvidenceUploader attachmentIds={ticket.attachments} readOnly />
+          <EvidenceUploader
+            attachments={[...ticket.attachments, ...newAttachments]}
+            ticketId={ticket.id}
+            onUploaded={(a) => setNewAttachments((prev) => [...prev, a])}
+            onRemove={(id) => setNewAttachments((prev) => prev.filter((a) => a.id !== id))}
+          />
         </section>
 
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
