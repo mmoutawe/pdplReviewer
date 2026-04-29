@@ -323,6 +323,8 @@ code, pre, kbd, samp {
 .toast-stack { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 300; }
 .toast { background: var(--ink-900); color: white; padding: 12px 16px; border-radius: var(--r-md); box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 10px; font-size: 13px; max-width: 360px; animation: toastIn var(--t-slow) var(--ease-out); }
 @keyframes toastIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 /* Stepper */
 .stepper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

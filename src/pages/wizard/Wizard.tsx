@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { RequestType } from '../../data/types'
-import { REQUEST_TYPE_LABELS, AI_GENERATIONS, PRE_ASSESSMENTS } from '../../data/seed'
+import { REQUEST_TYPE_LABELS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
-import { ConfidenceBadge } from '../../components/primitives'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, resetAIStream } from '../../store'
 import { useStore } from '../../hooks/useStore'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { createTicket, submitTicket } from '../../api/tickets'
+import { streamAI } from '../../api/ai'
 
 type Method = 'manual' | 'ai'
 
@@ -56,6 +56,10 @@ export default function Wizard() {
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [assessmentText, setAssessmentText] = useState('')
+  const [streamingText, setStreamingText] = useState('')
+  const [assessmentLoading, setAssessmentLoading] = useState(false)
+  const [assessmentError, setAssessmentError] = useState<string | null>(null)
 
   const requestType = type as RequestType
   const stepIndex = StepIndex(currentStep)
@@ -66,6 +70,50 @@ export default function Wizard() {
 
   // Autosave
   useEffect(() => { saveDraft(form) }, [form])
+
+  // Auto-trigger AI assessment when entering step
+  useEffect(() => {
+    if (currentStep !== 'assessment' || assessmentText || assessmentLoading) return
+    void runAssessment()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep])
+
+  function buildAssessmentPrompt() {
+    const parts = [
+      `Request type: ${REQUEST_TYPE_LABELS[requestType]}`,
+      `Title: ${form.title}`,
+      `Description: ${form.description}`,
+      form.vendorName ? `Vendor/recipient: ${form.vendorName}` : null,
+      `Jurisdiction: ${form.vendorJurisdiction}`,
+      `DPA signed: ${form.hasDPA ? 'Yes' : 'No'}`,
+      `Data categories: ${form.dataCategories.join(', ') || 'None specified'}`,
+      `Estimated data subjects: ${form.estimatedSubjects || 'Unknown'}`,
+      `Retention period (days): ${form.retentionDays || 'Unknown'}`,
+      `Cross-border transfer involved: ${form.crossBorder ? 'Yes' : 'No'}`,
+      `Data subject consent obtained: ${form.consentObtained ? 'Yes' : 'No'}`,
+    ]
+    return parts.filter(Boolean).join('\n')
+  }
+
+  async function runAssessment() {
+    setAssessmentLoading(true)
+    setAssessmentError(null)
+    setStreamingText('')
+    resetAIStream()
+    try {
+      const text = await streamAI({
+        feature: 'pre_assessment',
+        message: buildAssessmentPrompt(),
+        onToken: (t) => setStreamingText((prev) => prev + t),
+      })
+      setAssessmentText(text)
+      setStreamingText('')
+    } catch (err) {
+      setAssessmentError(err instanceof Error ? err.message : 'Assessment failed. Please try again.')
+    } finally {
+      setAssessmentLoading(false)
+    }
+  }
 
   function update(partial: Partial<WizardState>) {
     setForm((f) => ({ ...f, ...partial }))
@@ -147,10 +195,6 @@ export default function Wizard() {
       setSubmitting(false)
     }
   }
-
-  // Demo assessment — use Zenith if vendor type, otherwise Sahab
-  const demoAssessment = PRE_ASSESSMENTS[0]
-  const demoGen = AI_GENERATIONS.find((g) => g.id === demoAssessment.generationId)
 
   if (submitted) {
     return (
@@ -336,63 +380,54 @@ export default function Wizard() {
                 AI PDPL assessment
               </h2>
               <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
-                Review the AI-generated assessment before submitting. Address any <strong>critical</strong> or <strong>high</strong> findings before proceeding.
+                Review the AI-generated assessment before submitting. Address any critical or high-risk findings before proceeding.
               </p>
 
-              {/* Risk summary */}
-              <div style={{
-                display: 'flex', gap: 12, marginBottom: 20,
-                padding: '14px 18px',
-                background: demoAssessment.overallRisk === 'low' ? 'var(--emerald-50)' : 'var(--amber-50)',
-                border: `1px solid ${demoAssessment.overallRisk === 'low' ? '#BBF7D0' : '#FDE68A'}`,
-                borderRadius: 'var(--r-lg)', alignItems: 'center',
-              }}>
-                <span style={{ fontSize: 24 }} aria-hidden="true">
-                  {demoAssessment.overallRisk === 'low' ? '✅' : demoAssessment.overallRisk === 'high' ? '🚨' : '⚠️'}
-                </span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)' }}>
-                    Overall risk: <span style={{ textTransform: 'capitalize' }}>{demoAssessment.overallRisk}</span>
-                    {' · '}
-                    PDPL alignment: <span style={{ textTransform: 'capitalize' }}>{demoAssessment.pdplAlignment}</span>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--ink-600)', marginTop: 2 }}>{demoAssessment.summary}</div>
+              {/* Loading state */}
+              {assessmentLoading && (
+                <div style={{
+                  padding: '16px 18px', background: 'var(--surface-1)',
+                  border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', marginBottom: 16,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  <span style={{ fontSize: 16, animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden="true">⏳</span>
+                  <span style={{ fontSize: 13.5, color: 'var(--ink-600)' }}>Generating PDPL assessment…</span>
                 </div>
-                {demoGen && <ConfidenceBadge score={demoGen.confidence} />}
-              </div>
+              )}
 
-              {/* Findings */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {demoAssessment.findings.map((f) => {
-                  const sev = f.severity
-                  const bg = sev === 'critical' || sev === 'high' ? 'var(--red-50)' : sev === 'medium' ? 'var(--amber-50)' : 'var(--surface-1)'
-                  const border = sev === 'critical' || sev === 'high' ? '#FECACA' : sev === 'medium' ? '#FDE68A' : 'var(--line)'
-                  return (
-                    <div key={f.id} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 'var(--r-md)', padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
-                        <span style={{
-                          fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
-                          color: sev === 'critical' || sev === 'high' ? 'var(--red-700)' : sev === 'medium' ? 'var(--amber-700)' : 'var(--ink-500)',
-                        }}>{sev}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-800)' }}>{f.title}</span>
-                      </div>
-                      <p style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.6, margin: 0 }}>{f.detail}</p>
-                      {f.remediation && (
-                        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginTop: 6, fontStyle: 'italic' }}>
-                          Recommendation: {f.remediation}
-                        </p>
-                      )}
-                      {f.citations.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                          {f.citations.map((c) => (
-                            <abbr key={c.id} className={`cite ${c.source === 'pdpl' ? 'cite-pdpl' : 'cite-policy'}`} title={c.excerpt}>{c.ref}</abbr>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+              {/* Streaming preview — shown while tokens arrive */}
+              {(assessmentLoading || assessmentText) && (
+                <div style={{
+                  padding: '16px 18px',
+                  background: 'var(--surface-0)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--r-lg)',
+                  fontSize: 13.5,
+                  lineHeight: 1.75,
+                  color: 'var(--ink-800)',
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'var(--font-sans)',
+                  minHeight: 120,
+                }}>
+                  {assessmentLoading ? streamingText : assessmentText}
+                  {assessmentLoading && (
+                    <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'var(--brand-700)', verticalAlign: 'text-bottom', marginLeft: 1, animation: 'blink 1s step-end infinite' }} aria-hidden="true" />
+                  )}
+                </div>
+              )}
+
+              {/* Error state */}
+              {assessmentError && (
+                <div style={{
+                  padding: '14px 16px', background: 'var(--red-50)',
+                  border: '1px solid #FECACA', borderRadius: 'var(--r-md)',
+                  fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center',
+                }}>
+                  <span aria-hidden="true">⚠️</span>
+                  <span style={{ flex: 1 }}>{assessmentError}</span>
+                  <button className="btn btn-sm" onClick={() => void runAssessment()}>Retry</button>
+                </div>
+              )}
             </section>
           )}
 
@@ -446,7 +481,13 @@ export default function Wizard() {
                   {submitting ? 'Submitting…' : 'Submit request'}
                 </button>
               ) : (
-                <button className="btn btn-primary" onClick={next}>Continue →</button>
+                <button
+                  className="btn btn-primary"
+                  onClick={next}
+                  disabled={currentStep === 'assessment' && (assessmentLoading || !!assessmentError)}
+                >
+                  {currentStep === 'assessment' && assessmentLoading ? 'Generating…' : 'Continue →'}
+                </button>
               )}
             </div>
           )}
@@ -460,13 +501,15 @@ export default function Wizard() {
             background: 'var(--surface-0)',
           }} aria-label="AI guidance panel">
             <AICoPilotPanel
-              title={currentStep === 'assessment' ? 'AI Assessment' : 'AI Policy Guidance'}
+              title="PDPL Policy Guidance"
               cannedKey="policy_chat_pdpl29"
-              citations={demoGen?.citations ?? []}
-              confidence={demoGen?.confidence}
-              initialText={currentStep === 'assessment' ? demoAssessment.summary : undefined}
+              initialText={
+                currentStep === 'assessment'
+                  ? 'Assessment complete — ask any follow-up question about PDPL requirements for this request type.'
+                  : undefined
+              }
               context={`${REQUEST_TYPE_LABELS[requestType]} — ${form.title || 'Untitled'}`}
-              feature="request_builder"
+              feature="policy_chat"
             />
           </aside>
         )}
