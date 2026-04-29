@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { authStore, signIn } from '../store'
 import { useStore } from '../hooks/useStore'
 import { USERS, ROLE_LABELS } from '../data/seed'
@@ -77,9 +77,16 @@ function SupabaseSignIn() {
           </div>
 
           <div>
-            <label htmlFor="password" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
-              PASSWORD
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+              <label htmlFor="password" style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', letterSpacing: '0.02em' }}>
+                PASSWORD
+              </label>
+              <Link to="/forgot-password" style={{ fontSize: 11.5, color: 'var(--brand-700)', textDecoration: 'none' }}
+                onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline' }}
+                onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none' }}>
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               type="password"
@@ -100,7 +107,7 @@ function SupabaseSignIn() {
           </div>
 
           {error && (
-            <div style={{
+            <div role="alert" style={{
               padding: '8px 12px', borderRadius: 'var(--r-sm)',
               background: '#FEF2F2', border: '1px solid #FECACA',
               fontSize: 13, color: '#B91C1C',

@@ -25,6 +25,8 @@ const Admin           = lazy(() => import('./pages/Admin'))
 const ExternalRedeem  = lazy(() => import('./pages/ExternalRedeem'))
 const ExternalApproval = lazy(() => import('./pages/ExternalApproval'))
 const Architecture    = lazy(() => import('./pages/Architecture'))
+const ForgotPassword  = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword   = lazy(() => import('./pages/ResetPassword'))
 
 function PageSkeleton() {
   return (
@@ -66,6 +68,8 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/auth/reset-password" element={<ResetPassword />} />
           <Route path="/external/redeem/:token" element={<ExternalRedeem />} />
           <Route path="/external/approval/:token" element={<ExternalApproval />} />
 

@@ -36,6 +36,20 @@ export async function apiGetSession(): Promise<User | null> {
   return profile ? toUser(profile) : null
 }
 
+export async function apiResetPassword(email: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/auth/reset-password',
+  })
+  if (error) throw error
+}
+
+export async function apiUpdatePassword(newPassword: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.auth.updateUser({ password: newPassword })
+  if (error) throw error
+}
+
 export function onAuthStateChange(callback: (user: User | null) => void) {
   if (!supabase) return () => {}
   const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
