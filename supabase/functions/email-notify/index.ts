@@ -116,6 +116,15 @@ function htmlBody(notification: WebhookPayload['record'], appUrl: string): strin
 serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
 
+  // Validate webhook shared secret (set in Supabase Dashboard → Webhooks → Authorization header)
+  const webhookSecret = Deno.env.get('WEBHOOK_SECRET')
+  if (webhookSecret) {
+    const auth = req.headers.get('Authorization') ?? ''
+    if (auth !== `Bearer ${webhookSecret}`) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+  }
+
   const resendKey = Deno.env.get('RESEND_API_KEY')
   const emailFrom = Deno.env.get('EMAIL_FROM') ?? 'PDPL Reviewer <noreply@pdpl-reviewer.app>'
   const appUrl    = Deno.env.get('APP_URL') ?? 'https://pdpl-reviewer.app'

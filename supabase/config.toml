@@ -45,6 +45,8 @@ enabled = true
 
 [auth]
 enabled = true
+# Production: update site_url to your deployed domain (e.g. https://pdpl.yourcompany.com)
+# Run: supabase --project-ref <ref> update-config auth.site_url https://pdpl.yourcompany.com
 site_url = "http://localhost:5173"
 additional_redirect_urls = ["https://localhost:5173"]
 jwt_expiry = 3600
@@ -77,6 +79,13 @@ inspector_port = 8083
 verify_jwt = true
 
 [functions.external-link]
+verify_jwt = false
+
+[functions.process-attachment]
+verify_jwt = true
+
+[functions.email-notify]
+# Called by a Supabase Database Webhook (service-role JWT or custom WEBHOOK_SECRET)
 verify_jwt = false
 
 [analytics]
