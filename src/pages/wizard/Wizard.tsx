@@ -60,6 +60,10 @@ export default function Wizard() {
   const [streamingText, setStreamingText] = useState('')
   const [assessmentLoading, setAssessmentLoading] = useState(false)
   const [assessmentError, setAssessmentError] = useState<string | null>(null)
+  const [aiBuilderInput, setAiBuilderInput] = useState('')
+  const [aiBuilderLoading, setAiBuilderLoading] = useState(false)
+  const [aiBuilderDone, setAiBuilderDone] = useState(false)
+  const [aiBuilderError, setAiBuilderError] = useState<string | null>(null)
 
   const requestType = type as RequestType
   const stepIndex = StepIndex(currentStep)
@@ -112,6 +116,38 @@ export default function Wizard() {
       setAssessmentError(err instanceof Error ? err.message : 'Assessment failed. Please try again.')
     } finally {
       setAssessmentLoading(false)
+    }
+  }
+
+  async function runAIBuilder() {
+    if (!aiBuilderInput.trim()) return
+    setAiBuilderLoading(true)
+    setAiBuilderError(null)
+    resetAIStream()
+    try {
+      const raw = await streamAI({ feature: 'request_builder', message: aiBuilderInput })
+      // Parse JSON — try direct parse, then strip any accidental markdown fences
+      let parsed: Record<string, unknown> | null = null
+      try {
+        parsed = JSON.parse(raw)
+      } catch {
+        const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
+        if (m) { try { parsed = JSON.parse(m[1]) } catch { /* fall through */ } }
+      }
+      if (!parsed) throw new Error('Gemini response was not valid JSON. Try rephrasing your description.')
+      update({
+        title:              typeof parsed.title === 'string'           ? parsed.title : form.title,
+        description:        typeof parsed.description === 'string'     ? parsed.description : form.description,
+        dataCategories:     Array.isArray(parsed.dataCategories)       ? parsed.dataCategories as string[] : form.dataCategories,
+        estimatedSubjects:  typeof parsed.estimatedSubjects === 'string' ? parsed.estimatedSubjects : form.estimatedSubjects,
+        crossBorder:        typeof parsed.crossBorder === 'boolean'    ? parsed.crossBorder : form.crossBorder,
+        hasDPA:             typeof parsed.hasDPA === 'boolean'         ? parsed.hasDPA : form.hasDPA,
+      })
+      setAiBuilderDone(true)
+    } catch (err) {
+      setAiBuilderError(err instanceof Error ? err.message : 'Generation failed')
+    } finally {
+      setAiBuilderLoading(false)
     }
   }
 
@@ -268,7 +304,67 @@ export default function Wizard() {
           {/* ── Step: Initiation ── */}
           {currentStep === 'initiation' && (
             <section aria-labelledby="step-init">
-              <h2 id="step-init" style={{ fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Request details</h2>
+              <h2 id="step-init" style={{ fontSize: 18, fontWeight: 700, marginBottom: form.method === 'ai' ? 8 : 20 }}>Request details</h2>
+
+              {/* AI builder panel — shown only when method === 'ai' */}
+              {form.method === 'ai' && (
+                <div style={{ marginBottom: 24 }}>
+                  {!aiBuilderDone ? (
+                    <div style={{
+                      background: 'var(--brand-50)', border: '1px solid var(--brand-200)',
+                      borderRadius: 'var(--r-lg)', padding: '16px 18px',
+                    }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-800)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span aria-hidden="true">✨</span> Gemini request builder
+                      </div>
+                      <p style={{ fontSize: 12.5, color: 'var(--brand-700)', marginBottom: 12, lineHeight: 1.5 }}>
+                        Describe your use case in plain language. Gemini will extract the structured fields for you.
+                      </p>
+                      <textarea
+                        className="textarea"
+                        rows={4}
+                        value={aiBuilderInput}
+                        onChange={(e) => setAiBuilderInput(e.target.value)}
+                        placeholder="e.g. We need to onboard Sahab Cloud as an IaaS provider to host our InstaLend application. They'll process KYC data including national ID, IBAN, and credit scores for Saudi residents. The contract is 3 years and they're based in KSA."
+                        style={{ marginBottom: 10 }}
+                        disabled={aiBuilderLoading}
+                      />
+                      {aiBuilderError && (
+                        <div role="alert" style={{ fontSize: 12.5, color: 'var(--red-700)', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-sm)', padding: '8px 12px', marginBottom: 10 }}>
+                          {aiBuilderError}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => void runAIBuilder()}
+                          disabled={!aiBuilderInput.trim() || aiBuilderLoading}
+                        >
+                          {aiBuilderLoading
+                            ? <><span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite', marginRight: 6 }} aria-hidden="true" />Generating…</>
+                            : '✨ Generate with Gemini'}
+                        </button>
+                        <button className="btn btn-sm" onClick={() => update({ method: 'manual' })}>
+                          Fill manually instead
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: '#F0FDF4', border: '1px solid #BBF7D0',
+                      borderRadius: 'var(--r-md)', padding: '10px 14px',
+                      fontSize: 12.5, color: '#166534', display: 'flex', gap: 8, alignItems: 'center',
+                    }}>
+                      <span aria-hidden="true">✓</span>
+                      Form pre-filled by Gemini. Review and edit the fields below before continuing.
+                      <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setAiBuilderDone(false); setAiBuilderInput('') }}>
+                        Regenerate
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 <FormField label="Request title" required error={errors.title} id="req-title">
                   <input id="req-title" className="input" value={form.title}
