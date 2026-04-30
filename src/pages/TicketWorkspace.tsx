@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets } from '../store'
 import { useStore } from '../hooks/useStore'
@@ -35,6 +36,7 @@ export default function TicketWorkspace() {
   const { tickets } = useStore(ticketStore)
   const { user } = useStore(authStore)
   const navigate = useNavigate()
+  const isMobile = useMobile()
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
   const ticket = tickets.find((t) => t.id === id)
@@ -126,11 +128,11 @@ export default function TicketWorkspace() {
       <Tabs tabs={tabsWithCount} active={activeTab} onChange={(k) => setActiveTab(k as TabKey)} />
 
       {/* Tab content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '24px', display: activeTab === 'ai' ? 'flex' : 'block', gap: 20, minHeight: 0 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? '16px' : '24px', display: activeTab === 'ai' && !isMobile ? 'flex' : 'block', gap: 20, minHeight: 0 }}>
 
         {/* ── Overview ── */}
         {activeTab === 'overview' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1.5fr) minmax(0,1fr)', gap: 20 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <section className="card" style={{ padding: '18px 20px' }} aria-labelledby="desc-heading">
                 <h2 id="desc-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 10 }}>Description</h2>
@@ -139,7 +141,7 @@ export default function TicketWorkspace() {
 
               <section className="card" style={{ padding: '18px 20px' }} aria-labelledby="decl-heading">
                 <h2 id="decl-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 10 }}>Data declaration</h2>
-                <dl style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '8px 12px', fontSize: 13 }}>
+                <dl style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '200px 1fr', gap: '8px 12px', fontSize: 13 }}>
                   <dt style={{ color: 'var(--ink-500)' }}>Contains PII</dt>
                   <dd>{ticket.dataDeclaration.containsPII ? 'Yes — ' + ticket.dataDeclaration.piiCategories.join(', ') : 'No'}</dd>
                   <dt style={{ color: 'var(--ink-500)' }}>Contains sensitive data</dt>

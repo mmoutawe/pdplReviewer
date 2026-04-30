@@ -374,6 +374,19 @@ code, pre, kbd, samp {
 *::-webkit-scrollbar-thumb { background: var(--ink-200); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--ink-300); border: 2px solid transparent; background-clip: padding-box; }
 
+/* Mobile layout adjustments */
+@media (max-width: 767px) {
+  .page-header { padding: 12px 16px 10px; flex-wrap: wrap; }
+  .page-title { font-size: 17px; }
+  .page-content { padding: 16px; }
+  .filter-bar { padding: 8px 12px !important; flex-wrap: wrap; }
+  .tbl th, .tbl td { padding: 10px 10px; font-size: 12.5px; }
+  .card { border-radius: var(--r-md) !important; }
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal { border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; max-height: 92vh; overflow-y: auto; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }

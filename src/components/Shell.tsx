@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { authStore, signIn, signOut } from '../store'
 import { useStore } from '../hooks/useStore'
@@ -7,6 +7,7 @@ import type { Role } from '../data/types'
 import Logo from './Logo'
 import { Avatar, RoleBadge } from './primitives'
 import { NotificationBell } from './NotificationBell'
+import { useMobile } from '../hooks/useMobile'
 
 // ─── Nav items per role ───────────────────────────────────────────────────────
 interface NavItem { label: string; path: string; icon: ReactNode; exact?: boolean }
@@ -71,9 +72,9 @@ function getNavItems(role: Role): NavItem[] {
 }
 
 // ─── TopBar ───────────────────────────────────────────────────────────────────
-interface TopBarProps { collapsed: boolean; onToggle: () => void }
+interface TopBarProps { collapsed: boolean; onToggle: () => void; isMobile: boolean }
 
-function TopBar({ collapsed, onToggle }: TopBarProps) {
+function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
   const { user } = useStore(authStore)
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -84,21 +85,21 @@ function TopBar({ collapsed, onToggle }: TopBarProps) {
   return (
     <header style={{
       height: 'var(--topbar-h)', display: 'flex', alignItems: 'center',
-      padding: '0 16px', gap: 12,
+      padding: '0 16px', gap: isMobile ? 8 : 12,
       borderBottom: '1px solid var(--line)',
       background: 'var(--surface-0)',
       position: 'sticky', top: 0, zIndex: 40, flexShrink: 0,
     }}>
       {/* Hamburger + Logo */}
       <button className="btn btn-ghost btn-sm focus-ring" onClick={onToggle}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={isMobile ? (collapsed ? 'Open navigation' : 'Close navigation') : (collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
         style={{ padding: '0 6px', minWidth: 28 }}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
       <Link to="/dashboard" style={{ textDecoration: 'none' }} aria-label="PDPL Reviewer home">
-        <Logo size="md" collapsed={collapsed} />
+        <Logo size="md" collapsed={!isMobile && collapsed} />
       </Link>
 
       {/* Spacer */}
@@ -111,7 +112,7 @@ function TopBar({ collapsed, onToggle }: TopBarProps) {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M1 6h10M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Demo role
+          {!isMobile && 'Demo role'}
           <RoleBadge role={user.role} size="sm" />
         </button>
         {roleSwitchOpen && (
@@ -201,20 +202,38 @@ function TopBar({ collapsed, onToggle }: TopBarProps) {
 }
 
 // ─── LeftRail ─────────────────────────────────────────────────────────────────
-interface RailProps { collapsed: boolean }
+interface RailProps { collapsed: boolean; isMobile: boolean; onClose: () => void }
 
-function LeftRail({ collapsed }: RailProps) {
+function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
   const { user } = useStore(authStore)
   const location = useLocation()
   const navItems = getNavItems(user.role)
+
+  // Close mobile drawer on route change
+  useEffect(() => { if (isMobile) onClose() }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function isActive(item: NavItem) {
     if (item.exact) return location.pathname === item.path
     return location.pathname.startsWith(item.path)
   }
 
+  const drawerOpen = isMobile && !collapsed
+
   return (
-    <aside style={{
+    <aside style={isMobile ? {
+      position: 'fixed',
+      top: 'var(--topbar-h)',
+      left: 0,
+      height: 'calc(100vh - var(--topbar-h))',
+      width: 'var(--leftrail-w)',
+      zIndex: 60,
+      background: 'var(--surface-0)',
+      borderRight: '1px solid var(--line)',
+      display: 'flex', flexDirection: 'column',
+      transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
+      transition: 'transform var(--t-slow) var(--ease-out)',
+      boxShadow: drawerOpen ? 'var(--shadow-lg)' : 'none',
+    } : {
       width: collapsed ? 'var(--leftrail-w-collapsed)' : 'var(--leftrail-w)',
       flexShrink: 0, borderRight: '1px solid var(--line)',
       background: 'var(--surface-0)', overflow: 'hidden',
@@ -270,12 +289,32 @@ function LeftRail({ collapsed }: RailProps) {
 interface ShellProps { children: ReactNode }
 
 export default function Shell({ children }: ShellProps) {
+  const isMobile = useMobile()
+  // Desktop: collapsed = sidebar icon-only mode
+  // Mobile: collapsed = drawer hidden
   const [collapsed, setCollapsed] = useState(false)
+
+  // When switching to mobile, close the drawer by default
+  useEffect(() => { if (isMobile) setCollapsed(true) }, [isMobile])
+
+  const drawerOpen = isMobile && !collapsed
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <TopBar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <LeftRail collapsed={collapsed} />
+      <TopBar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} isMobile={isMobile} />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+        {/* Mobile backdrop */}
+        {drawerOpen && (
+          <div
+            aria-hidden="true"
+            onClick={() => setCollapsed(true)}
+            style={{
+              position: 'fixed', inset: 0, top: 'var(--topbar-h)',
+              background: 'rgba(0,0,0,0.35)', zIndex: 55,
+            }}
+          />
+        )}
+        <LeftRail collapsed={collapsed} isMobile={isMobile} onClose={() => setCollapsed(true)} />
         <main id="main-content" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {children}
         </main>
