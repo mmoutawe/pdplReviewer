@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore } from '../store'
 import { useStore } from '../hooks/useStore'
-import { REQUEST_TYPE_LABELS, userById, ROLE_LABELS } from '../data/seed'
+import { REQUEST_TYPE_LABELS, ROLE_LABELS } from '../data/seed'
 import { StatusPill, SLAIndicator, Avatar, KPI, EmptyState } from '../components/primitives'
 import { FilterBar } from '../components/table'
 import type { Role, Ticket, TicketState } from '../data/types'
 import { formatDate, slaStatus } from '../lib/utils'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { fetchTickets, subscribeToTickets } from '../api/tickets'
+import { getCachedUser } from '../lib/userCache'
 
 const ROLE_QUEUE_STATE: Record<string, TicketState[]> = {
   data_management: ['submitted', 'in_data_management'],
@@ -16,18 +19,42 @@ const ROLE_QUEUE_STATE: Record<string, TicketState[]> = {
 
 export default function ReviewerQueue() {
   const { role } = useParams<{ role: string }>()
-  const { tickets } = useStore(ticketStore)
+  const { tickets: storeTickets } = useStore(ticketStore)
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'sla' | 'date'>('sla')
+  const [liveTickets, setLiveTickets] = useState<Ticket[]>([])
+  const [loading, setLoading] = useState(false)
 
   const queueRole = role as Role
   const states = ROLE_QUEUE_STATE[role ?? ''] ?? []
 
   useEffect(() => { document.title = `${ROLE_LABELS[queueRole] ?? 'Review'} Queue — PDPL Reviewer` }, [queueRole])
 
-  const visible = tickets
-    .filter((t) => states.includes(t.state))
+  useEffect(() => {
+    if (!isSupabaseConfigured || !states.length) return
+    setLoading(true)
+    fetchTickets({ state: states })
+      .then(setLiveTickets)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+
+    return subscribeToTickets((updated) => {
+      setLiveTickets((prev) => {
+        const idx = prev.findIndex((t) => t.id === updated.id)
+        const inQueue = states.includes(updated.state)
+        if (idx >= 0 && !inQueue) return prev.filter((t) => t.id !== updated.id)
+        if (idx >= 0 && inQueue) { const next = [...prev]; next[idx] = updated; return next }
+        if (idx < 0 && inQueue) return [updated, ...prev]
+        return prev
+      })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role])
+
+  const baseTickets = isSupabaseConfigured ? liveTickets : storeTickets.filter((t) => states.includes(t.state))
+
+  const visible = baseTickets
     .filter((t) => {
       if (!search) return true
       const q = search.toLowerCase()
@@ -74,7 +101,9 @@ export default function ReviewerQueue() {
         }
       />
 
-      {visible.length === 0 ? (
+      {loading ? (
+        <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading queue…</div>
+      ) : visible.length === 0 ? (
         <EmptyState title="Queue is empty" body="No tickets are currently assigned to this queue." icon="✓" />
       ) : (
         <ul>
@@ -90,7 +119,7 @@ export default function ReviewerQueue() {
 function QueueRow({ ticket, onClick }: { ticket: Ticket; onClick: () => void }) {
   const { label: _label, color } = slaStatus(ticket.sla.decisionDueAt, ticket.sla.breached)
   const urgentBg = color === 'red' ? 'var(--red-50)' : color === 'amber' ? 'var(--amber-50)' : 'transparent'
-  const reviewer = ticket.reviews[0]?.reviewerId ? userById(ticket.reviews[0].reviewerId) : null
+  const reviewer = ticket.reviews[0]?.reviewerId ? getCachedUser(ticket.reviews[0].reviewerId) : null
 
   return (
     <li style={{ borderBottom: '1px solid var(--line)' }}>

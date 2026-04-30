@@ -1,6 +1,9 @@
 import { supabase, toAttachment } from '../lib/supabase'
 import type { Attachment } from '../data/types'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+
 const BUCKET = 'ticket-attachments'
 const SIGNED_URL_TTL = 3600 // 1 hour
 
@@ -77,6 +80,22 @@ export async function uploadAttachment(
     void supabase.storage.from(BUCKET).remove([storagePath])
     throw dbError
   }
+
+  // Fire-and-forget: trigger AI extraction + summary on the Edge Function
+  void (async () => {
+    const { data: { session } } = await supabase!.auth.getSession()
+    if (!session?.access_token) return
+    const url = `${viteEnv.VITE_SUPABASE_URL}/functions/v1/process-attachment`
+    void fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': viteEnv.VITE_SUPABASE_ANON_KEY ?? '',
+      },
+      body: JSON.stringify({ attachmentId }),
+    })
+  })()
 
   return toAttachment(row, signedUrl)
 }

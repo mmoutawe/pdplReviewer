@@ -283,3 +283,23 @@ export function subscribeToTicket(
 
   return () => { void supabase!.removeChannel(channel) }
 }
+
+// Subscribes to all ticket changes — callers filter by state themselves.
+export function subscribeToTickets(
+  onUpdate: (ticket: Ticket) => void,
+) {
+  if (!supabase) return () => {}
+
+  const handle = async (payload: { new: { id: string } }) => {
+    const ticket = await fetchTicketById(payload.new.id)
+    if (ticket) onUpdate(ticket)
+  }
+
+  const channel = supabase
+    .channel('tickets:all')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, handle)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tickets' }, handle)
+    .subscribe()
+
+  return () => { void supabase!.removeChannel(channel) }
+}
