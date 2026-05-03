@@ -21,16 +21,18 @@ import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTick
 import { getCachedUser } from '../lib/userCache'
 import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
 import { ReviewerAssessmentView } from '../components/ReviewerAssessmentView'
+import { AIDocumentChat } from '../components/AIDocumentChat'
 
-type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit'
+type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit' | 'documents'
 
 const TABS = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'evidence', label: 'Evidence' },
-  { key: 'ai',       label: 'AI Assessment' },
-  { key: 'reviews',  label: 'Reviews' },
-  { key: 'returns',  label: 'Return thread' },
-  { key: 'audit',    label: 'Audit log' },
+  { key: 'overview',  label: 'Overview' },
+  { key: 'evidence',  label: 'Evidence' },
+  { key: 'ai',        label: 'AI Assessment' },
+  { key: 'documents', label: 'Documents' },
+  { key: 'reviews',   label: 'Reviews' },
+  { key: 'returns',   label: 'Return thread' },
+  { key: 'audit',     label: 'Audit log' },
 ]
 
 export default function TicketWorkspace() {
@@ -383,6 +385,13 @@ export default function TicketWorkspace() {
               </aside>
             )}
           </>
+        )}
+
+        {/* ── Documents ── */}
+        {activeTab === 'documents' && (
+          <div style={{ maxWidth: 760, height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <AIDocumentChat ticket={ticket} />
+          </div>
         )}
 
         {/* ── Reviews ── */}
