@@ -11,7 +11,7 @@ import type { Attachment } from '../data/types'
 import { StatusPill, SLAIndicator, Avatar, RoleBadge, ConfidenceBadge, EmptyState } from '../components/primitives'
 import { Tabs } from '../components/overlays'
 import { EvidenceUploader } from '../components/forms'
-import { AICoPilotPanel, CitationChip } from '../components/AICoPilotPanel'
+import { CitationChip } from '../components/AICoPilotPanel'
 import { AuditTimeline } from '../components/AuditTimeline'
 import { CommentThread } from '../components/CommentThread'
 import { formatDate, formatDateTime } from '../lib/utils'
@@ -22,6 +22,8 @@ import { getCachedUser } from '../lib/userCache'
 import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
 import { ReviewerAssessmentView } from '../components/ReviewerAssessmentView'
 import { AIDocumentChat } from '../components/AIDocumentChat'
+import { ReviewerAssistPanel } from '../components/ReviewerAssistPanel'
+import { runChecklistReview, type ChecklistResult, CHECKLIST_LABELS, type ChecklistVerdict } from '../api/aiChecklist'
 
 type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit' | 'documents'
 
@@ -45,6 +47,9 @@ export default function TicketWorkspace() {
   const [reviewerData, setReviewerData] = useState<Record<string, unknown> | null>(null)
   const [reviewerLoading, setReviewerLoading] = useState(false)
   const [reviewerError, setReviewerError] = useState<string | null>(null)
+  const [checklistData, setChecklistData] = useState<ChecklistResult | null>(null)
+  const [checklistLoading, setChecklistLoading] = useState(false)
+  const [checklistError, setChecklistError] = useState<string | null>(null)
 
   const ticket = tickets.find((t) => t.id === id)
   useEffect(() => {
@@ -105,6 +110,29 @@ export default function TicketWorkspace() {
       setReviewerError(err instanceof Error ? err.message : 'Failed to generate reviewer assessment.')
     } finally {
       setReviewerLoading(false)
+    }
+  }
+
+  async function generateChecklist() {
+    if (!ticket) return
+    setChecklistLoading(true)
+    setChecklistError(null)
+    try {
+      const ticketPayload = {
+        type:            ticket.type,
+        title:           ticket.title,
+        description:     ticket.description,
+        payload:         ticket.payload,
+        dataDeclaration: ticket.dataDeclaration,
+        attachments:     ticket.attachments.map((a) => ({ filename: a.filename, summary: a.extractedSummary })),
+        tags:            ticket.tags,
+      }
+      const data = await runChecklistReview(ticketPayload)
+      setChecklistData(data)
+    } catch (err) {
+      setChecklistError(err instanceof Error ? err.message : 'Failed to run checklist.')
+    } finally {
+      setChecklistLoading(false)
     }
   }
 
@@ -329,6 +357,73 @@ export default function TicketWorkspace() {
                 )}
               </section>
 
+              {/* Compliance checklist */}
+              <section>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Compliance Checklist</h2>
+                  {!checklistData && !checklistLoading && (
+                    <button className="btn btn-sm" onClick={() => void generateChecklist()}>
+                      Run checklist
+                    </button>
+                  )}
+                  {checklistData && !checklistLoading && (
+                    <button className="btn btn-sm" onClick={() => { setChecklistData(null); void generateChecklist() }}>
+                      Rerun
+                    </button>
+                  )}
+                </div>
+
+                {checklistLoading && (
+                  <div style={{ padding: '12px 16px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden="true">⏳</span>
+                    <span style={{ fontSize: 13, color: 'var(--ink-600)' }}>Running checklist…</span>
+                  </div>
+                )}
+
+                {checklistError && (
+                  <div style={{ padding: '10px 14px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <span aria-hidden="true">⚠️</span>
+                    <span style={{ flex: 1 }}>{checklistError}</span>
+                    <button className="btn btn-sm" onClick={() => void generateChecklist()}>Retry</button>
+                  </div>
+                )}
+
+                {checklistData && !checklistLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {checklistData.items.map((item) => {
+                      const verdictColor: Record<ChecklistVerdict, string> = { pass: '#166534', warn: '#92400E', fail: '#991B1B' }
+                      const verdictBg:    Record<ChecklistVerdict, string> = { pass: '#F0FDF4', warn: '#FFFBEB', fail: '#FEF2F2' }
+                      const verdictBorder:Record<ChecklistVerdict, string> = { pass: '#BBF7D0', warn: '#FDE68A', fail: '#FECACA' }
+                      const verdictIcon:  Record<ChecklistVerdict, string> = { pass: '✓', warn: '⚠', fail: '✕' }
+                      const v = item.verdict
+                      return (
+                        <div key={item.key} style={{
+                          display: 'flex', gap: 10, alignItems: 'flex-start',
+                          padding: '10px 14px', borderRadius: 'var(--r-md)',
+                          background: verdictBg[v], border: `1px solid ${verdictBorder[v]}`,
+                        }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: verdictColor[v], flexShrink: 0, width: 14, textAlign: 'center', marginTop: 1 }}>
+                            {verdictIcon[v]}
+                          </span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: verdictColor[v], marginBottom: 2 }}>
+                              {CHECKLIST_LABELS[item.key] ?? item.key}
+                            </div>
+                            <div style={{ fontSize: 12.5, color: 'var(--ink-700)', lineHeight: 1.5 }}>{item.justification}</div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {!checklistData && !checklistLoading && !checklistError && (
+                  <div style={{ padding: '14px', background: 'var(--surface-1)', border: '1px dashed var(--line)', borderRadius: 'var(--r-lg)', textAlign: 'center', fontSize: 13, color: 'var(--ink-400)' }}>
+                    Click <strong>Run checklist</strong> to evaluate the 5 PDPL compliance criteria.
+                  </div>
+                )}
+              </section>
+
               {/* Pre-submission AI summary (from seed/submission) */}
               {assessment && (
                 <section>
@@ -372,16 +467,9 @@ export default function TicketWorkspace() {
               )}
             </div>
 
-            {generation && (
-              <aside style={{ width: 340, flexShrink: 0 }} aria-label="AI co-pilot">
-                <AICoPilotPanel
-                  title="Reviewer AI Co-Pilot"
-                  cannedKey="reviewer_copilot_vendor_check"
-                  citations={generation.citations}
-                  confidence={generation.confidence}
-                  feature="copilot"
-                  context={ticket.title}
-                />
+            {!isMobile && (
+              <aside style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }} aria-label="Reviewer assist">
+                <ReviewerAssistPanel ticket={ticket} userRole={user.role} />
               </aside>
             )}
           </>

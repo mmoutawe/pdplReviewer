@@ -6,32 +6,45 @@ import { CommentThread } from '../components/CommentThread'
 import { EvidenceUploader } from '../components/forms'
 import type { Attachment } from '../data/types'
 import { EmptyState } from '../components/primitives'
-import { AICoPilotPanel } from '../components/AICoPilotPanel'
+import { EvaluateReplyView } from '../components/EvaluateReplyView'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { addReturnComment, transitionTicket } from '../api/tickets'
-import { streamAI } from '../api/ai'
-import { AI_CANNED } from '../lib/mockAi'
+import { evaluateReply, type ReplyEvaluation } from '../api/aiEvaluateReply'
+
+const ROLE_LABELS: Record<string, string> = {
+  requester:       'Requester',
+  data_management: 'Data Management Reviewer',
+  legal:           'Legal Reviewer',
+  security:        'Security Reviewer',
+  admin:           'Admin',
+}
 
 export default function ReturnedResponse() {
   const { id } = useParams<{ id: string }>()
   const { tickets } = useStore(ticketStore)
   const navigate = useNavigate()
-  const [submitted, setSubmitted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [lastReply, setLastReply] = useState('')
+  const [submitted, setSubmitted]     = useState(false)
+  const [submitting, setSubmitting]   = useState(false)
   const [newAttachments, setNewAttachments] = useState<Attachment[]>([])
+  const [evaluation, setEvaluation]   = useState<ReplyEvaluation | null>(null)
+  const [evalLoading, setEvalLoading] = useState(false)
+  const [evalError, setEvalError]     = useState<string | null>(null)
 
   const ticket = tickets.find((t) => t.id === id)
   useEffect(() => { document.title = `Respond — ${id} — PDPL Reviewer` }, [id])
 
-  if (!ticket) return <EmptyState title="Ticket not found" icon="🔍" action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back</button>} />
+  if (!ticket) return (
+    <EmptyState title="Ticket not found" icon="🔍"
+      action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back</button>} />
+  )
   if (ticket.state !== 'returned_to_requester') {
-    return <EmptyState title="Ticket is not returned" body="This ticket is not currently awaiting your response." icon="ℹ️"
-      action={<button className="btn btn-primary" onClick={() => navigate(`/requests/${id}`)}>Open ticket</button>} />
+    return (
+      <EmptyState title="Ticket is not returned" body="This ticket is not currently awaiting your response." icon="ℹ️"
+        action={<button className="btn btn-primary" onClick={() => navigate(`/requests/${id}`)}>Open ticket</button>} />
+    )
   }
 
   async function handleReply(msg: string) {
-    setLastReply(msg)
     if (isSupabaseConfigured) {
       try {
         await addReturnComment(ticket!.id, msg)
@@ -44,11 +57,38 @@ export default function ReturnedResponse() {
     } else {
       showToast('Reply added (demo mode).', 'success')
     }
-    // Trigger AI evaluation of the reply
-    const evalPrompt = ticket!.returnThread.length > 0
-      ? `Reviewer comment: "${ticket!.returnThread[ticket!.returnThread.length - 1].message}"\n\nRequester reply: "${msg}"\n\nEvaluate this reply.`
-      : msg
-    void streamAI({ feature: 'evaluate_reply', message: evalPrompt, ticketId: ticket!.id })
+
+    // Trigger evaluation
+    const lastReviewerComment = ticket!.returnThread.length > 0
+      ? ticket!.returnThread[ticket!.returnThread.length - 1].message
+      : ''
+
+    const ticketContext = JSON.stringify({
+      id:          ticket!.id,
+      type:        ticket!.type,
+      title:       ticket!.title,
+      description: ticket!.description,
+      tags:        ticket!.tags,
+    })
+
+    setEvalLoading(true)
+    setEvalError(null)
+    setEvaluation(null)
+
+    try {
+      const result = await evaluateReply({
+        roleLabel:       ROLE_LABELS['requester'],
+        reviewerComment: lastReviewerComment,
+        requesterReply:  msg,
+        ticketContext,
+        attachments:     [...ticket!.attachments, ...newAttachments],
+      })
+      setEvaluation(result)
+    } catch (err) {
+      setEvalError(err instanceof Error ? err.message : 'Evaluation failed.')
+    } finally {
+      setEvalLoading(false)
+    }
   }
 
   async function handleResubmit() {
@@ -79,14 +119,13 @@ export default function ReturnedResponse() {
     )
   }
 
-  const evalContext = lastReply
-    ? `Evaluating reply to return comment on ticket ${ticket.id}`
-    : undefined
-
   return (
     <div style={{ display: 'flex', height: '100%' }}>
+      {/* Left: reply form */}
       <div style={{ flex: 1, overflow: 'auto', padding: '28px 32px', maxWidth: 680 }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/requests/${id}`)} style={{ marginBottom: 16 }}>← Back to ticket</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/requests/${id}`)} style={{ marginBottom: 16 }}>
+          ← Back to ticket
+        </button>
         <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Respond to reviewer — {ticket.id}</h1>
         <p style={{ color: 'var(--ink-500)', marginBottom: 24, fontSize: 13.5 }}>
           Address each comment from the reviewer. Attach supporting evidence where needed. The AI will score your response for completeness.
@@ -115,16 +154,56 @@ export default function ReturnedResponse() {
         </div>
       </div>
 
-      {/* AI scoring panel */}
-      <aside style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)', padding: 16, background: 'var(--surface-0)' }} aria-label="AI evaluation panel">
-        <AICoPilotPanel
-          title="AI Evaluate Reply"
-          cannedKey={AI_CANNED.evaluate_reply_high ? 'evaluate_reply_high' : 'reviewer_copilot_vendor_check'}
-          initialText={lastReply ? undefined : 'Write your reply above — the AI will score it for completeness, specificity, and evidentiary support.'}
-          feature="evaluate_reply"
-          ticketId={ticket.id}
-          context={evalContext ?? `Return thread — ${ticket.id}`}
-        />
+      {/* Right: AI evaluation panel */}
+      <aside style={{
+        width: 340, flexShrink: 0,
+        borderLeft: '1px solid var(--line)',
+        display: 'flex', flexDirection: 'column',
+        background: 'var(--surface-0)',
+      }} aria-label="AI evaluation panel">
+
+        {/* Panel header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px',
+          borderBottom: '1px solid #DDD6FE', background: 'var(--violet-50)',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 1l1.5 3 3.5.5-2.5 2.5.5 3.5L8 9l-3 1.5.5-3.5L3 4.5 6.5 4 8 1z" fill="var(--violet-700)" opacity=".8" />
+          </svg>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--violet-700)' }}>AI Evaluate Reply</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--violet-500)', fontFamily: 'var(--font-mono)' }}>
+            {evalLoading ? 'evaluating…' : evaluation ? 'done' : 'ready'}
+          </span>
+        </div>
+
+        {/* Panel body */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
+          {!evaluation && !evalLoading && !evalError && (
+            <p style={{ fontSize: 13, color: 'var(--ink-400)', lineHeight: 1.65 }}>
+              Write your reply above — the AI will score it for completeness, specificity, and evidentiary support.
+            </p>
+          )}
+
+          {evalLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0' }}>
+              <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden="true">⏳</span>
+              <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>Evaluating your reply…</span>
+            </div>
+          )}
+
+          {evalError && (
+            <div role="alert" style={{
+              fontSize: 12.5, color: 'var(--red-700)', background: 'var(--red-50)',
+              border: '1px solid #FECACA', borderRadius: 'var(--r-sm)', padding: '10px 12px',
+            }}>
+              {evalError}
+            </div>
+          )}
+
+          {evaluation && !evalLoading && (
+            <EvaluateReplyView evaluation={evaluation} />
+          )}
+        </div>
       </aside>
     </div>
   )
