@@ -5,11 +5,13 @@ import { REQUEST_TYPE_LABELS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, resetAIStream } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket } from '../../store'
 import { useStore } from '../../hooks/useStore'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { createTicket, submitTicket } from '../../api/tickets'
-import { streamAI } from '../../api/ai'
+import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, type RequestBuilderType } from '../../api/aiRequestBuilder'
+import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
+import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentView'
 
 type Method = 'manual' | 'ai'
 
@@ -56,14 +58,14 @@ export default function Wizard() {
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [assessmentText, setAssessmentText] = useState('')
-  const [streamingText, setStreamingText] = useState('')
+  const [assessmentData, setAssessmentData] = useState<Record<string, unknown> | null>(null)
   const [assessmentLoading, setAssessmentLoading] = useState(false)
   const [assessmentError, setAssessmentError] = useState<string | null>(null)
-  const [aiBuilderInput, setAiBuilderInput] = useState('')
-  const [aiBuilderLoading, setAiBuilderLoading] = useState(false)
-  const [aiBuilderDone, setAiBuilderDone] = useState(false)
-  const [aiBuilderError, setAiBuilderError] = useState<string | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatDone, setChatDone] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
 
   const requestType = type as RequestType
   const stepIndex = StepIndex(currentStep)
@@ -77,41 +79,32 @@ export default function Wizard() {
 
   // Auto-trigger AI assessment when entering step
   useEffect(() => {
-    if (currentStep !== 'assessment' || assessmentText || assessmentLoading) return
+    if (currentStep !== 'assessment' || assessmentData || assessmentLoading) return
     void runAssessment()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep])
 
-  function buildAssessmentPrompt() {
-    const parts = [
-      `Request type: ${REQUEST_TYPE_LABELS[requestType]}`,
-      `Title: ${form.title}`,
-      `Description: ${form.description}`,
-      form.vendorName ? `Vendor/recipient: ${form.vendorName}` : null,
-      `Jurisdiction: ${form.vendorJurisdiction}`,
-      `DPA signed: ${form.hasDPA ? 'Yes' : 'No'}`,
-      `Data categories: ${form.dataCategories.join(', ') || 'None specified'}`,
-      `Estimated data subjects: ${form.estimatedSubjects || 'Unknown'}`,
-      `Retention period (days): ${form.retentionDays || 'Unknown'}`,
-      `Cross-border transfer involved: ${form.crossBorder ? 'Yes' : 'No'}`,
-      `Data subject consent obtained: ${form.consentObtained ? 'Yes' : 'No'}`,
-    ]
-    return parts.filter(Boolean).join('\n')
-  }
-
   async function runAssessment() {
     setAssessmentLoading(true)
     setAssessmentError(null)
-    setStreamingText('')
-    resetAIStream()
     try {
-      const text = await streamAI({
-        feature: 'pre_assessment',
-        message: buildAssessmentPrompt(),
-        onToken: (t) => setStreamingText((prev) => prev + t),
-      })
-      setAssessmentText(text)
-      setStreamingText('')
+      const initiation = {
+        title: form.title,
+        description: form.description,
+        ...(form.vendorName       && { vendorName:         form.vendorName }),
+        ...(form.vendorJurisdiction && { vendorJurisdiction: form.vendorJurisdiction }),
+        ...(form.tags             && { tags:               form.tags }),
+      }
+      const questionnaire = {
+        dataCategories:    form.dataCategories,
+        estimatedSubjects: form.estimatedSubjects,
+        retentionDays:     form.retentionDays,
+        crossBorder:       form.crossBorder,
+        consentObtained:   form.consentObtained,
+        hasDPA:            form.hasDPA,
+      }
+      const data = await runPresubmitAssessment(requestType as PresubmitRequestType, initiation, questionnaire)
+      setAssessmentData(data)
     } catch (err) {
       setAssessmentError(err instanceof Error ? err.message : 'Assessment failed. Please try again.')
     } finally {
@@ -119,41 +112,72 @@ export default function Wizard() {
     }
   }
 
-  async function runAIBuilder() {
-    if (!aiBuilderInput.trim()) return
-    setAiBuilderLoading(true)
-    setAiBuilderError(null)
-    resetAIStream()
+  // Auto-start chat when entering the initiation step in AI mode
+  useEffect(() => {
+    if (form.method !== 'ai' || currentStep !== 'initiation') return
+    if (chatMessages.length > 0 || chatLoading || chatDone) return
+    void startChat()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.method, currentStep])
+
+  async function startChat() {
+    setChatLoading(true)
+    setChatError(null)
     try {
-      const raw = await streamAI({ feature: 'request_builder', message: aiBuilderInput })
-      // Parse JSON — try progressively looser strategies
-      let parsed: Record<string, unknown> | null = null
-      const attempts = [
-        raw.trim(),
-        // strip markdown code fences
-        (raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [])[1],
-        // extract first { ... last }
-        raw.includes('{') ? raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : null,
-      ]
-      for (const candidate of attempts) {
-        if (!candidate) continue
-        try { parsed = JSON.parse(candidate); break } catch { /* try next */ }
+      const { message, result } = await chatWithRequestBuilder(
+        requestType as RequestBuilderType,
+        [],
+      )
+      if (result) {
+        applyBuilderResult(result)
+      } else {
+        setChatMessages([{ role: 'assistant', content: message }])
       }
-      if (!parsed) throw new Error('Gemini response was not valid JSON. Try rephrasing your description.')
-      update({
-        title:              typeof parsed.title === 'string'           ? parsed.title : form.title,
-        description:        typeof parsed.description === 'string'     ? parsed.description : form.description,
-        dataCategories:     Array.isArray(parsed.dataCategories)       ? parsed.dataCategories as string[] : form.dataCategories,
-        estimatedSubjects:  typeof parsed.estimatedSubjects === 'string' ? parsed.estimatedSubjects : form.estimatedSubjects,
-        crossBorder:        typeof parsed.crossBorder === 'boolean'    ? parsed.crossBorder : form.crossBorder,
-        hasDPA:             typeof parsed.hasDPA === 'boolean'         ? parsed.hasDPA : form.hasDPA,
-      })
-      setAiBuilderDone(true)
     } catch (err) {
-      setAiBuilderError(err instanceof Error ? err.message : 'Generation failed')
+      setChatError(err instanceof Error ? err.message : 'Failed to start conversation')
     } finally {
-      setAiBuilderLoading(false)
+      setChatLoading(false)
     }
+  }
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || chatLoading) return
+    const userMsg: ChatMessage = { role: 'user', content: chatInput.trim() }
+    const next = [...chatMessages, userMsg]
+    setChatMessages(next)
+    setChatInput('')
+    setChatLoading(true)
+    setChatError(null)
+    try {
+      const { message, result } = await chatWithRequestBuilder(
+        requestType as RequestBuilderType,
+        next,
+      )
+      if (result) {
+        applyBuilderResult(result)
+      } else {
+        setChatMessages((prev) => [...prev, { role: 'assistant', content: message }])
+      }
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : 'Failed to send message')
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  function applyBuilderResult(result: RequestBuilderResult) {
+    update({
+      title:             result.title             ?? form.title,
+      description:       result.description       ?? form.description,
+      vendorName:        result.vendorName        ?? form.vendorName,
+      vendorJurisdiction: result.vendorJurisdiction ?? form.vendorJurisdiction,
+      hasDPA:            result.hasDPA            ?? form.hasDPA,
+      dataCategories:    result.dataCategories    ?? form.dataCategories,
+      estimatedSubjects: result.estimatedSubjects ?? form.estimatedSubjects,
+      retentionDays:     result.retentionDays     ?? form.retentionDays,
+      crossBorder:       result.crossBorder       ?? form.crossBorder,
+    })
+    setChatDone(true)
   }
 
   function update(partial: Partial<WizardState>) {
@@ -311,62 +335,115 @@ export default function Wizard() {
             <section aria-labelledby="step-init">
               <h2 id="step-init" style={{ fontSize: 18, fontWeight: 700, marginBottom: form.method === 'ai' ? 8 : 20 }}>Request details</h2>
 
-              {/* AI builder panel — shown only when method === 'ai' */}
+              {/* AI builder chat — shown only when method === 'ai' */}
               {form.method === 'ai' && (
                 <div style={{ marginBottom: 24 }}>
-                  {!aiBuilderDone ? (
+                  <div style={{
+                    border: '1px solid var(--brand-200)', borderRadius: 'var(--r-lg)',
+                    overflow: 'hidden', background: 'var(--surface-0)',
+                  }}>
+                    {/* Header */}
                     <div style={{
-                      background: 'var(--brand-50)', border: '1px solid var(--brand-200)',
-                      borderRadius: 'var(--r-lg)', padding: '16px 18px',
+                      padding: '10px 14px', background: 'var(--brand-50)',
+                      borderBottom: '1px solid var(--brand-200)',
+                      fontSize: 13, fontWeight: 600, color: 'var(--brand-800)',
+                      display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-800)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span aria-hidden="true">✨</span> Gemini request builder
-                      </div>
-                      <p style={{ fontSize: 12.5, color: 'var(--brand-700)', marginBottom: 12, lineHeight: 1.5 }}>
-                        Describe your use case in plain language. Gemini will extract the structured fields for you.
-                      </p>
-                      <textarea
-                        className="textarea"
-                        rows={4}
-                        value={aiBuilderInput}
-                        onChange={(e) => setAiBuilderInput(e.target.value)}
-                        placeholder="e.g. We need to onboard Sahab Cloud as an IaaS provider to host our InstaLend application. They'll process KYC data including national ID, IBAN, and credit scores for Saudi residents. The contract is 3 years and they're based in KSA."
-                        style={{ marginBottom: 10 }}
-                        disabled={aiBuilderLoading}
-                      />
-                      {aiBuilderError && (
-                        <div role="alert" style={{ fontSize: 12.5, color: 'var(--red-700)', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-sm)', padding: '8px 12px', marginBottom: 10 }}>
-                          {aiBuilderError}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => void runAIBuilder()}
-                          disabled={!aiBuilderInput.trim() || aiBuilderLoading}
-                        >
-                          {aiBuilderLoading
-                            ? <><span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite', marginRight: 6 }} aria-hidden="true" />Generating…</>
-                            : '✨ Generate with Gemini'}
-                        </button>
-                        <button className="btn btn-sm" onClick={() => update({ method: 'manual' })}>
-                          Fill manually instead
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{
-                      background: '#F0FDF4', border: '1px solid #BBF7D0',
-                      borderRadius: 'var(--r-md)', padding: '10px 14px',
-                      fontSize: 12.5, color: '#166534', display: 'flex', gap: 8, alignItems: 'center',
-                    }}>
-                      <span aria-hidden="true">✓</span>
-                      Form pre-filled by Gemini. Review and edit the fields below before continuing.
-                      <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setAiBuilderDone(false); setAiBuilderInput('') }}>
-                        Regenerate
+                      <span aria-hidden="true">✨</span> AI Request Builder
+                      <button className="btn btn-sm" style={{ marginLeft: 'auto', fontSize: 12 }}
+                        onClick={() => update({ method: 'manual' })}>
+                        Fill manually
                       </button>
                     </div>
-                  )}
+
+                    {/* Messages */}
+                    <div style={{
+                      maxHeight: 300, overflowY: 'auto', padding: '12px 14px',
+                      display: 'flex', flexDirection: 'column', gap: 10,
+                    }}>
+                      {chatMessages.length === 0 && chatLoading && (
+                        <div style={{ fontSize: 13, color: 'var(--ink-400)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }} aria-hidden="true">⏳</span>
+                          Starting conversation…
+                        </div>
+                      )}
+                      {chatMessages.map((msg, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                          <div style={{
+                            maxWidth: '85%', padding: '8px 12px', fontSize: 13, lineHeight: 1.5,
+                            borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                            background: msg.role === 'user' ? 'var(--brand-700)' : 'var(--surface-1)',
+                            color: msg.role === 'user' ? '#fff' : 'var(--ink-800)',
+                            border: msg.role === 'user' ? 'none' : '1px solid var(--line)',
+                          }}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+                      {chatMessages.length > 0 && chatLoading && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                          <div style={{
+                            padding: '8px 12px', borderRadius: '12px 12px 12px 2px',
+                            background: 'var(--surface-1)', border: '1px solid var(--line)',
+                            fontSize: 18, letterSpacing: 2, color: 'var(--ink-400)',
+                          }}>···</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Error */}
+                    {chatError && (
+                      <div role="alert" style={{
+                        padding: '8px 14px', background: 'var(--red-50)',
+                        borderTop: '1px solid #FECACA', fontSize: 12.5, color: 'var(--red-700)',
+                        display: 'flex', gap: 8, alignItems: 'center',
+                      }}>
+                        {chatError}
+                        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => void startChat()}>Retry</button>
+                      </div>
+                    )}
+
+                    {/* Done banner */}
+                    {chatDone && (
+                      <div style={{
+                        padding: '8px 14px', background: '#F0FDF4',
+                        borderTop: '1px solid #BBF7D0',
+                        fontSize: 12.5, color: '#166534', display: 'flex', gap: 8, alignItems: 'center',
+                      }}>
+                        <span aria-hidden="true">✓</span> Form pre-filled — review and edit the fields below.
+                        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => {
+                          setChatMessages([]); setChatDone(false); setChatError(null); void startChat()
+                        }}>
+                          Start over
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Input */}
+                    {!chatDone && (
+                      <div style={{
+                        padding: '10px 14px', borderTop: '1px solid var(--line)',
+                        display: 'flex', gap: 8, background: 'var(--surface-0)',
+                      }}>
+                        <input
+                          className="input"
+                          style={{ flex: 1, fontSize: 13 }}
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendChatMessage() } }}
+                          placeholder="Type your answer…"
+                          disabled={chatLoading || chatMessages.length === 0}
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => void sendChatMessage()}
+                          disabled={!chatInput.trim() || chatLoading || chatMessages.length === 0}
+                        >
+                          Send
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -484,7 +561,7 @@ export default function Wizard() {
                 Review the AI-generated assessment before submitting. Address any critical or high-risk findings before proceeding.
               </p>
 
-              {/* Loading state */}
+              {/* Loading */}
               {assessmentLoading && (
                 <div style={{
                   padding: '16px 18px', background: 'var(--surface-1)',
@@ -496,28 +573,12 @@ export default function Wizard() {
                 </div>
               )}
 
-              {/* Streaming preview — shown while tokens arrive */}
-              {(assessmentLoading || assessmentText) && (
-                <div style={{
-                  padding: '16px 18px',
-                  background: 'var(--surface-0)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 'var(--r-lg)',
-                  fontSize: 13.5,
-                  lineHeight: 1.75,
-                  color: 'var(--ink-800)',
-                  whiteSpace: 'pre-wrap',
-                  fontFamily: 'var(--font-sans)',
-                  minHeight: 120,
-                }}>
-                  {assessmentLoading ? streamingText : assessmentText}
-                  {assessmentLoading && (
-                    <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'var(--brand-700)', verticalAlign: 'text-bottom', marginLeft: 1, animation: 'blink 1s step-end infinite' }} aria-hidden="true" />
-                  )}
-                </div>
+              {/* Structured assessment */}
+              {assessmentData && !assessmentLoading && (
+                <PresubmitAssessmentView data={assessmentData} requestType={requestType} />
               )}
 
-              {/* Error state */}
+              {/* Error */}
               {assessmentError && (
                 <div style={{
                   padding: '14px 16px', background: 'var(--red-50)',

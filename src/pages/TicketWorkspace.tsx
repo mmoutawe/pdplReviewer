@@ -19,6 +19,8 @@ import type { ReviewSlot, TicketState } from '../data/types'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket } from '../api/tickets'
 import { getCachedUser } from '../lib/userCache'
+import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
+import { ReviewerAssessmentView } from '../components/ReviewerAssessmentView'
 
 type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit'
 
@@ -38,6 +40,9 @@ export default function TicketWorkspace() {
   const navigate = useNavigate()
   const isMobile = useMobile()
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
+  const [reviewerData, setReviewerData] = useState<Record<string, unknown> | null>(null)
+  const [reviewerLoading, setReviewerLoading] = useState(false)
+  const [reviewerError, setReviewerError] = useState<string | null>(null)
 
   const ticket = tickets.find((t) => t.id === id)
   useEffect(() => {
@@ -77,6 +82,29 @@ export default function TicketWorkspace() {
     (user.role === 'legal' && ticket.state === 'in_legal_review') ||
     (user.role === 'security' && ticket.state === 'in_security_review')
   )
+
+  async function generateReviewerAI() {
+    if (!ticket) return
+    setReviewerLoading(true)
+    setReviewerError(null)
+    try {
+      const ticketPayload = {
+        type:            ticket.type,
+        title:           ticket.title,
+        description:     ticket.description,
+        payload:         ticket.payload,
+        dataDeclaration: ticket.dataDeclaration,
+        returnThread:    ticket.returnThread,
+        tags:            ticket.tags,
+      }
+      const data = await runReviewerAssessment(ticket.type as ReviewerRequestType, ticketPayload)
+      setReviewerData(data)
+    } catch (err) {
+      setReviewerError(err instanceof Error ? err.message : 'Failed to generate reviewer assessment.')
+    } finally {
+      setReviewerLoading(false)
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -243,47 +271,105 @@ export default function TicketWorkspace() {
         {/* ── AI Assessment ── */}
         {activeTab === 'ai' && (
           <>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {assessment ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div style={{
-                    padding: '14px 18px',
-                    background: assessment.overallRisk === 'low' ? 'var(--emerald-50)' : 'var(--red-50)',
-                    border: `1px solid ${assessment.overallRisk === 'low' ? '#BBF7D0' : '#FECACA'}`,
-                    borderRadius: 'var(--r-md)',
-                  }}>
-                    <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 4 }}>{assessment.summary}</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {assessment.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
-                    </div>
-                  </div>
-                  {assessment.findings.map((f) => {
-                    const sev = f.severity
-                    const sevColor = sev === 'critical' || sev === 'high' ? 'var(--red-700)' : sev === 'medium' ? 'var(--amber-700)' : 'var(--ink-400)'
-                    return (
-                      <div key={f.id} className="card" style={{ padding: '14px 18px' }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: sevColor, letterSpacing: '0.05em' }}>{sev}</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-800)' }}>{f.title}</span>
-                          <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--ink-400)' }}>{f.category}</span>
-                        </div>
-                        <p style={{ fontSize: 13.5, color: 'var(--ink-700)', lineHeight: 1.7, marginBottom: f.remediation ? 8 : 0 }}>{f.detail}</p>
-                        {f.remediation && (
-                          <p style={{ fontSize: 12.5, color: 'var(--ink-600)', borderTop: '1px solid var(--line)', paddingTop: 8, fontStyle: 'italic' }}>
-                            Recommendation: {f.remediation}
-                          </p>
-                        )}
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                          {f.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
-                        </div>
-                      </div>
-                    )
-                  })}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+              {/* Reviewer AI deep assessment */}
+              <section>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Reviewer AI Deep Assessment</h2>
+                  {!reviewerData && !reviewerLoading && (
+                    <button className="btn btn-primary btn-sm" onClick={() => void generateReviewerAI()}>
+                      ✨ Generate
+                    </button>
+                  )}
+                  {reviewerData && !reviewerLoading && (
+                    <button className="btn btn-sm" onClick={() => { setReviewerData(null); void generateReviewerAI() }}>
+                      Regenerate
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <EmptyState title="No AI assessment" body="AI assessment will be generated on submission." icon="✨" />
+
+                {reviewerLoading && (
+                  <div style={{
+                    padding: '16px 18px', background: 'var(--surface-1)',
+                    border: '1px solid var(--line)', borderRadius: 'var(--r-lg)',
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}>
+                    <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden="true">⏳</span>
+                    <span style={{ fontSize: 13.5, color: 'var(--ink-600)' }}>Running deep reviewer assessment…</span>
+                  </div>
+                )}
+
+                {reviewerError && (
+                  <div style={{
+                    padding: '12px 16px', background: 'var(--red-50)',
+                    border: '1px solid #FECACA', borderRadius: 'var(--r-md)',
+                    fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center',
+                  }}>
+                    <span aria-hidden="true">⚠️</span>
+                    <span style={{ flex: 1 }}>{reviewerError}</span>
+                    <button className="btn btn-sm" onClick={() => void generateReviewerAI()}>Retry</button>
+                  </div>
+                )}
+
+                {reviewerData && !reviewerLoading && (
+                  <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />
+                )}
+
+                {!reviewerData && !reviewerLoading && !reviewerError && (
+                  <div style={{
+                    padding: '20px', background: 'var(--surface-1)',
+                    border: '1px dashed var(--line)', borderRadius: 'var(--r-lg)',
+                    textAlign: 'center', fontSize: 13.5, color: 'var(--ink-400)',
+                  }}>
+                    Click <strong>Generate</strong> to run a deep PDPL review for this ticket.
+                  </div>
+                )}
+              </section>
+
+              {/* Pre-submission AI summary (from seed/submission) */}
+              {assessment && (
+                <section>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 14 }}>Pre-Submission AI Summary</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{
+                      padding: '14px 18px',
+                      background: assessment.overallRisk === 'low' ? 'var(--emerald-50)' : 'var(--red-50)',
+                      border: `1px solid ${assessment.overallRisk === 'low' ? '#BBF7D0' : '#FECACA'}`,
+                      borderRadius: 'var(--r-md)',
+                    }}>
+                      <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--ink-900)', marginBottom: 4 }}>{assessment.summary}</p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {assessment.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
+                      </div>
+                    </div>
+                    {assessment.findings.map((f) => {
+                      const sev = f.severity
+                      const sevColor = sev === 'critical' || sev === 'high' ? 'var(--red-700)' : sev === 'medium' ? 'var(--amber-700)' : 'var(--ink-400)'
+                      return (
+                        <div key={f.id} className="card" style={{ padding: '14px 18px' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                            <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: sevColor, letterSpacing: '0.05em' }}>{sev}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-800)' }}>{f.title}</span>
+                            <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--ink-400)' }}>{f.category}</span>
+                          </div>
+                          <p style={{ fontSize: 13.5, color: 'var(--ink-700)', lineHeight: 1.7, marginBottom: f.remediation ? 8 : 0 }}>{f.detail}</p>
+                          {f.remediation && (
+                            <p style={{ fontSize: 12.5, color: 'var(--ink-600)', borderTop: '1px solid var(--line)', paddingTop: 8, fontStyle: 'italic' }}>
+                              Recommendation: {f.remediation}
+                            </p>
+                          )}
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                            {f.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
               )}
             </div>
+
             {generation && (
               <aside style={{ width: 340, flexShrink: 0 }} aria-label="AI co-pilot">
                 <AICoPilotPanel
