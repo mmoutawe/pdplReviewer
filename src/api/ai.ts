@@ -23,7 +23,7 @@ interface AIStreamOptions {
   onToken?: (token: string) => void
 }
 
-const GEMINI_SYSTEM_PROMPT = `You are a PDPL compliance intake assistant for a Saudi FinTech organization operating under the Personal Data Protection Law (Royal Decree M/19, 2021).
+const AZURE_SYSTEM_PROMPT = `You are a PDPL compliance intake assistant for a Saudi FinTech organization operating under the Personal Data Protection Law (Royal Decree M/19, 2021).
 
 Given a freeform description of a data processing activity, extract the relevant fields and respond with ONLY valid JSON — no markdown, no code fences, no explanations, nothing before or after the JSON object.
 
@@ -39,62 +39,36 @@ The JSON must have exactly these keys:
   "notes": "PDPL compliance observations, relevant article numbers, risks"
 }`
 
-async function streamGemini(
-  message: string,
-  onToken?: (token: string) => void,
-): Promise<string> {
-  const apiKey = viteEnv.VITE_GEMINI_API_KEY
-  if (!apiKey) throw new Error('VITE_GEMINI_API_KEY not set')
+async function callAzureOpenAI(message: string): Promise<string> {
+  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
+  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o'
+  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
+  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
     body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: message }] }],
-      systemInstruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      messages: [
+        { role: 'system', content: AZURE_SYSTEM_PROMPT },
+        { role: 'user',   content: message },
+      ],
+      temperature: 0.7,
+      max_tokens: 1024,
+      response_format: { type: 'json_object' },
     }),
   })
 
   if (!response.ok) {
     const err = await response.text()
-    throw new Error(`Gemini error ${response.status}: ${err}`)
+    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
   }
 
-  const reader = response.body!.getReader()
-  const decoder = new TextDecoder()
-  let fullText = ''
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice(6).trim()
-      if (!data || data === '[DONE]') continue
-      try {
-        const payload = JSON.parse(data)
-        const token: string = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-        if (token) {
-          fullText += token
-          onToken?.(token)
-          aiStreamStore.setState({ tokens: [...aiStreamStore.getState().tokens, token] })
-        }
-      } catch {
-        // malformed SSE line — skip
-      }
-    }
-  }
-
-  return fullText
+  const data = await response.json()
+  return data?.choices?.[0]?.message?.content ?? ''
 }
 
 /**
@@ -104,13 +78,14 @@ async function streamGemini(
  * - Otherwise: falls back to local mock streaming
  */
 export async function streamAI(opts: AIStreamOptions): Promise<string> {
-  // Route request_builder through Gemini whenever the key is available
-  if (opts.feature === 'request_builder' && viteEnv.VITE_GEMINI_API_KEY) {
+  // Route request_builder through Azure OpenAI whenever the key is available
+  if (opts.feature === 'request_builder' && viteEnv.VITE_AZURE_OPENAI_KEY) {
     resetAIStream()
     aiStreamStore.setState({ streaming: true, tokens: [], done: false, error: null })
     try {
-      const text = await streamGemini(opts.message, opts.onToken)
-      aiStreamStore.setState({ streaming: false, done: true })
+      const text = await callAzureOpenAI(opts.message)
+      opts.onToken?.(text)
+      aiStreamStore.setState({ tokens: [text], streaming: false, done: true })
       return text
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)

@@ -126,13 +126,18 @@ export default function Wizard() {
     resetAIStream()
     try {
       const raw = await streamAI({ feature: 'request_builder', message: aiBuilderInput })
-      // Parse JSON — try direct parse, then strip any accidental markdown fences
+      // Parse JSON — try progressively looser strategies
       let parsed: Record<string, unknown> | null = null
-      try {
-        parsed = JSON.parse(raw)
-      } catch {
-        const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/)
-        if (m) { try { parsed = JSON.parse(m[1]) } catch { /* fall through */ } }
+      const attempts = [
+        raw.trim(),
+        // strip markdown code fences
+        (raw.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [])[1],
+        // extract first { ... last }
+        raw.includes('{') ? raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1) : null,
+      ]
+      for (const candidate of attempts) {
+        if (!candidate) continue
+        try { parsed = JSON.parse(candidate); break } catch { /* try next */ }
       }
       if (!parsed) throw new Error('Gemini response was not valid JSON. Try rephrasing your description.')
       update({
