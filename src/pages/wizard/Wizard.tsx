@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import type { RequestType } from '../../data/types'
+import type { RequestType, Ticket, TicketPayload } from '../../data/types'
 import { REQUEST_TYPE_LABELS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore } from '../../store'
 import { useStore } from '../../hooks/useStore'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { createTicket, submitTicket } from '../../api/tickets'
@@ -262,9 +262,81 @@ export default function Wizard() {
         showToast('Request submitted successfully.', 'success')
         navigate(`/requests/${ready.id}`)
       } else {
+        // Demo mode — build a full Ticket and inject it into the store
+        const sensitive = ['biometric', 'health', 'national_id']
+        const financial  = ['iban', 'transaction_history']
+        const now        = new Date().toISOString()
+        const year       = new Date().getFullYear()
+        const count      = ticketStore.getState().tickets.length + 1
+        const newId      = `PDPL-${year}-${String(count).padStart(4, '0')}`
+
+        const payloadMap: Record<RequestType, TicketPayload> = {
+          vendor_onboarding: {
+            kind: 'vendor_onboarding', vendorName: form.vendorName || 'Unknown Vendor',
+            vendorWebsite: '', servicesProvided: '', dataProcessingPurpose: form.description,
+            contractRef: '', hasDPA: form.hasDPA, vendorJurisdiction: form.vendorJurisdiction,
+            subprocessors: [], certifications: [],
+          },
+          external_document_sharing: {
+            kind: 'external_document_sharing', documentTitle: form.title,
+            recipientName: form.vendorName || '', recipientOrg: form.vendorName || '',
+            recipientEmail: '', recipientJurisdiction: form.vendorJurisdiction,
+            purpose: form.description, retentionDays: Number(form.retentionDays) || 30,
+            expiryAt: new Date(Date.now() + (Number(form.retentionDays) || 30) * 86400000).toISOString(),
+          },
+          data_sharing_external: {
+            kind: 'data_sharing_external', recipientOrg: form.vendorName || '',
+            recipientJurisdiction: form.vendorJurisdiction, legalBasis: 'legitimate_interest',
+            datasetName: form.title, rowCountEstimate: Number(form.estimatedSubjects) || 0,
+            fieldsShared: form.dataCategories, encryptionAtRest: true, encryptionInTransit: true,
+            recipientUseCase: form.description,
+          },
+          internal_data_access: {
+            kind: 'internal_data_access', systemName: '', datasetName: form.title,
+            accessLevel: 'read', accessDuration: '30d', businessJustification: form.description,
+            managerApproverId: '', fieldsRequested: form.dataCategories,
+          },
+          cross_border_transfer: {
+            kind: 'cross_border_transfer', destinationCountry: form.vendorJurisdiction,
+            destinationOrg: form.vendorName || '', transferMechanism: 'sccs',
+            dataCategories: form.dataCategories, estimatedRecords: Number(form.estimatedSubjects) || 0,
+            encryptionInTransit: true, destinationCertifications: [], hasSaudiResidencyCopy: false,
+          },
+        }
+
+        const demoTicket: Ticket = {
+          id: newId, type: requestType, state: 'in_data_management',
+          title: form.title, description: form.description, requesterId: user.id,
+          createdAt: now, updatedAt: now, submittedAt: now,
+          payload: payloadMap[requestType],
+          dataDeclaration: {
+            containsPII: form.dataCategories.length > 0,
+            piiCategories: form.dataCategories,
+            containsSensitive: form.dataCategories.some((c) => sensitive.includes(c)),
+            sensitiveCategories: form.dataCategories.filter((c) => sensitive.includes(c)),
+            containsFinancial: form.dataCategories.some((c) => financial.includes(c)),
+            financialCategories: form.dataCategories.filter((c) => financial.includes(c)),
+            affectedDataSubjectGroups: ['customers'],
+            estimatedSubjectCount: Number(form.estimatedSubjects) || 0,
+            retentionPeriodDays: Number(form.retentionDays) || 90,
+            encryptionState: 'both',
+            crossBorderInvolved: form.crossBorder,
+            consentObtained: form.consentObtained,
+            consentMechanism: form.consentObtained ? 'explicit' : undefined,
+          },
+          reviews: [{ role: 'data_management', reviewerId: null, verdict: 'pending' }],
+          sla: {
+            ackHours: 24, decisionHours: 72, startedAt: now, breached: false,
+            decisionDueAt: new Date(Date.now() + 72 * 3600000).toISOString(),
+          },
+          attachments: [], returnThread: [],
+          tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        }
+
+        demoAddTicket(demoTicket)
         clearDraft()
-        setSubmitted(true)
         showToast('Request submitted successfully.', 'success')
+        navigate(`/requests/${newId}`)
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Submission failed.', 'error')

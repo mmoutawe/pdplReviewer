@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ticketStore, showToast, refreshTickets } from '../store'
+import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment } from '../store'
 import { useStore } from '../hooks/useStore'
 import { CommentThread } from '../components/CommentThread'
 import { EvidenceUploader } from '../components/forms'
@@ -55,7 +55,9 @@ export default function ReturnedResponse() {
         return
       }
     } else {
-      showToast('Reply added (demo mode).', 'success')
+      const { user } = authStore.getState()
+      demoAddReturnComment(ticket!.id, msg, 'requester', user.fullName)
+      showToast('Reply added.', 'success')
     }
 
     // Trigger evaluation
@@ -96,8 +98,9 @@ export default function ReturnedResponse() {
     try {
       if (isSupabaseConfigured) {
         const updated = await transitionTicket(ticket!.id, 'in_data_management', 'Resubmitted after addressing return comments')
-        const { updateTicket } = await import('../store')
         updateTicket(updated.id, updated)
+      } else {
+        updateTicket(ticket!.id, { state: 'in_data_management' })
       }
       setSubmitted(true)
       showToast('Response submitted and ticket resubmitted.', 'success')

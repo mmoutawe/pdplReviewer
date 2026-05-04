@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ticketStore, authStore, showToast, updateTicket, refreshTickets } from '../store'
+import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment } from '../store'
 import { useStore } from '../hooks/useStore'
 import {
   vendorById, projectById, REQUEST_TYPE_LABELS,
@@ -85,7 +85,7 @@ export default function TicketWorkspace() {
   }))
 
   const canReview = (
-    (user.role === 'data_management' && ticket.state === 'in_data_management') ||
+    (user.role === 'data_management' && ['submitted', 'in_data_management'].includes(ticket.state)) ||
     (user.role === 'legal' && ticket.state === 'in_legal_review') ||
     (user.role === 'security' && ticket.state === 'in_security_review')
   )
@@ -176,7 +176,7 @@ export default function TicketWorkspace() {
               </button>
             )}
             {canReview && (
-              <ReviewActions ticket={ticket} role={user.role as 'data_management' | 'legal' | 'security'} />
+              <ReviewActions ticket={ticket} role={user.role as 'data_management' | 'legal' | 'security'} userName={user.fullName} />
             )}
           </div>
         </div>
@@ -533,7 +533,8 @@ export default function TicketWorkspace() {
                     showToast(err instanceof Error ? err.message : 'Failed to add comment.', 'error')
                   }
                 } else {
-                  showToast('Comment added (demo mode).', 'success')
+                  demoAddReturnComment(ticket.id, msg, user.role as import('../data/types').Role, user.fullName)
+                  showToast('Comment added.', 'success')
                 }
               }}
             />
@@ -574,7 +575,7 @@ function ReviewerRow({ slot }: { slot: ReviewSlot }) {
   )
 }
 
-function ReviewActions({ ticket, role }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security' }) {
+function ReviewActions({ ticket, role, userName }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security'; userName: string }) {
   const navigate = useNavigate()
   const [pending, setPending] = useState<'approve' | 'return' | 'reject' | null>(null)
   const [notes, setNotes] = useState('')
@@ -597,6 +598,11 @@ function ReviewActions({ ticket, role }: { ticket: import('../data/types').Ticke
         await saveReviewDecision(ticket.id, role, pending, notes || undefined)
         const updated = await transitionTicket(ticket.id, nextState(pending), notes || undefined)
         updateTicket(ticket.id, updated)
+      } else {
+        updateTicket(ticket.id, { state: nextState(pending) })
+        if (pending === 'return' && notes.trim()) {
+          demoAddReturnComment(ticket.id, notes, role, userName)
+        }
       }
       showToast(`Decision recorded: ${pending}`, 'success')
       navigate('/requests')

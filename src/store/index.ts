@@ -6,7 +6,7 @@
  * works with zero backend setup.
  */
 
-import type { Ticket, User } from '../data/types'
+import type { Ticket, User, Role, ReturnThreadEntry } from '../data/types'
 import {
   NOTIFICATIONS as SEED_NOTIFS,
   TICKETS as SEED_TICKETS,
@@ -131,6 +131,23 @@ export function updateTicket(id: string, partial: Partial<Ticket>) {
       t.id === id ? { ...t, ...partial, updatedAt: new Date().toISOString() } : t
     ),
   })
+}
+
+export function demoAddTicket(ticket: Ticket) {
+  ticketStore.setState({ tickets: [ticket, ...ticketStore.getState().tickets] })
+}
+
+export function demoAddReturnComment(ticketId: string, message: string, byRole: Role, byName: string) {
+  const ticket = ticketStore.getState().tickets.find((t) => t.id === ticketId)
+  if (!ticket) return
+  const entry: ReturnThreadEntry = {
+    id: crypto.randomUUID(),
+    by: byName,
+    byRole,
+    message,
+    createdAt: new Date().toISOString(),
+  }
+  updateTicket(ticketId, { returnThread: [...ticket.returnThread, entry] })
 }
 
 export async function refreshTickets() {
