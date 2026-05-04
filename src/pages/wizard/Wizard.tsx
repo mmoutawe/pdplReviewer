@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { RequestType } from '../../data/types'
 import { REQUEST_TYPE_LABELS } from '../../data/seed'
@@ -66,6 +66,18 @@ export default function Wizard() {
   const [chatLoading, setChatLoading] = useState(false)
   const [chatDone, setChatDone] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const chatInputRef  = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (chatScrollRef.current)
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+  }, [chatMessages, chatLoading])
+
+  useEffect(() => {
+    if (!chatLoading && chatMessages.length > 0 && !chatDone)
+      chatInputRef.current?.focus()
+  }, [chatLoading, chatMessages.length, chatDone])
 
   const requestType = type as RequestType
   const stepIndex = StepIndex(currentStep)
@@ -357,7 +369,7 @@ export default function Wizard() {
                     </div>
 
                     {/* Messages */}
-                    <div style={{
+                    <div ref={chatScrollRef} style={{
                       maxHeight: 300, overflowY: 'auto', padding: '12px 14px',
                       display: 'flex', flexDirection: 'column', gap: 10,
                     }}>
@@ -426,6 +438,7 @@ export default function Wizard() {
                         display: 'flex', gap: 8, background: 'var(--surface-0)',
                       }}>
                         <input
+                          ref={chatInputRef}
                           className="input"
                           style={{ flex: 1, fontSize: 13 }}
                           value={chatInput}
