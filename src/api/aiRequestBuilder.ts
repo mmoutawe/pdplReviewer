@@ -148,11 +148,11 @@ export async function chatWithRequestBuilder(
 ): Promise<ChatResponse> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const messages = [
     { role: 'system',    content: SYSTEM_PROMPTS[requestType] },
@@ -168,7 +168,7 @@ export async function chatWithRequestBuilder(
       tools: [TOOLS[requestType]],
       tool_choice: 'auto',
       temperature: 0.7,
-      max_tokens: 1024,
+      max_completion_tokens: 1024,
     }),
   })
 

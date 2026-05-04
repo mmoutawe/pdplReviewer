@@ -93,7 +93,7 @@ export async function runReviewerAssessment(
 ): Promise<Record<string, unknown>> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
@@ -101,7 +101,7 @@ export async function runReviewerAssessment(
 Ticket:
 ${JSON.stringify(ticket, null, 2)}`
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -112,7 +112,7 @@ ${JSON.stringify(ticket, null, 2)}`
         { role: 'user',   content: userMessage },
       ],
       temperature: 0.3,
-      max_tokens: 2048,
+      max_completion_tokens: 2048,
       response_format: { type: 'json_object' },
     }),
   })

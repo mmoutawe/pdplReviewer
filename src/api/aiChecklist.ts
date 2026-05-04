@@ -60,11 +60,11 @@ export async function runChecklistReview(
 ): Promise<ChecklistResult> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const itemsList = CHECKLIST_ITEMS.map((i) => `${i.key} - ${i.label}`).join('\n')
   const userMessage = `Checklist items:\n${itemsList}\n\nRequest data:\n${JSON.stringify(ticketData, null, 2)}`
@@ -80,7 +80,7 @@ export async function runChecklistReview(
       tools:       [CHECKLIST_TOOL],
       tool_choice: { type: 'function', function: { name: 'submit_checklist' } },
       temperature: 0.2,
-      max_tokens:  512,
+      max_completion_tokens:  512,
     }),
   })
 
@@ -162,12 +162,12 @@ export async function validateQuestionnaireDocument(opts: {
 
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
   const today = new Date().toISOString().slice(0, 10)
-  const url   = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url   = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -180,7 +180,7 @@ export async function validateQuestionnaireDocument(opts: {
       tools:       [DOC_VALIDATOR_TOOL],
       tool_choice: { type: 'function', function: { name: 'submit_document_validation' } },
       temperature: 0.1,
-      max_tokens:  512,
+      max_completion_tokens:  512,
     }),
   })
 
@@ -241,11 +241,11 @@ const FORM_EXTRACT_SYSTEM = `You extract PDPL compliance review request data fro
 export async function extractRequestForm(documentText: string): Promise<ExtractedRequest> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -258,7 +258,7 @@ export async function extractRequestForm(documentText: string): Promise<Extracte
       tools:       [FORM_EXTRACT_TOOL],
       tool_choice: { type: 'function', function: { name: 'extract_request_data' } },
       temperature: 0.1,
-      max_tokens:  1024,
+      max_completion_tokens:  1024,
     }),
   })
 

@@ -82,11 +82,11 @@ export async function evaluateReply(opts: {
 
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const attachmentContext = buildAttachmentContext(attachments)
   const systemPrompt      = buildSystemPrompt(roleLabel, reviewerComment, ticketContext, attachmentContext)
@@ -103,7 +103,7 @@ export async function evaluateReply(opts: {
       tools:        [TOOL_DEF],
       tool_choice:  { type: 'function', function: { name: 'submit_reply_evaluation' } },
       temperature:  0.3,
-      max_tokens:   1024,
+      max_completion_tokens: 1024,
     }),
   })
 

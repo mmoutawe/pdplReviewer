@@ -96,7 +96,7 @@ export async function runPresubmitAssessment(
 ): Promise<Record<string, unknown>> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
@@ -108,7 +108,7 @@ ${JSON.stringify(questionnaire, null, 2)}
 Document text excerpts (may be empty):
 ${(documentText ?? '').slice(0, 6000)}`
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -119,7 +119,7 @@ ${(documentText ?? '').slice(0, 6000)}`
         { role: 'user',   content: userMessage },
       ],
       temperature: 0.4,
-      max_tokens: 2048,
+      max_completion_tokens: 2048,
       response_format: { type: 'json_object' },
     }),
   })

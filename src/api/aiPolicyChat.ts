@@ -131,11 +131,11 @@ export async function* streamPolicyChat(
 ): AsyncGenerator<string> {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4.1-mini'
+  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2024-12-01-preview`
+  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
   const response = await fetch(url, {
     method: 'POST',
@@ -147,7 +147,7 @@ export async function* streamPolicyChat(
       ],
       stream: true,
       temperature: 0.5,
-      max_tokens: 1024,
+      max_completion_tokens: 1024,
     }),
   })
 
