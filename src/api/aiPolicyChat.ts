@@ -146,7 +146,7 @@ export async function* streamPolicyChat(
         ...history,
       ],
       stream: true,
-      temperature: 0.5,
+
       max_completion_tokens: 1024,
     }),
   })

@@ -102,7 +102,7 @@ export async function evaluateReply(opts: {
       ],
       tools:        [TOOL_DEF],
       tool_choice:  { type: 'function', function: { name: 'submit_reply_evaluation' } },
-      temperature:  0.3,
+
       max_completion_tokens: 1024,
     }),
   })

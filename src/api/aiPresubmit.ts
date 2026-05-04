@@ -118,7 +118,7 @@ ${(documentText ?? '').slice(0, 6000)}`
         { role: 'system', content: SYSTEM_PROMPTS[requestType] },
         { role: 'user',   content: userMessage },
       ],
-      temperature: 0.4,
+
       max_completion_tokens: 2048,
       response_format: { type: 'json_object' },
     }),

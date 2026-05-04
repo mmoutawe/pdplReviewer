@@ -56,7 +56,7 @@ async function callAzureOpenAI(message: string): Promise<string> {
         { role: 'system', content: AZURE_SYSTEM_PROMPT },
         { role: 'user',   content: message },
       ],
-      temperature: 0.7,
+
       max_completion_tokens: 1024,
       response_format: { type: 'json_object' },
     }),

@@ -79,7 +79,7 @@ export async function runChecklistReview(
       ],
       tools:       [CHECKLIST_TOOL],
       tool_choice: { type: 'function', function: { name: 'submit_checklist' } },
-      temperature: 0.2,
+
       max_completion_tokens:  512,
     }),
   })
@@ -179,7 +179,7 @@ export async function validateQuestionnaireDocument(opts: {
       ],
       tools:       [DOC_VALIDATOR_TOOL],
       tool_choice: { type: 'function', function: { name: 'submit_document_validation' } },
-      temperature: 0.1,
+
       max_completion_tokens:  512,
     }),
   })
@@ -257,7 +257,7 @@ export async function extractRequestForm(documentText: string): Promise<Extracte
       ],
       tools:       [FORM_EXTRACT_TOOL],
       tool_choice: { type: 'function', function: { name: 'extract_request_data' } },
-      temperature: 0.1,
+
       max_completion_tokens:  1024,
     }),
   })

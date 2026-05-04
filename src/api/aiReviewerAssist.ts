@@ -72,7 +72,7 @@ export async function* streamReviewerAssist(
         ...history,
       ],
       stream: true,
-      temperature: 0.5,
+
       max_completion_tokens: 1024,
     }),
   })

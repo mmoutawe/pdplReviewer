@@ -111,7 +111,7 @@ ${JSON.stringify(ticket, null, 2)}`
         { role: 'system', content: SYSTEM_PROMPTS[requestType] },
         { role: 'user',   content: userMessage },
       ],
-      temperature: 0.3,
+
       max_completion_tokens: 2048,
       response_format: { type: 'json_object' },
     }),

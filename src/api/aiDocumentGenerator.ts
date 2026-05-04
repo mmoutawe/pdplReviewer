@@ -49,7 +49,7 @@ export async function* streamDocument(
         { role: 'user',   content: userRequest },
       ],
       stream: true,
-      temperature: 0.4,
+
       max_completion_tokens: 4096,
     }),
   })
