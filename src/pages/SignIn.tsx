@@ -2,21 +2,17 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { authStore, signIn } from '../store'
 import { useStore } from '../hooks/useStore'
-import { USERS, ROLE_LABELS } from '../data/seed'
-import { Avatar } from '../components/primitives'
 import Logo from '../components/Logo'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { apiSignIn } from '../api/auth'
 
-const PERSONAS = USERS.filter((u) => u.role !== 'external_recipient')
-
-// ── Demo credentials for Supabase mode ───────────────────
+// ── Demo credentials (used in both Supabase and demo mode) ───────────────────
 const DEMO_CREDENTIALS = [
-  { email: 'admin@pdpl.demo',      password: 'Admin#2026!',       label: 'Admin',           role: 'admin' },
-  { email: 'requester@pdpl.demo',  password: 'Requester#2026!',   label: 'Requester',       role: 'requester' },
-  { email: 'datamgmt@pdpl.demo',   password: 'DataMgmt#2026!',    label: 'Data Management', role: 'data_management' },
-  { email: 'legal@pdpl.demo',      password: 'Legal#2026!',       label: 'Legal',           role: 'legal' },
-  { email: 'security@pdpl.demo',   password: 'Security#2026!',    label: 'Security',        role: 'security' },
+  { email: 'admin@pdpl.demo',      password: 'Admin#2026!',       label: 'Admin',           role: 'admin',           userId: 'u-sara' },
+  { email: 'requester@pdpl.demo',  password: 'Requester#2026!',   label: 'Requester',       role: 'requester',       userId: 'u-rana' },
+  { email: 'datamgmt@pdpl.demo',   password: 'DataMgmt#2026!',    label: 'Data Management', role: 'data_management', userId: 'u-mohammed' },
+  { email: 'legal@pdpl.demo',      password: 'Legal#2026!',       label: 'Legal',           role: 'legal',           userId: 'u-tariq' },
+  { email: 'security@pdpl.demo',   password: 'Security#2026!',    label: 'Security',        role: 'security',        userId: 'u-yousef' },
 ]
 
 const ROLE_PILL_COLOR: Record<string, string> = {
@@ -204,19 +200,32 @@ function SupabaseSignIn() {
   )
 }
 
-// ── Demo persona switcher (no-backend mode) ───────────────
+// ── Demo mode: email/password form ────────────────────────
 
 function DemoSignIn() {
   useEffect(() => { document.title = 'Sign In — PDPL Reviewer' }, [])
-  const { isSignedIn, user } = useStore(authStore)
+  const { isSignedIn } = useStore(authStore)
   const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [credsOpen, setCredsOpen] = useState(false)
 
   useEffect(() => {
     if (isSignedIn) navigate('/dashboard')
   }, [isSignedIn, navigate])
 
-  function choose(userId: string) {
-    signIn(userId)
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const match = DEMO_CREDENTIALS.find(
+      (c) => c.email.toLowerCase() === email.trim().toLowerCase() && c.password === password
+    )
+    if (!match) {
+      setError('Invalid email or password. Use the demo credentials below.')
+      return
+    }
+    signIn(match.userId)
     navigate('/dashboard')
   }
 
@@ -226,67 +235,136 @@ function DemoSignIn() {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '24px 16px',
     }}>
-      <div className="card" style={{ width: '100%', maxWidth: 460, padding: '40px 36px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+      <div className="card" style={{ width: '100%', maxWidth: 420, padding: '40px 36px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <Logo size="lg" />
-          <p style={{ marginTop: 16, color: 'var(--ink-500)', fontSize: 14, lineHeight: 1.6 }}>
-            AI-powered PDPL compliance platform.<br />
-            Select a demo persona to explore the platform.
+          <p style={{ marginTop: 14, color: 'var(--ink-500)', fontSize: 14, lineHeight: 1.6 }}>
+            AI-powered PDPL compliance platform.
           </p>
         </div>
 
+        {/* Demo mode banner */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--brand-50)', border: '1px solid #BFDBFE',
-          borderRadius: 'var(--r-md)', padding: '8px 12px', marginBottom: 24,
+          borderRadius: 'var(--r-md)', padding: '8px 12px', marginBottom: 20,
           fontSize: 12, color: 'var(--brand-800)',
         }}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M4.5 7l1.5 1.5 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M4.5 6.5l1.5 1.5 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Demo mode — all data is synthetic and does not contain real personal information.
+          Demo mode — all data is synthetic. Sign in with the credentials below.
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {PERSONAS.map((u) => (
-            <button key={u.id} onClick={() => choose(u.id)}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label htmlFor="demo-email" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+              EMAIL
+            </label>
+            <input
+              id="demo-email" type="email" autoComplete="email" required
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="e.g. admin@pdpl.demo"
               style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 14px', borderRadius: 'var(--r-md)',
-                border: `1px solid ${user?.id === u.id ? '#BFDBFE' : 'var(--line)'}`,
-                background: user?.id === u.id ? 'var(--brand-50)' : 'var(--surface-0)',
-                cursor: 'pointer', textAlign: 'left', width: '100%',
-                transition: 'all var(--t-fast) var(--ease-out)',
+                width: '100%', padding: '9px 12px', fontSize: 14,
+                border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+                background: 'var(--surface-0)', color: 'var(--ink-900)',
+                outline: 'none', boxSizing: 'border-box',
               }}
-              onMouseEnter={(e) => {
-                if (user?.id !== u.id) {
-                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--brand-700)'
-                  ;(e.currentTarget as HTMLButtonElement).style.background = 'var(--brand-50)'
-                }
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="demo-password" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+              PASSWORD
+            </label>
+            <input
+              id="demo-password" type="password" autoComplete="current-password" required
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              style={{
+                width: '100%', padding: '9px 12px', fontSize: 14,
+                border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+                background: 'var(--surface-0)', color: 'var(--ink-900)',
+                outline: 'none', boxSizing: 'border-box',
               }}
-              onMouseLeave={(e) => {
-                if (user?.id !== u.id) {
-                  ;(e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)'
-                  ;(e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-0)'
-                }
-              }}>
-              <Avatar initials={u.initials} color={u.avatarColor} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{u.fullName}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 1 }}>
-                  {ROLE_LABELS[u.role]} · {u.department}
-                </div>
-              </div>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)', flexShrink: 0 }}>
-                <path d="M4.5 2.5l5 4.5-5 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          ))}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }}
+            />
+          </div>
+
+          {error && (
+            <div role="alert" style={{
+              padding: '8px 12px', borderRadius: 'var(--r-sm)',
+              background: '#FEF2F2', border: '1px solid #FECACA',
+              fontSize: 13, color: '#B91C1C',
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" style={{
+            marginTop: 4, padding: '10px 0', borderRadius: 'var(--r-sm)',
+            background: 'var(--brand-700)', color: '#fff',
+            fontSize: 14, fontWeight: 600, border: 'none', cursor: 'pointer',
+            transition: 'background var(--t-fast)',
+          }}>
+            Sign In
+          </button>
+        </form>
+
+        {/* Demo credentials accordion */}
+        <div style={{ marginTop: 20, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', overflow: 'hidden' }}>
+          <button
+            type="button"
+            onClick={() => setCredsOpen((o) => !o)}
+            style={{
+              width: '100%', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'var(--surface-1)', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+              color: 'var(--ink-600)',
+            }}>
+            <span>Demo credentials</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"
+              style={{ transform: credsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </button>
+          {credsOpen && (
+            <div style={{ borderTop: '1px solid var(--line)' }}>
+              {DEMO_CREDENTIALS.map((c) => (
+                <button key={c.email} type="button"
+                  onClick={() => { setEmail(c.email); setPassword(c.password); setCredsOpen(false); setError(null) }}
+                  style={{
+                    width: '100%', padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'transparent', border: 'none', borderBottom: '1px solid var(--line-soft)',
+                    cursor: 'pointer', textAlign: 'left', transition: 'background var(--t-fast)',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                    fontSize: 11, fontWeight: 700, color: '#fff',
+                    background: ROLE_PILL_COLOR[c.role] ?? '#6B7280',
+                  }}>
+                    {c.label.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)' }}>{c.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-500)', fontFamily: 'var(--font-mono)' }}>{c.email}</div>
+                  </div>
+                  <span style={{ fontSize: 10.5, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{c.password}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <p style={{ marginTop: 20, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
-          PDPL Reviewer is designed for Saudi FinTech organizations operating under the Personal Data Protection Law (Royal Decree M/19, 2021).
+        <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
+          PDPL Reviewer — Saudi FinTech privacy compliance under Royal Decree M/19, 2021.
         </p>
       </div>
     </div>
