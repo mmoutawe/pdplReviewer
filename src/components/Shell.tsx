@@ -39,6 +39,12 @@ function ArchIcon() {
 function NewIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
 }
+function DocIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="1" width="10" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 5.5h5M5.5 8.5h5M5.5 11.5h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+}
+function TemplateIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="2" y="7" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="9" y="7" width="5" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.4"/></svg>
+}
 
 function getNavItems(role: Role): NavItem[] {
   const base: NavItem[] = [
@@ -48,18 +54,23 @@ function getNavItems(role: Role): NavItem[] {
     { label: 'My Requests', path: '/requests', icon: <TicketIcon /> },
     { label: 'New Request', path: '/requests/new', icon: <NewIcon /> },
     { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
+    { label: 'Documents', path: '/documents', icon: <DocIcon /> },
   ]
   const reviewerItems: NavItem[] = [
     { label: 'Queue', path: `/queue/${role}`, icon: <QueueIcon /> },
     { label: 'All Requests', path: '/requests', icon: <TicketIcon /> },
     { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
     { label: 'Vendors', path: '/vendors', icon: <VendorIcon /> },
+    { label: 'Documents', path: '/documents', icon: <DocIcon /> },
+    { label: 'Templates', path: '/templates', icon: <TemplateIcon /> },
     { label: 'Audit Ledger', path: '/audit', icon: <AuditIcon /> },
   ]
   const adminItems: NavItem[] = [
     { label: 'All Requests', path: '/requests', icon: <TicketIcon /> },
     { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
     { label: 'Vendors', path: '/vendors', icon: <VendorIcon /> },
+    { label: 'Documents', path: '/documents', icon: <DocIcon /> },
+    { label: 'Templates', path: '/templates', icon: <TemplateIcon /> },
     { label: 'Audit Ledger', path: '/audit', icon: <AuditIcon /> },
     { label: 'Admin', path: '/admin', icon: <AdminIcon /> },
   ]
@@ -182,6 +193,14 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
                 <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
                   onClick={() => { navigate('/notifications'); setUserMenuOpen(false) }}>
                   Notifications
+                </button>
+                <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
+                  onClick={() => { navigate('/notifications/preferences'); setUserMenuOpen(false) }}>
+                  Notification preferences
+                </button>
+                <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
+                  onClick={() => { navigate('/change-password'); setUserMenuOpen(false) }}>
+                  Change password
                 </button>
                 <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
                   onClick={() => { navigate('/architecture'); setUserMenuOpen(false) }}>

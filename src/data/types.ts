@@ -343,6 +343,121 @@ export interface Project {
   startedAt: string
 }
 
+// ─── Document Library ─────────────────────────────────────────────────────────
+
+export type ProjectDocumentType = 'dpa' | 'nda' | 'soc2' | 'iso27001' | 'contract' | 'questionnaire' | 'report' | 'other'
+export type ProjectDocumentStatus = 'draft' | 'active' | 'superseded' | 'expired'
+
+export const DOCUMENT_TYPE_LABELS: Record<ProjectDocumentType, string> = {
+  dpa: 'Data Processing Agreement',
+  nda: 'Non-Disclosure Agreement',
+  soc2: 'SOC 2 Report',
+  iso27001: 'ISO 27001 Certificate',
+  contract: 'Contract',
+  questionnaire: 'Questionnaire',
+  report: 'Assessment Report',
+  other: 'Other',
+}
+
+export const DOCUMENT_STATUS_LABELS: Record<ProjectDocumentStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  superseded: 'Superseded',
+  expired: 'Expired',
+}
+
+export interface ProjectDocument {
+  id: string
+  project_id: string | null
+  vendor_id: string | null
+  parent_document_id: string | null
+  title: string
+  document_type: ProjectDocumentType
+  version: number
+  status: ProjectDocumentStatus
+  file_path: string
+  file_type: string
+  file_size: number
+  description: string | null
+  tags: string[] | null
+  effective_date: string | null
+  expiry_date: string | null
+  uploaded_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ─── Templates Library ────────────────────────────────────────────────────────
+
+export type TemplateCategory = 'dpa' | 'nda' | 'letter' | 'assessment' | 'other'
+
+export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  dpa: 'Data Processing Agreement',
+  nda: 'NDA',
+  letter: 'Compliance Letter',
+  assessment: 'Assessment / Questionnaire',
+  other: 'Other',
+}
+
+export interface ReviewerTemplate {
+  id: string
+  title: string
+  description: string | null
+  file_path: string
+  file_type: string
+  category: TemplateCategory
+  is_active: boolean
+  uploaded_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+// ─── External Links (admin management) ───────────────────────────────────────
+
+export interface AdminExternalLink {
+  id: string
+  token: string
+  label: string
+  created_at: string
+  expires_at: string | null
+  revoked: boolean
+  recipient_email: string | null
+  recipient_name: string | null
+  status: string
+  approved_at: string | null
+}
+
+// ─── Notification Preferences ─────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'ticket_submitted'
+  | 'ticket_returned'
+  | 'ticket_approved'
+  | 'ticket_rejected'
+  | 'ticket_escalated_legal'
+  | 'ticket_escalated_security'
+  | 'reviewer_reply'
+  | 'external_invitation'
+  | 'external_approval_summary'
+  | 'password_change_required'
+  | 'account_purged_warning'
+
+export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
+  ticket_submitted:          'Ticket submitted',
+  ticket_returned:           'Ticket returned for clarification',
+  ticket_approved:           'Ticket approved',
+  ticket_rejected:           'Ticket rejected',
+  ticket_escalated_legal:    'Escalated to Legal',
+  ticket_escalated_security: 'Escalated to Security',
+  reviewer_reply:            'Reviewer reply',
+  external_invitation:       'External invitation issued',
+  external_approval_summary: 'External approval summary',
+  password_change_required:  'Password change required',
+  account_purged_warning:    'Account scheduled for deletion',
+}
+
+export const ALL_NOTIFICATION_TYPES = Object.keys(NOTIFICATION_TYPE_LABELS) as NotificationType[]
+
 export interface ExternalLink {
   token: string
   ticketId: string

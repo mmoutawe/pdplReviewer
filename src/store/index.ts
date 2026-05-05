@@ -137,6 +137,10 @@ export function demoAddTicket(ticket: Ticket) {
   ticketStore.setState({ tickets: [ticket, ...ticketStore.getState().tickets] })
 }
 
+export function demoDeleteTicket(id: string) {
+  ticketStore.setState({ tickets: ticketStore.getState().tickets.filter((t) => t.id !== id) })
+}
+
 export function demoAddReturnComment(ticketId: string, message: string, byRole: Role, byName: string) {
   const ticket = ticketStore.getState().tickets.find((t) => t.id === ticketId)
   if (!ticket) return

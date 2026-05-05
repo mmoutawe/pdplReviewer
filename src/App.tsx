@@ -27,6 +27,10 @@ const ExternalApproval = lazy(() => import('./pages/ExternalApproval'))
 const Architecture    = lazy(() => import('./pages/Architecture'))
 const ForgotPassword  = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword   = lazy(() => import('./pages/ResetPassword'))
+const DocumentLibrary = lazy(() => import('./pages/DocumentLibrary'))
+const TemplatesLibrary = lazy(() => import('./pages/TemplatesLibrary'))
+const ChangePassword  = lazy(() => import('./pages/ChangePassword'))
+const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'))
 
 function PageSkeleton() {
   return (
@@ -100,14 +104,24 @@ export default function App() {
           <Route path="/audit" element={<RequireAuth><AuditLedger /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotifCenter /></RequireAuth>} />
 
+          {/* Libraries */}
+          <Route path="/documents" element={<RequireAuth><DocumentLibrary /></RequireAuth>} />
+          <Route path="/templates" element={<RequireAuth><TemplatesLibrary /></RequireAuth>} />
+
+          {/* User account */}
+          <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/notifications/preferences" element={<RequireAuth><NotificationPreferences /></RequireAuth>} />
+
           {/* Admin */}
           <Route path="/admin" element={<RequireAuth><Admin tab="home" /></RequireAuth>} />
           <Route path="/admin/users" element={<RequireAuth><Admin tab="users" /></RequireAuth>} />
           <Route path="/admin/roles" element={<RequireAuth><Admin tab="roles" /></RequireAuth>} />
           <Route path="/admin/policies" element={<RequireAuth><Admin tab="policies" /></RequireAuth>} />
+          <Route path="/admin/tickets" element={<RequireAuth><Admin tab="tickets" /></RequireAuth>} />
           <Route path="/admin/retention" element={<RequireAuth><Admin tab="retention" /></RequireAuth>} />
           <Route path="/admin/ai" element={<RequireAuth><Admin tab="ai" /></RequireAuth>} />
-          <Route path="/admin/audit-access" element={<RequireAuth><Admin tab="audit-access" /></RequireAuth>} />
+          <Route path="/admin/audit-access" element={<RequireAuth><Admin tab="audit" /></RequireAuth>} />
+          <Route path="/admin/settings" element={<RequireAuth><Admin tab="settings" /></RequireAuth>} />
 
           {/* Architecture deliverable */}
           <Route path="/architecture" element={<RequireAuth><Architecture /></RequireAuth>} />

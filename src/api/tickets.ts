@@ -284,6 +284,12 @@ export function subscribeToTicket(
   return () => { void supabase!.removeChannel(channel) }
 }
 
+export async function deleteTicket(id: string): Promise<void> {
+  if (!supabase) throw new Error('Supabase not configured')
+  const { error } = await supabase.from('tickets').delete().eq('id', id)
+  if (error) throw error
+}
+
 // Subscribes to all ticket changes — callers filter by state themselves.
 export function subscribeToTickets(
   onUpdate: (ticket: Ticket) => void,
