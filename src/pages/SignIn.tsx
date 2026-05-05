@@ -10,6 +10,19 @@ import { apiSignIn } from '../api/auth'
 
 const PERSONAS = USERS.filter((u) => u.role !== 'external_recipient')
 
+// ── Demo credentials for Supabase mode ───────────────────
+const DEMO_CREDENTIALS = [
+  { email: 'admin@pdpl.demo',      password: 'Admin#2026!',       label: 'Admin',           role: 'admin' },
+  { email: 'requester@pdpl.demo',  password: 'Requester#2026!',   label: 'Requester',       role: 'requester' },
+  { email: 'datamgmt@pdpl.demo',   password: 'DataMgmt#2026!',    label: 'Data Management', role: 'data_management' },
+  { email: 'legal@pdpl.demo',      password: 'Legal#2026!',       label: 'Legal',           role: 'legal' },
+  { email: 'security@pdpl.demo',   password: 'Security#2026!',    label: 'Security',        role: 'security' },
+]
+
+const ROLE_PILL_COLOR: Record<string, string> = {
+  admin: '#7C3AED', requester: '#1D4ED8', data_management: '#0369A1', legal: '#6D28D9', security: '#B45309',
+}
+
 // ── Real auth form (Supabase mode) ────────────────────────
 
 function SupabaseSignIn() {
@@ -17,6 +30,7 @@ function SupabaseSignIn() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [credsOpen, setCredsOpen] = useState(false)
   const navigate = useNavigate()
   const { isSignedIn } = useStore(authStore)
 
@@ -130,7 +144,59 @@ function SupabaseSignIn() {
           </button>
         </form>
 
-        <p style={{ marginTop: 24, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
+        {/* Demo credentials accordion */}
+        <div style={{ marginTop: 20, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', overflow: 'hidden' }}>
+          <button
+            type="button"
+            onClick={() => setCredsOpen((o) => !o)}
+            style={{
+              width: '100%', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'var(--surface-1)', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+              color: 'var(--ink-600)',
+            }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M6.5 4v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              Demo credentials
+            </span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"
+              style={{ transform: credsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+            </svg>
+          </button>
+          {credsOpen && (
+            <div style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+              {DEMO_CREDENTIALS.map((c) => (
+                <button key={c.email} type="button"
+                  onClick={() => { setEmail(c.email); setPassword(c.password); setCredsOpen(false) }}
+                  style={{
+                    width: '100%', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                    transition: 'background var(--t-fast)',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#fff',
+                    background: ROLE_PILL_COLOR[c.role] ?? '#6B7280',
+                  }}>
+                    {c.label.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)' }}>{c.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-500)', fontFamily: 'var(--font-mono)' }}>{c.email}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)' }}>{c.password}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
           PDPL Reviewer — Saudi FinTech privacy compliance under Royal Decree M/19, 2021.
         </p>
       </div>

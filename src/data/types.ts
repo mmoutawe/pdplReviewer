@@ -458,6 +458,25 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
 
 export const ALL_NOTIFICATION_TYPES = Object.keys(NOTIFICATION_TYPE_LABELS) as NotificationType[]
 
+// ─── Risk level ───────────────────────────────────────────────────────────────
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
+
+// ─── Sub-ticket tracks ────────────────────────────────────────────────────────
+export type SubTicketTrack = 'legal' | 'security' | 'requester_clarification'
+
+export interface SubTicketRef {
+  track: SubTicketTrack
+  ticketId: string
+  state: TicketState
+}
+
+// ─── PDPL Article reference ───────────────────────────────────────────────────
+export interface ArticleRef {
+  article: string   // e.g. "Art. 4(1)"
+  title: string     // short description
+  url?: string
+}
+
 export interface ExternalLink {
   token: string
   ticketId: string

@@ -31,6 +31,8 @@ const DocumentLibrary = lazy(() => import('./pages/DocumentLibrary'))
 const TemplatesLibrary = lazy(() => import('./pages/TemplatesLibrary'))
 const ChangePassword  = lazy(() => import('./pages/ChangePassword'))
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'))
+const ExternalDashboard = lazy(() => import('./pages/ExternalDashboard'))
+const NotFound        = lazy(() => import('./pages/NotFound'))
 
 function PageSkeleton() {
   return (
@@ -111,6 +113,7 @@ export default function App() {
           {/* User account */}
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/notifications/preferences" element={<RequireAuth><NotificationPreferences /></RequireAuth>} />
+          <Route path="/external-portal" element={<RequireAuth><ExternalDashboard /></RequireAuth>} />
 
           {/* Admin */}
           <Route path="/admin" element={<RequireAuth><Admin tab="home" /></RequireAuth>} />
@@ -127,7 +130,7 @@ export default function App() {
           <Route path="/architecture" element={<RequireAuth><Architecture /></RequireAuth>} />
 
           {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </Layout>

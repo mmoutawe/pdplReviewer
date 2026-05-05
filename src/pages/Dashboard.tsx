@@ -2,8 +2,8 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authStore, ticketStore, notifStore } from '../store'
 import { useStore } from '../hooks/useStore'
-import { AUDIT, REQUEST_TYPE_LABELS, STATE_LABELS, ROLE_LABELS, userById } from '../data/seed'
-import { KPI, StatusPill, SLAIndicator, Avatar, EmptyState } from '../components/primitives'
+import { AUDIT, REQUEST_TYPE_LABELS, STATE_LABELS, ROLE_LABELS, userById, PRE_ASSESSMENTS } from '../data/seed'
+import { KPI, StatusPill, SLAIndicator, Avatar, EmptyState, RiskBadge } from '../components/primitives'
 import { formatDate, timeAgo } from '../lib/utils'
 import type { Ticket } from '../data/types'
 
@@ -196,6 +196,7 @@ export default function Dashboard() {
 function hour() { return new Date().getHours() }
 
 function TicketRow({ ticket, onClick }: { ticket: Ticket; onClick: () => void }) {
+  const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === ticket.id)
   return (
     <li style={{ borderBottom: '1px solid var(--line-soft)' }}>
       <button onClick={onClick} style={{
@@ -210,6 +211,7 @@ function TicketRow({ ticket, onClick }: { ticket: Ticket; onClick: () => void })
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-500)' }}>{ticket.id}</span>
             <StatusPill state={ticket.state} size="sm" />
             <SLAIndicator dueAt={ticket.sla.decisionDueAt} breached={ticket.sla.breached} compact />
+            {assessment && <RiskBadge level={assessment.overallRisk} compact />}
           </div>
           <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 2 }}>{ticket.title}</div>
           <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>

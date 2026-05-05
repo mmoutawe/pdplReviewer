@@ -2,8 +2,9 @@ import { type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import Shell from './Shell'
 import { ToastStack } from './overlays'
+import PolicyChatbot from './PolicyChatbot'
 
-const SHELL_LESS = ['/sign-in', '/forgot-password', '/auth/', '/external/']
+const SHELL_LESS = ['/sign-in', '/forgot-password', '/auth/', '/external/', '/change-password']
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
@@ -28,6 +29,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </a>
       {noShell ? <>{children}</> : <Shell>{children}</Shell>}
       <ToastStack />
+      {!noShell && <PolicyChatbot />}
     </>
   )
 }

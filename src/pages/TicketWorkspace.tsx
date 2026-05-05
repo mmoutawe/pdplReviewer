@@ -8,15 +8,16 @@ import {
   AI_GENERATIONS, PRE_ASSESSMENTS, AUDIT,
 } from '../data/seed'
 import type { Attachment } from '../data/types'
-import { StatusPill, SLAIndicator, Avatar, RoleBadge, ConfidenceBadge, EmptyState } from '../components/primitives'
+import { StatusPill, SLAIndicator, Avatar, RoleBadge, ConfidenceBadge, EmptyState, RiskBadge, ArticleRefBadge } from '../components/primitives'
 import { Tabs } from '../components/overlays'
 import { EvidenceUploader } from '../components/forms'
 import { CitationChip } from '../components/AICoPilotPanel'
 import { AuditTimeline } from '../components/AuditTimeline'
 import { CommentThread } from '../components/CommentThread'
 import { formatDate, formatDateTime } from '../lib/utils'
-import type { ReviewSlot, TicketState } from '../data/types'
+import type { TicketState } from '../data/types'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { exportAssessmentPdf } from '../lib/exportAssessmentPdf'
 import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket } from '../api/tickets'
 import { getCachedUser } from '../lib/userCache'
 import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
@@ -244,10 +245,8 @@ export default function TicketWorkspace() {
               {assessment && (
                 <section className="card" style={{ padding: '14px 18px' }} aria-labelledby="risk-heading">
                   <h2 id="risk-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 8 }}>Risk summary</h2>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                    <span className={`pill pill-no-dot ${assessment.overallRisk === 'low' ? 'pill-emerald' : assessment.overallRisk === 'high' || assessment.overallRisk === 'critical' ? 'pill-red' : 'pill-amber'}`}>
-                      Risk: {assessment.overallRisk}
-                    </span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                    <RiskBadge level={assessment.overallRisk} compact />
                     <span className={`pill pill-no-dot ${assessment.pdplAlignment === 'aligned' ? 'pill-emerald' : assessment.pdplAlignment === 'misaligned' ? 'pill-red' : 'pill-amber'}`}>
                       PDPL: {assessment.pdplAlignment}
                     </span>
@@ -260,17 +259,63 @@ export default function TicketWorkspace() {
                 </section>
               )}
 
-              {/* Reviewer status */}
+              {/* Review Tracks panel */}
               <section className="card" style={{ padding: '14px 18px' }} aria-labelledby="reviewers-heading">
-                <h2 id="reviewers-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 8 }}>Review status</h2>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {ticket.reviews.map((r) => (
-                    <ReviewerRow key={r.role} slot={r} />
-                  ))}
-                  {ticket.reviews.length === 0 && (
-                    <p style={{ fontSize: 12.5, color: 'var(--ink-400)' }}>Not yet assigned to reviewers.</p>
-                  )}
-                </div>
+                <h2 id="reviewers-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 10 }}>Review tracks</h2>
+                {ticket.reviews.length === 0 ? (
+                  <p style={{ fontSize: 12.5, color: 'var(--ink-400)' }}>Not yet assigned to reviewers.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    {ticket.reviews.map((r, i) => {
+                      const verdictColor = r.verdict === 'approve' ? 'var(--emerald-700)' : r.verdict === 'reject' ? 'var(--red-700)' : r.verdict === 'return' ? 'var(--amber-700)' : 'var(--ink-400)'
+                      const verdictBg    = r.verdict === 'approve' ? 'var(--emerald-50)' : r.verdict === 'reject' ? 'var(--red-50)' : r.verdict === 'return' ? 'var(--amber-50)' : 'var(--surface-1)'
+                      const verdictIcon  = r.verdict === 'approve' ? '✓' : r.verdict === 'reject' ? '✕' : r.verdict === 'return' ? '↩' : r.verdict === 'escalate' ? '↑' : '…'
+                      const isLast = i === ticket.reviews.length - 1
+                      return (
+                        <div key={r.role} style={{ display: 'flex', gap: 12, alignItems: 'stretch', paddingBottom: isLast ? 0 : 8 }}>
+                          {/* Track line */}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: 20 }}>
+                            <div style={{
+                              width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                              background: verdictBg, border: `2px solid ${verdictColor}`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 10, fontWeight: 700, color: verdictColor,
+                            }}>
+                              {verdictIcon}
+                            </div>
+                            {!isLast && <div style={{ width: 2, flex: 1, background: 'var(--line)', marginTop: 2 }} />}
+                          </div>
+                          {/* Track content */}
+                          <div style={{ flex: 1, paddingBottom: isLast ? 0 : 12 }}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <RoleBadge role={r.role} size="sm" />
+                              <span className={`pill pill-no-dot ${r.verdict === 'approve' ? 'pill-emerald' : r.verdict === 'reject' ? 'pill-red' : r.verdict === 'return' ? 'pill-amber' : 'pill-slate'}`}
+                                style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>
+                                {r.verdict === 'pending' ? 'Pending' : r.verdict}
+                              </span>
+                              {r.decidedAt && (
+                                <span style={{ fontSize: 11, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)' }}>
+                                  {formatDate(r.decidedAt)}
+                                </span>
+                              )}
+                            </div>
+                            {r.notes && (
+                              <p style={{ fontSize: 12, color: 'var(--ink-600)', marginTop: 4, lineHeight: 1.5, fontStyle: 'italic' }}>
+                                "{r.notes}"
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                {/* Split-track hint for admin */}
+                {user.role === 'admin' && ticket.state === 'in_data_management' && (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--line-soft)', fontSize: 12, color: 'var(--ink-400)', fontStyle: 'italic' }}>
+                    Tip: escalate to Legal or Security from the review actions to open parallel tracks.
+                  </div>
+                )}
               </section>
             </div>
           </div>
@@ -427,7 +472,13 @@ export default function TicketWorkspace() {
               {/* Pre-submission AI summary (from seed/submission) */}
               {assessment && (
                 <section>
-                  <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 14 }}>Pre-Submission AI Summary</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Pre-Submission AI Summary</h2>
+                    <button className="btn btn-sm btn-ghost" style={{ marginLeft: 'auto' }}
+                      onClick={() => exportAssessmentPdf(ticket.id, assessment, ticket.title)}>
+                      ↓ Export PDF
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{
                       padding: '14px 18px',
@@ -457,7 +508,10 @@ export default function TicketWorkspace() {
                             </p>
                           )}
                           <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                            {f.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
+                            {f.citations.map((c) => c.source === 'pdpl'
+                              ? <ArticleRefBadge key={c.id} article={c.ref} title={c.excerpt} />
+                              : <CitationChip key={c.id} cite={c} />
+                            )}
                           </div>
                         </div>
                       )
@@ -553,24 +607,6 @@ export default function TicketWorkspace() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
-
-function ReviewerRow({ slot }: { slot: ReviewSlot }) {
-  const reviewer = slot.reviewerId ? getCachedUser(slot.reviewerId) : null
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--line-soft)' }}>
-      {reviewer
-        ? <Avatar initials={reviewer.initials} color={reviewer.avatarColor} size={22} />
-        : <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'inline-flex' }} aria-hidden="true" />}
-      <span style={{ fontSize: 13, flex: 1 }}>
-        {reviewer?.fullName ?? 'Unassigned'} <span style={{ color: 'var(--ink-400)', fontSize: 12 }}>({slot.role.replace('_', ' ')})</span>
-      </span>
-      <span className={`pill pill-no-dot ${slot.verdict === 'approve' ? 'pill-emerald' : slot.verdict === 'reject' ? 'pill-red' : slot.verdict === 'return' ? 'pill-amber' : 'pill-slate'}`}
-        style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>
-        {slot.verdict}
-      </span>
     </div>
   )
 }

@@ -1,6 +1,6 @@
-import { type ReactNode, type CSSProperties } from 'react'
+import { type ReactNode, type CSSProperties, useState } from 'react'
 import { cn, stateColor } from '../lib/utils'
-import type { Role, TicketState } from '../data/types'
+import type { Role, TicketState, RiskLevel } from '../data/types'
 import { STATE_LABELS, ROLE_LABELS } from '../data/seed'
 
 // ─── StatusPill ──────────────────────────────────────────────────────────────
@@ -166,6 +166,57 @@ export function SectionHeader({ title, action }: { title: string; action?: React
       <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</h3>
       {action}
     </div>
+  )
+}
+
+// ─── RiskBadge ───────────────────────────────────────────────────────────────
+const RISK_PILL: Record<RiskLevel, string> = {
+  low:      'pill-emerald',
+  medium:   'pill-amber',
+  high:     'pill-red',
+  critical: 'pill-red',
+}
+const RISK_LABEL: Record<RiskLevel, string> = {
+  low: 'Low risk', medium: 'Medium risk', high: 'High risk', critical: 'Critical risk',
+}
+interface RiskBadgeProps { level: RiskLevel; compact?: boolean }
+export function RiskBadge({ level, compact = false }: RiskBadgeProps) {
+  return (
+    <span className={cn('pill pill-no-dot', RISK_PILL[level])}
+      style={compact ? { height: 18, fontSize: 10.5, padding: '0 6px' } : undefined}>
+      {compact ? level : RISK_LABEL[level]}
+    </span>
+  )
+}
+
+// ─── ArticleRefBadge ─────────────────────────────────────────────────────────
+interface ArticleRefBadgeProps { article: string; title?: string }
+export function ArticleRefBadge({ article, title }: ArticleRefBadgeProps) {
+  const [hover, setHover] = useState(false)
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        fontSize: 11, fontWeight: 600, padding: '1px 6px',
+        borderRadius: 4, border: '1px solid var(--brand-200)',
+        background: 'var(--brand-50)', color: 'var(--brand-800)',
+        cursor: title ? 'help' : 'default', whiteSpace: 'nowrap',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        ⚖ {article}
+      </span>
+      {title && hover && (
+        <span style={{
+          position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+          marginBottom: 6, padding: '6px 10px', borderRadius: 'var(--r-sm)',
+          background: 'var(--ink-900)', color: '#fff', fontSize: 11.5, whiteSpace: 'nowrap',
+          boxShadow: 'var(--shadow-lg)', zIndex: 100, pointerEvents: 'none',
+        }}>
+          {title}
+        </span>
+      )}
+    </span>
   )
 }
 
