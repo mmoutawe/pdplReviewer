@@ -18,8 +18,8 @@ type Method = 'manual' | 'ai' | 'xlsx'
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 const STEPS = [
-  { key: 'vendor_project', label: 'Vendor & Project' },
   { key: 'method',         label: 'Creation method' },
+  { key: 'vendor_project', label: 'Vendor & Project' },
   { key: 'initiation',     label: 'Initiation' },
   { key: 'declaration',    label: 'Data declaration' },
   { key: 'assessment',     label: 'AI assessment' },
@@ -78,7 +78,7 @@ export default function Wizard() {
   const navigate = useNavigate()
   const { user } = useStore(authStore)
 
-  const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'vendor_project' : 'initiation')
+  const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'method' : 'initiation')
   const [form, setForm] = useState<WizardState>(() => {
     const draft = loadDraft<WizardState>()
     return draft ?? empty
