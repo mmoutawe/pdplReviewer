@@ -65,6 +65,32 @@ export default function RequestList() {
   const stateOptions = Object.entries(STATE_LABELS).map(([v, l]) => ({ value: v, label: l }))
   const typeOptions = Object.entries(REQUEST_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l }))
 
+  function exportCSV() {
+    const header = ['ID', 'Title', 'Type', 'Status', 'Submitted', 'SLA due', 'Breached', 'Subjects', 'Contains PII', 'Cross-border']
+    const rows = visible.map((t) => [
+      t.id,
+      `"${t.title.replace(/"/g, '""')}"`,
+      REQUEST_TYPE_LABELS[t.type],
+      STATE_LABELS[t.state] ?? t.state,
+      t.submittedAt ? t.submittedAt.slice(0, 10) : '',
+      t.sla.decisionDueAt.slice(0, 10),
+      t.sla.breached ? 'Yes' : 'No',
+      t.dataDeclaration.estimatedSubjectCount,
+      t.dataDeclaration.containsPII ? 'Yes' : 'No',
+      t.dataDeclaration.crossBorderInvolved ? 'Yes' : 'No',
+    ])
+    const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `requests-export-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -72,11 +98,20 @@ export default function RequestList() {
           <h1 className="page-title">{user.role === 'requester' ? 'My Requests' : 'All Requests'}</h1>
           <p className="page-subtitle">{visible.length} record{visible.length !== 1 ? 's' : ''}</p>
         </div>
-        {user.role === 'requester' && (
-          <button className="btn btn-primary btn-lg" onClick={() => navigate('/requests/new')}>
-            New request
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={exportCSV} title="Export filtered results to CSV">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M1.5 10.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            Export CSV
           </button>
-        )}
+          {user.role === 'requester' && (
+            <button className="btn btn-primary btn-lg" onClick={() => navigate('/requests/new')}>
+              New request
+            </button>
+          )}
+        </div>
       </div>
       <FilterBar
         search={search} onSearch={setSearch} placeholder="Search by ID, title, description…"
