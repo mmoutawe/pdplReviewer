@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import type { RequestType, Ticket, TicketPayload } from '../../data/types'
-import { REQUEST_TYPE_LABELS } from '../../data/seed'
+import { REQUEST_TYPE_LABELS, VENDORS, PROJECTS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
@@ -18,11 +18,12 @@ type Method = 'manual' | 'ai' | 'xlsx'
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 const STEPS = [
-  { key: 'method',       label: 'Creation method' },
-  { key: 'initiation',   label: 'Initiation' },
-  { key: 'declaration',  label: 'Data declaration' },
-  { key: 'assessment',   label: 'AI assessment' },
-  { key: 'confirm',      label: 'Confirm & submit' },
+  { key: 'vendor_project', label: 'Vendor & Project' },
+  { key: 'method',         label: 'Creation method' },
+  { key: 'initiation',     label: 'Initiation' },
+  { key: 'declaration',    label: 'Data declaration' },
+  { key: 'assessment',     label: 'AI assessment' },
+  { key: 'confirm',        label: 'Confirm & submit' },
 ]
 
 function StepIndex(step: string) { return STEPS.findIndex((s) => s.key === step) }
@@ -75,16 +76,12 @@ const empty: WizardState = {
 export default function Wizard() {
   const { type, method: urlMethod } = useParams<{ type: RequestType; method: string }>()
   const navigate = useNavigate()
-  const location = useLocation()
   const { user } = useStore(authStore)
 
-  const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'method' : 'initiation')
+  const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'vendor_project' : 'initiation')
   const [form, setForm] = useState<WizardState>(() => {
     const draft = loadDraft<WizardState>()
-    const params = new URLSearchParams(location.search)
-    const linkedVendorId = params.get('vendorId') ?? ''
-    const linkedProjectId = params.get('projectId') ?? ''
-    return { ...(draft ?? empty), linkedVendorId, linkedProjectId }
+    return draft ?? empty
   })
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -533,6 +530,38 @@ export default function Wizard() {
       <div style={{ flex: 1, overflow: 'auto', display: 'flex', minHeight: 0 }}>
         {/* Main content */}
         <div style={{ flex: 1, padding: '28px 32px', maxWidth: 680, minWidth: 0 }}>
+
+          {/* ── Step: Vendor & Project ── */}
+          {currentStep === 'vendor_project' && (
+            <section aria-labelledby="step-vendor-project">
+              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Link to a vendor or project</h2>
+              <p style={{ color: 'var(--ink-500)', marginBottom: 24, fontSize: 13.5 }}>
+                Optionally associate this request with an existing vendor or project. You can skip this step if not applicable.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6, letterSpacing: '0.02em' }}>VENDOR</label>
+                  <select value={form.linkedVendorId} onChange={(e) => update({ linkedVendorId: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none' }}>
+                    <option value="">— None —</option>
+                    {VENDORS.map((v) => <option key={v.id} value={v.id}>{v.tradeName}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6, letterSpacing: '0.02em' }}>PROJECT</label>
+                  <select value={form.linkedProjectId} onChange={(e) => update({ linkedProjectId: e.target.value })}
+                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none' }}>
+                    <option value="">— None —</option>
+                    {PROJECTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 28 }}>
+                <button className="btn btn-ghost" onClick={() => { update({ linkedVendorId: '', linkedProjectId: '' }); next() }}>Skip</button>
+                <button className="btn btn-primary" onClick={next}>Continue →</button>
+              </div>
+            </section>
+          )}
 
           {/* ── Step: Method ── */}
           {currentStep === 'method' && (
