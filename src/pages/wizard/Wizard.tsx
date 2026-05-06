@@ -14,7 +14,7 @@ import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, ty
 import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
 import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentView'
 
-type Method = 'manual' | 'ai'
+type Method = 'manual' | 'ai' | 'xlsx'
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 const STEPS = [
@@ -99,6 +99,8 @@ export default function Wizard() {
   const [chatError, setChatError] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const chatInputRef  = useRef<HTMLInputElement>(null)
+  const [xlsxFile, setXlsxFile] = useState<File | null>(null)
+  const [xlsxParsing, setXlsxParsing] = useState(false)
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -225,6 +227,80 @@ export default function Wizard() {
 
   function update(partial: Partial<WizardState>) {
     setForm((f) => ({ ...f, ...partial }))
+  }
+
+  function downloadTemplate() {
+    const header = [
+      'Title', 'Description', 'Vendor / Recipient Name', 'Jurisdiction',
+      'Data Categories (comma-separated: name,email,phone,national_id,iban,transaction_history,device_id,location,biometric,health)',
+      'Estimated Data Subjects', 'Retention Period (days)',
+      'Cross-border Transfer (Yes/No)', 'Consent Obtained (Yes/No)', 'DPA Signed (Yes/No)',
+      'Tags (comma-separated)',
+    ]
+    const example = [
+      'Sahab Cloud — primary IaaS hosting',
+      'Cloud infrastructure provider that will store and process customer personal data on our behalf.',
+      'Sahab Cloud Ltd', 'UAE', 'email,phone,name',
+      '50000', '730', 'No', 'Yes', 'Yes', 'tier-1-vendor,restricted-data',
+    ]
+    const csv = [header, example].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = 'pdpl-request-template.csv'
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  async function parseXlsxFile(file: File) {
+    setXlsxParsing(true)
+    try {
+      const text = await file.text()
+      const lines = text.replace(/\r/g, '').split('\n').filter(Boolean)
+      if (lines.length < 2) {
+        showToast('Template appears empty — fill in at least one data row.', 'error')
+        return
+      }
+      function parseRow(line: string): string[] {
+        const result: string[] = []
+        let inQ = false, cur = ''
+        for (const ch of line) {
+          if (ch === '"' && !inQ) { inQ = true }
+          else if (ch === '"' && inQ) { inQ = false }
+          else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = '' }
+          else { cur += ch }
+        }
+        result.push(cur.trim())
+        return result
+      }
+      const row = parseRow(lines[1])
+      const [title, description, vendorName, vendorJurisdiction, dataCatRaw,
+             estimatedSubjects, retentionDays, crossBorderRaw, consentRaw, dpaRaw, tags] = row
+      const toBool = (v: string) => v?.toLowerCase().startsWith('y')
+      const cats = dataCatRaw
+        ? dataCatRaw.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+      update({
+        title: title || '',
+        description: description || '',
+        vendorName: vendorName || '',
+        vendorJurisdiction: vendorJurisdiction || 'KSA',
+        dataCategories: cats,
+        estimatedSubjects: estimatedSubjects || '',
+        retentionDays: retentionDays || '',
+        crossBorder: toBool(crossBorderRaw),
+        consentObtained: toBool(consentRaw),
+        hasDPA: toBool(dpaRaw),
+        tags: tags || '',
+      })
+      showToast('Template parsed — review the pre-filled fields below.', 'success')
+      const idx = StepIndex(currentStep)
+      if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key)
+    } catch {
+      showToast('Could not read the file. Make sure you upload the CSV template.', 'error')
+    } finally {
+      setXlsxParsing(false)
+    }
   }
 
   function defaultProcessingRoles(): WizardState['processingRoles'] {
@@ -463,8 +539,13 @@ export default function Wizard() {
                 The AI builder helps you describe your use case in plain language and generates a structured form.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(['manual', 'ai'] as Method[]).map((m) => (
-                  <button key={m} onClick={() => { update({ method: m }); next() }}
+                {([
+                  { m: 'manual' as Method, icon: '📋', label: 'Fill out manually', desc: 'Complete the form fields directly.' },
+                  { m: 'ai' as Method, icon: '✨', label: 'AI request builder', desc: 'Describe your use case in plain language and let AI structure it for you.' },
+                  { m: 'xlsx' as Method, icon: '📊', label: 'Upload Excel template', desc: 'Download the blank template, fill it in offline, then upload for automatic field extraction.' },
+                ]).map(({ m, icon, label, desc }) => (
+                  <button key={m}
+                    onClick={() => { update({ method: m }); if (m !== 'xlsx') next() }}
                     style={{
                       padding: '18px 20px', borderRadius: 'var(--r-lg)',
                       border: `1px solid ${form.method === m ? 'var(--brand-700)' : 'var(--line)'}`,
@@ -473,14 +554,75 @@ export default function Wizard() {
                       transition: 'all var(--t-fast)',
                     }}>
                     <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 4 }}>
-                      {m === 'manual' ? '📋 Fill out manually' : '✨ AI request builder'}
+                      {icon} {label}
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>
-                      {m === 'manual' ? 'Complete the form fields directly.' : 'Describe your use case in plain language and let AI structure it for you.'}
-                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>{desc}</div>
                   </button>
                 ))}
               </div>
+
+              {/* XLSX upload panel — shown after selecting the xlsx method */}
+              {form.method === 'xlsx' && (
+                <div style={{ marginTop: 20, padding: '20px 22px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Step 1: download */}
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 1 — Download blank template</div>
+                    <button className="btn btn-ghost btn-sm" onClick={downloadTemplate} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                        <path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M1.5 10.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                      Download pdpl-request-template.csv
+                    </button>
+                    <p style={{ fontSize: 12, color: 'var(--ink-400)', marginTop: 6 }}>Open in Excel or Google Sheets, fill in row 2, save as CSV.</p>
+                  </div>
+
+                  {/* Step 2: upload */}
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 2 — Upload completed template</div>
+                    <label style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      gap: 8, padding: '20px 16px',
+                      border: `2px dashed ${xlsxFile ? 'var(--brand-700)' : 'var(--line)'}`,
+                      borderRadius: 'var(--r-md)', cursor: 'pointer',
+                      background: xlsxFile ? 'var(--brand-50)' : 'var(--surface-0)',
+                      transition: 'all var(--t-fast)',
+                    }}>
+                      <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
+                        onChange={(e) => setXlsxFile(e.target.files?.[0] ?? null)} />
+                      {xlsxFile ? (
+                        <>
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <path d="M4 10l4 4 8-8" stroke="var(--brand-700)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--brand-800)' }}>{xlsxFile.name}</span>
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>Click to replace</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)' }}>
+                            <path d="M11 3v12M7 7l4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                            <path d="M3 17h16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                          </svg>
+                          <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>Click to select your filled template</span>
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>.csv, .xlsx, .xls</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+
+                  {/* Extract button */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={!xlsxFile || xlsxParsing}
+                      onClick={() => xlsxFile && void parseXlsxFile(xlsxFile)}
+                    >
+                      {xlsxParsing ? 'Extracting fields…' : 'Extract & continue →'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
