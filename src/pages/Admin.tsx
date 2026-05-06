@@ -4,7 +4,7 @@ import { USERS, POLICIES } from '../data/seed'
 import { Avatar, RoleBadge, KPI } from '../components/primitives'
 import { Tabs } from '../components/overlays'
 import { formatDate, formatDateTime } from '../lib/utils'
-import type { Role } from '../data/types'
+import type { Role, User, Policy } from '../data/types'
 import type { AdminExternalLink } from '../data/types'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { showToast, ticketStore, demoDeleteTicket } from '../store'
@@ -55,6 +55,15 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   const [aiSettings, setAiSettings] = useState<Record<string, boolean>>(
     Object.fromEntries(AI_SETTINGS.map((s) => [s.key, s.enabled]))
   )
+
+  // ── Users tab ──
+  const [localUsers, setLocalUsers] = useState<User[]>([...USERS])
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showInvite, setShowInvite] = useState(false)
+
+  // ── Policies tab ──
+  const [localPolicies, setLocalPolicies] = useState<Policy[]>([...POLICIES])
+  const [showNewPolicy, setShowNewPolicy] = useState(false)
 
   // ── All Tickets tab ──
   const [ticketSearch, setTicketSearch] = useState('')
@@ -158,11 +167,6 @@ export default function Admin({ tab: initialTab }: AdminProps) {
     { key: 'settings', label: 'Settings' },
   ]
 
-  const roleGroups = USERS.reduce<Record<string, typeof USERS>>((acc, u) => {
-    if (!acc[u.role]) acc[u.role] = []
-    acc[u.role].push(u)
-    return acc
-  }, {})
 
   return (
     <div>
@@ -192,7 +196,13 @@ export default function Admin({ tab: initialTab }: AdminProps) {
         {/* ── USERS ─────────────────────────── */}
         {tab === 'users' && (
           <div>
-            {(Object.entries(roleGroups) as [Role, typeof USERS][]).map(([role, users]) => (
+            {(Object.entries(
+              localUsers.reduce<Record<string, User[]>>((acc, u) => {
+                if (!acc[u.role]) acc[u.role] = []
+                acc[u.role].push(u)
+                return acc
+              }, {})
+            ) as [Role, User[]][]).map(([role, users]) => (
               <div key={role} style={{ marginBottom: 28 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                   <RoleBadge role={role} size="sm" />
@@ -210,7 +220,8 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                       <span className="pill pill-no-dot pill-emerald" style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>
                         active
                       </span>
-                      <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}>Edit</button>
+                      <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}
+                        onClick={() => setEditingUser(u)}>Edit</button>
                     </div>
                   ))}
                 </div>
@@ -218,7 +229,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
             ))}
 
             <div style={{ marginTop: 8 }}>
-              <button className="btn btn-primary btn-sm">+ Invite user</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowInvite(true)}>+ Invite user</button>
             </div>
           </div>
         )}
@@ -228,10 +239,10 @@ export default function Admin({ tab: initialTab }: AdminProps) {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>Policy Library Management</span>
-              <button className="btn btn-primary btn-sm">+ New policy</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowNewPolicy(true)}>+ New policy</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {POLICIES.map((pol) => (
+              {localPolicies.map((pol) => (
                 <div key={pol.id} className="card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span className="tag" style={{ flexShrink: 0 }}>{pol.code}</span>
                   <div style={{ flex: 1, minWidth: 120 }}>
@@ -247,8 +258,10 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                     {pol.embeddingsBuilt ? '⬡ Searchable' : '⬡ Pending indexing'}
                   </span>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-sm btn-ghost">Edit</button>
-                    <button className="btn btn-sm btn-ghost">Archive</button>
+                    <button className="btn btn-sm btn-ghost"
+                      onClick={() => setLocalPolicies((prev) => prev.map((p) => p.id === pol.id ? { ...p, status: (p.status === 'active' ? 'retired' : 'active') as Policy['status'] } : p))}>
+                      {pol.status === 'active' ? 'Retire' : 'Restore'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -612,6 +625,293 @@ export default function Admin({ tab: initialTab }: AdminProps) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Edit user dialog ── */}
+      {editingUser && (
+        <EditUserDialog
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSave={(updated) => {
+            setLocalUsers((prev) => prev.map((u) => u.id === updated.id ? updated : u))
+            setEditingUser(null)
+            showToast('User updated.', 'success')
+          }}
+        />
+      )}
+
+      {/* ── Invite user dialog ── */}
+      {showInvite && (
+        <InviteUserDialog
+          onClose={() => setShowInvite(false)}
+          onInvited={(u) => {
+            setLocalUsers((prev) => [...prev, u])
+            setShowInvite(false)
+            showToast('User invited.', 'success')
+          }}
+        />
+      )}
+
+      {/* ── New policy dialog ── */}
+      {showNewPolicy && (
+        <NewPolicyDialog
+          onClose={() => setShowNewPolicy(false)}
+          onCreated={(pol) => {
+            setLocalPolicies((prev) => [...prev, pol])
+            setShowNewPolicy(false)
+            showToast('Policy created.', 'success')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Dialogs ──────────────────────────────────────────────────────────────────
+
+const ROLES_SELECTABLE: Role[] = ['requester', 'data_management', 'legal', 'security', 'admin']
+const ROLE_LABELS_FULL: Record<Role, string> = {
+  requester: 'Requester', data_management: 'Data Management', legal: 'Legal',
+  security: 'Security', admin: 'Admin', external_recipient: 'External Recipient',
+}
+
+const dlgInputSt: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', fontSize: 13,
+  border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+  background: 'var(--surface-0)', color: 'var(--ink-900)',
+  outline: 'none', boxSizing: 'border-box',
+}
+const dlgLabelSt: React.CSSProperties = {
+  display: 'block', fontSize: 11.5, fontWeight: 600,
+  color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em',
+}
+
+function EditUserDialog({ user, onClose, onSave }: {
+  user: User; onClose: () => void; onSave: (u: User) => void
+}) {
+  const [role, setRole] = useState<Role>(user.role)
+  const [department, setDepartment] = useState(user.department)
+  const [jobTitle, setJobTitle] = useState(user.jobTitle)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 440, padding: '28px 32px', zIndex: 1 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 4 }}>Edit user</h2>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginBottom: 20 }}>{user.fullName} · {user.email}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={dlgLabelSt}>ROLE</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={dlgInputSt}>
+              {ROLES_SELECTABLE.map((r) => <option key={r} value={r}>{ROLE_LABELS_FULL[r]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={dlgLabelSt}>DEPARTMENT</label>
+            <input value={department} onChange={(e) => setDepartment(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div>
+            <label style={dlgLabelSt}>JOB TITLE</label>
+            <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          {!isSupabaseConfigured && (
+            <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
+              Demo mode — changes apply this session only.
+            </p>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => onSave({ ...user, role, department, jobTitle })}>Save changes</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InviteUserDialog({ onClose, onInvited }: {
+  onClose: () => void; onInvited: (u: User) => void
+}) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<Role>('requester')
+  const [department, setDepartment] = useState('')
+  const [jobTitle, setJobTitle] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!fullName.trim() || !email.trim()) { setError('Full name and email are required.'); return }
+    const initials = fullName.trim().split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+    const colors = ['#0B5FFF', '#5B21B6', '#047857', '#B45309', '#0E7490', '#9333EA']
+    const newUser: User = {
+      id: `u-new-${Date.now()}`,
+      fullName: fullName.trim(),
+      email: email.trim(),
+      role,
+      department: department.trim() || 'Unknown',
+      jobTitle: jobTitle.trim() || 'Unknown',
+      initials,
+      avatarColor: colors[Math.floor(Math.random() * colors.length)],
+    }
+    onInvited(newUser)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 460, padding: '28px 32px', zIndex: 1 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Invite user</h2>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>FULL NAME *</label>
+              <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Layla Al-Harbi" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>WORK EMAIL *</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="layla@company.com" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={dlgLabelSt}>ROLE</label>
+              <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={dlgInputSt}>
+                {ROLES_SELECTABLE.map((r) => <option key={r} value={r}>{ROLE_LABELS_FULL[r]}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={dlgLabelSt}>DEPARTMENT</label>
+              <input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Legal" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>JOB TITLE</label>
+              <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Privacy Analyst" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+          </div>
+          {!isSupabaseConfigured && (
+            <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
+              Demo mode — user will be added to the local list this session only. In production, an invitation email would be sent via Supabase.
+            </p>
+          )}
+          {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Send invitation</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function NewPolicyDialog({ onClose, onCreated }: {
+  onClose: () => void; onCreated: (p: Policy) => void
+}) {
+  const [code, setCode] = useState('')
+  const [title, setTitle] = useState('')
+  const [category, setCategory] = useState<Policy['category']>('internal')
+  const [version, setVersion] = useState('1.0')
+  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
+  const [ownerDept, setOwnerDept] = useState('')
+  const [summary, setSummary] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!code.trim() || !title.trim()) { setError('Policy code and title are required.'); return }
+    const newPolicy: Policy = {
+      id: `pol-new-${Date.now()}`,
+      code: code.trim().toUpperCase(),
+      title: title.trim(),
+      category,
+      version: version.trim() || '1.0',
+      effectiveDate,
+      ownerDept: ownerDept.trim() || 'Privacy Office',
+      status: 'active',
+      summary: summary.trim(),
+      body: summary.trim(),
+      embeddingsBuilt: false,
+      citationCount: 0,
+    }
+    onCreated(newPolicy)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 520, padding: '28px 32px', zIndex: 1, maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>New policy</h2>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={dlgLabelSt}>POLICY CODE *</label>
+              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. POL-AI-008" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={dlgLabelSt}>VERSION</label>
+              <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>TITLE *</label>
+              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Data Breach Response Policy" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={dlgLabelSt}>CATEGORY</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value as Policy['category'])} style={dlgInputSt}>
+                <option value="internal">Internal</option>
+                <option value="pdpl">PDPL</option>
+                <option value="sama">SAMA</option>
+                <option value="cma">CMA</option>
+                <option value="iso27001">ISO 27001</option>
+              </select>
+            </div>
+            <div>
+              <label style={dlgLabelSt}>OWNER DEPARTMENT</label>
+              <input value={ownerDept} onChange={(e) => setOwnerDept(e.target.value)} placeholder="e.g. Privacy Office" style={dlgInputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>EFFECTIVE DATE</label>
+              <input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} style={dlgInputSt} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={dlgLabelSt}>SUMMARY</label>
+              <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={3}
+                placeholder="Brief description of the policy scope and key requirements…"
+                style={{ ...dlgInputSt, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+          </div>
+          {!isSupabaseConfigured && (
+            <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
+              Demo mode — policy will be added locally this session only.
+            </p>
+          )}
+          {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Create policy</button>
+          </div>
+        </form>
       </div>
     </div>
   )
