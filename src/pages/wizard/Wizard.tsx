@@ -98,6 +98,7 @@ export default function Wizard() {
   const chatInputRef  = useRef<HTMLInputElement>(null)
   const [xlsxFile, setXlsxFile] = useState<File | null>(null)
   const [xlsxParsing, setXlsxParsing] = useState(false)
+  const [vendorSearch, setVendorSearch] = useState('')
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -534,29 +535,114 @@ export default function Wizard() {
           {/* ── Step: Vendor & Project ── */}
           {currentStep === 'vendor_project' && (
             <section aria-labelledby="step-vendor-project">
-              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Link to a vendor or project</h2>
-              <p style={{ color: 'var(--ink-500)', marginBottom: 24, fontSize: 13.5 }}>
-                Optionally associate this request with an existing vendor or project. You can skip this step if not applicable.
+              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Select Vendor &amp; Project</h2>
+              <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
+                Choose the vendor and project for this compliance review request.
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6, letterSpacing: '0.02em' }}>VENDOR</label>
-                  <select value={form.linkedVendorId} onChange={(e) => update({ linkedVendorId: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none' }}>
-                    <option value="">— None —</option>
-                    {VENDORS.map((v) => <option key={v.id} value={v.id}>{v.tradeName}</option>)}
-                  </select>
+
+              {/* Vendor card */}
+              <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true" style={{ color: 'var(--ink-500)', flexShrink: 0 }}>
+                    <rect x="1" y="4" width="13" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+                    <path d="M4 4V3a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.3"/>
+                  </svg>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Vendor</span>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6, letterSpacing: '0.02em' }}>PROJECT</label>
-                  <select value={form.linkedProjectId} onChange={(e) => update({ linkedProjectId: e.target.value })}
-                    style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none' }}>
-                    <option value="">— None —</option>
-                    {PROJECTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+
+                {/* Search row */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"
+                      style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-400)', pointerEvents: 'none' }}>
+                      <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M8.5 8.5l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    </svg>
+                    <input
+                      type="text" placeholder="Search vendors…"
+                      value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px 7px 28px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <button className="btn btn-ghost btn-sm" style={{ whiteSpace: 'nowrap', gap: 4 }}>
+                    <span aria-hidden="true">+</span> New Vendor
+                  </button>
+                </div>
+
+                {/* Vendor list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {VENDORS.filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
+                    const selected = form.linkedVendorId === v.id
+                    return (
+                      <button key={v.id}
+                        onClick={() => update({ linkedVendorId: selected ? '' : v.id, linkedProjectId: '' })}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
+                          border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
+                          borderRadius: 'var(--r-md)',
+                          background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
+                          transition: 'all var(--t-fast)',
+                        }}>
+                        <div>
+                          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{v.tradeName}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{v.category} · {v.jurisdiction}</div>
+                        </div>
+                        <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: v.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: v.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
+                          {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 28 }}>
+
+              {/* Project card — only shown after a vendor is selected */}
+              {form.linkedVendorId && (
+                <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true" style={{ color: 'var(--ink-500)', flexShrink: 0 }}>
+                      <rect x="1" y="3" width="13" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M5 3V2h5v1" stroke="currentColor" strokeWidth="1.3"/>
+                    </svg>
+                    <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>
+                      Project under {VENDORS.find((v) => v.id === form.linkedVendorId)?.tradeName}
+                    </span>
+                  </div>
+
+                  <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10, gap: 4 }}>
+                    <span aria-hidden="true">+</span> New Project
+                  </button>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {PROJECTS.map((p) => {
+                      const selected = form.linkedProjectId === p.id
+                      return (
+                        <button key={p.id}
+                          onClick={() => update({ linkedProjectId: selected ? '' : p.id })}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
+                            border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
+                            borderRadius: 'var(--r-md)',
+                            background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
+                            transition: 'all var(--t-fast)',
+                          }}>
+                          <div>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{p.name}</div>
+                            <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{p.code} · {p.businessUnit}</div>
+                          </div>
+                          <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: p.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: p.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
+                            {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
                 <button className="btn btn-ghost" onClick={() => { update({ linkedVendorId: '', linkedProjectId: '' }); next() }}>Skip</button>
                 <button className="btn btn-primary" onClick={next}>Continue →</button>
               </div>
