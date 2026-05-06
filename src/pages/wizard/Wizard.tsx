@@ -122,6 +122,9 @@ export default function Wizard() {
   // Autosave
   useEffect(() => { saveDraft(form) }, [form])
 
+  // Clear draft when leaving the wizard without submitting
+  useEffect(() => { return () => { clearDraft() } }, [])
+
   // Auto-trigger AI assessment when entering step
   useEffect(() => {
     if (currentStep !== 'assessment' || assessmentData || assessmentLoading) return
