@@ -83,6 +83,39 @@ export default function Dashboard() {
           {myNotifs.length > 0 && <KPI label="Unread alerts" value={myNotifs.length} color="var(--brand-700)" />}
         </div>
 
+        {/* Compliance at a glance */}
+        <section className="card" aria-labelledby="compliance-heading" style={{ padding: '18px 24px' }}>
+          <h2 id="compliance-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 20 }}>
+            Compliance at a glance
+          </h2>
+          <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap', alignItems: 'center' }}>
+            <ComplianceRing
+              rate={approved + rejected > 0 ? Math.round((approved / (approved + rejected)) * 100) : 0}
+              label="Approval rate"
+              sublabel={`${approved} of ${approved + rejected} decisions`}
+            />
+            <ComplianceRing
+              rate={open.length > 0 ? Math.round(((open.length - slaAtRisk.length) / open.length) * 100) : 100}
+              label="SLA compliance"
+              sublabel={`${open.length - slaAtRisk.length} of ${open.length} on track`}
+            />
+            <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { label: 'Approved',    count: approved,               color: 'var(--emerald-700)', bg: 'var(--emerald-50)' },
+                { label: 'Rejected',    count: rejected,               color: 'var(--red-700)',     bg: 'var(--red-50)' },
+                { label: 'In review',   count: open.length,            color: 'var(--amber-700)',   bg: 'var(--amber-50)' },
+                { label: 'SLA at risk', count: slaAtRisk.length,       color: 'var(--red-700)',     bg: 'var(--red-50)' },
+              ].map(({ label, count, color, bg }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12.5, color: 'var(--ink-600)', flex: 1 }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color, background: bg, borderRadius: 4, padding: '1px 8px', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1fr)', gap: 16 }}>
           {/* My open tickets */}
           <section className="card" aria-labelledby="open-tickets-heading">
@@ -194,6 +227,28 @@ export default function Dashboard() {
 }
 
 function hour() { return new Date().getHours() }
+
+function ComplianceRing({ rate, label, sublabel }: { rate: number; label: string; sublabel: string }) {
+  const r = 38
+  const circ = 2 * Math.PI * r
+  const offset = circ * (1 - Math.min(rate, 100) / 100)
+  const color = rate >= 80 ? 'var(--emerald-600)' : rate >= 60 ? 'var(--amber-600)' : 'var(--red-600)'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      <svg width={96} height={96} viewBox="0 0 96 96" aria-label={`${label}: ${rate}%`}>
+        <circle cx={48} cy={48} r={r} fill="none" stroke="var(--line)" strokeWidth={9} />
+        <circle cx={48} cy={48} r={r} fill="none" stroke={color} strokeWidth={9}
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round" transform="rotate(-90 48 48)"
+          style={{ transition: 'stroke-dashoffset 0.6s ease' }}
+        />
+        <text x={48} y={44} textAnchor="middle" fontSize={15} fontWeight={700} fill={color}>{rate}%</text>
+        <text x={48} y={60} textAnchor="middle" fontSize={10} fill="var(--ink-400)">{label}</text>
+      </svg>
+      <span style={{ fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', maxWidth: 100 }}>{sublabel}</span>
+    </div>
+  )
+}
 
 function TicketRow({ ticket, onClick }: { ticket: Ticket; onClick: () => void }) {
   const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === ticket.id)

@@ -18,6 +18,8 @@ import { formatDate, formatDateTime } from '../lib/utils'
 import type { TicketState } from '../data/types'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { exportAssessmentPdf } from '../lib/exportAssessmentPdf'
+import { exportTicketDocx } from '../lib/exportTicketDocx'
+import { getWorkflowSettings } from '../lib/workflowSettings'
 import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket } from '../api/tickets'
 import { getCachedUser } from '../lib/userCache'
 import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
@@ -27,6 +29,7 @@ import { ReviewerAssistPanel } from '../components/ReviewerAssistPanel'
 import { runChecklistReview, type ChecklistResult, CHECKLIST_LABELS, type ChecklistVerdict } from '../api/aiChecklist'
 
 type TabKey = 'overview' | 'evidence' | 'ai' | 'reviews' | 'returns' | 'audit' | 'documents'
+type SplitTrack = 'legal' | 'security'
 
 const TABS = [
   { key: 'overview',  label: 'Overview' },
@@ -51,6 +54,8 @@ export default function TicketWorkspace() {
   const [checklistData, setChecklistData] = useState<ChecklistResult | null>(null)
   const [checklistLoading, setChecklistLoading] = useState(false)
   const [checklistError, setChecklistError] = useState<string | null>(null)
+  const [showSplitDialog, setShowSplitDialog] = useState(false)
+  const [reviewerAttachments, setReviewerAttachments] = useState<Attachment[]>([])
 
   const ticket = tickets.find((t) => t.id === id)
   useEffect(() => {
@@ -174,6 +179,14 @@ export default function TicketWorkspace() {
             {ticket.state === 'returned_to_requester' && user.id === ticket.requesterId && (
               <button className="btn btn-primary" onClick={() => navigate(`/requests/${ticket.id}/respond`)}>
                 Respond to reviewer
+              </button>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => exportTicketDocx(ticket)} title="Download as Word document">
+              ↓ DOCX
+            </button>
+            {(user.role === 'admin' || user.role === 'data_management') && ticket.state === 'in_data_management' && (
+              <button className="btn" onClick={() => setShowSplitDialog(true)}>
+                ⎇ Split to parallel review
               </button>
             )}
             {canReview && (
@@ -317,6 +330,39 @@ export default function TicketWorkspace() {
                   </div>
                 )}
               </section>
+
+              {/* Sub-tickets panel */}
+              {(ticket.parentTicketId || (ticket.childTicketIds && ticket.childTicketIds.length > 0)) && (() => {
+                const { tickets: allTickets } = ticketStore.getState()
+                const parent = ticket.parentTicketId ? allTickets.find((t) => t.id === ticket.parentTicketId) : null
+                const children = ticket.childTicketIds?.map((cid) => allTickets.find((t) => t.id === cid)).filter(Boolean) ?? []
+                return (
+                  <section className="card" style={{ padding: '14px 18px' }} aria-labelledby="related-heading">
+                    <h2 id="related-heading" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 10 }}>Related tickets</h2>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {parent && (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)' }}>
+                          <span style={{ fontSize: 10.5, color: 'var(--ink-400)', flexShrink: 0 }}>Parent</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-500)' }}>{parent.id}</span>
+                          <StatusPill state={parent.state} size="sm" />
+                          <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto', fontSize: 11 }}
+                            onClick={() => navigate(`/requests/${parent.id}`)}>Open</button>
+                        </div>
+                      )}
+                      {children.map((child) => child && (
+                        <div key={child.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)' }}>
+                          <span style={{ fontSize: 10.5, color: 'var(--ink-400)', flexShrink: 0 }}>Child</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-500)' }}>{child.id}</span>
+                          <StatusPill state={child.state} size="sm" />
+                          <span style={{ fontSize: 12, color: 'var(--ink-500)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{child.title}</span>
+                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, flexShrink: 0 }}
+                            onClick={() => navigate(`/requests/${child.id}`)}>Open</button>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )
+              })()}
             </div>
           </div>
         )}
@@ -538,36 +584,61 @@ export default function TicketWorkspace() {
 
         {/* ── Reviews ── */}
         {activeTab === 'reviews' && (
-          <div style={{ maxWidth: 640 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Review decisions</h2>
-            {ticket.reviews.length === 0 ? (
-              <EmptyState title="No reviews" body="Reviews will appear once the ticket is assigned." />
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {ticket.reviews.map((r) => {
-                  const reviewer = r.reviewerId ? getCachedUser(r.reviewerId) : null
-                  return (
-                    <div key={r.role} className="card" style={{ padding: '14px 18px' }}>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: r.notes ? 8 : 0 }}>
-                        {reviewer && <Avatar initials={reviewer.initials} color={reviewer.avatarColor} size={28} />}
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13.5 }}>{reviewer?.fullName ?? 'Unassigned'}</div>
-                          <RoleBadge role={r.role} size="sm" />
+          <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Review decisions</h2>
+              {ticket.reviews.length === 0 ? (
+                <EmptyState title="No reviews" body="Reviews will appear once the ticket is assigned." />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {ticket.reviews.map((r) => {
+                    const reviewer = r.reviewerId ? getCachedUser(r.reviewerId) : null
+                    return (
+                      <div key={r.role} className="card" style={{ padding: '14px 18px' }}>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: r.notes ? 8 : 0 }}>
+                          {reviewer && <Avatar initials={reviewer.initials} color={reviewer.avatarColor} size={28} />}
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13.5 }}>{reviewer?.fullName ?? 'Unassigned'}</div>
+                            <RoleBadge role={r.role} size="sm" />
+                          </div>
+                          <div style={{ marginLeft: 'auto' }}>
+                            <span className={`pill pill-no-dot ${r.verdict === 'approve' ? 'pill-emerald' : r.verdict === 'reject' ? 'pill-red' : r.verdict === 'return' ? 'pill-amber' : 'pill-slate'}`}>
+                              {r.verdict === 'pending' ? 'Pending' : r.verdict}
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ marginLeft: 'auto' }}>
-                          <span className={`pill pill-no-dot ${r.verdict === 'approve' ? 'pill-emerald' : r.verdict === 'reject' ? 'pill-red' : r.verdict === 'return' ? 'pill-amber' : 'pill-slate'}`}>
-                            {r.verdict === 'pending' ? 'Pending' : r.verdict}
-                          </span>
-                        </div>
+                        {r.notes && <p style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.65, marginTop: 8 }}>{r.notes}</p>}
+                        {r.decidedAt && <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>{formatDateTime(r.decidedAt)}</div>}
                       </div>
-                      {r.notes && <p style={{ fontSize: 13, color: 'var(--ink-600)', lineHeight: 1.65, marginTop: 8 }}>{r.notes}</p>}
-                      {r.decidedAt && <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>{formatDateTime(r.decidedAt)}</div>}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Reviewer supporting documents */}
+            <div>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 12 }}>
+                Reviewer supporting documents
+              </h2>
+              {!canReview && reviewerAttachments.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--ink-400)' }}>No reviewer documents attached.</p>
+              ) : (
+                <EvidenceUploader
+                  attachments={reviewerAttachments}
+                  ticketId={ticket.id}
+                  readOnly={!canReview}
+                  onUploaded={(a) => setReviewerAttachments((prev) => [...prev, a])}
+                  onRemove={(id) => setReviewerAttachments((prev) => prev.filter((a) => a.id !== id))}
+                />
+              )}
+            </div>
           </div>
+        )}
+
+        {/* Split-to-parallel dialog */}
+        {showSplitDialog && (
+          <SplitRouteDialog ticket={ticket} onClose={() => setShowSplitDialog(false)} />
         )}
 
         {/* ── Return thread ── */}
@@ -611,6 +682,87 @@ export default function TicketWorkspace() {
   )
 }
 
+function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types').Ticket; onClose: () => void }) {
+  const [tracks, setTracks] = useState<Record<SplitTrack, boolean>>({ legal: true, security: true })
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const hasExisting = (track: SplitTrack) => ticket.reviews.some((r) => r.role === track)
+
+  function toggle(track: SplitTrack) {
+    setTracks((prev) => ({ ...prev, [track]: !prev[track] }))
+  }
+
+  function confirm() {
+    if (!tracks.legal && !tracks.security) return
+    setSaving(true)
+    const newReviews = [...ticket.reviews]
+    if (tracks.legal && !hasExisting('legal')) {
+      newReviews.push({ role: 'legal', verdict: 'pending', reviewerId: null })
+    }
+    if (tracks.security && !hasExisting('security')) {
+      newReviews.push({ role: 'security', verdict: 'pending', reviewerId: null })
+    }
+    updateTicket(ticket.id, { reviews: newReviews, state: 'in_legal_review' })
+    showToast('Ticket routed to parallel review tracks.', 'success')
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{
+        background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px',
+        width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+      }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>Split to parallel review</h2>
+        <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 20, lineHeight: 1.6 }}>
+          Route this ticket to Legal and/or Security simultaneously. Both tracks run in parallel and must complete before a final decision.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+          {(['legal', 'security'] as SplitTrack[]).map((track) => (
+            <label key={track} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+              border: `2px solid ${tracks[track] ? 'var(--brand-400)' : 'var(--line)'}`,
+              borderRadius: 'var(--r-md)', cursor: hasExisting(track) ? 'not-allowed' : 'pointer',
+              background: tracks[track] ? 'var(--brand-50)' : 'var(--surface-0)',
+              opacity: hasExisting(track) ? 0.6 : 1,
+            }}>
+              <input type="checkbox" checked={tracks[track]} disabled={hasExisting(track)}
+                onChange={() => toggle(track)} style={{ width: 16, height: 16, accentColor: 'var(--brand-600)' }} />
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
+                  {track} review {hasExisting(track) && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-400)' }}>(already assigned)</span>}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>
+                  {track === 'legal' ? 'Contract, regulatory, and legal compliance assessment' : 'Security controls, encryption, and risk evaluation'}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>
+            ROUTING NOTES (OPTIONAL)
+          </label>
+          <textarea className="textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add context for the reviewers about what to focus on…" />
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={confirm}
+            disabled={saving || (!tracks.legal && !tracks.security)}>
+            {saving ? 'Routing…' : 'Confirm split'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ReviewActions({ ticket, role, userName }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security'; userName: string }) {
   const navigate = useNavigate()
   const [pending, setPending] = useState<'approve' | 'return' | 'reject' | null>(null)
@@ -620,8 +772,18 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
   function nextState(verdict: 'approve' | 'return' | 'reject'): TicketState {
     if (verdict === 'return') return 'returned_to_requester'
     if (verdict === 'reject') return 'rejected'
-    if (role === 'data_management') return 'in_legal_review'
-    if (role === 'legal') return 'in_security_review'
+    const cfg = getWorkflowSettings()
+    if (role === 'data_management') {
+      const needsLegal = cfg.legalForCrossBorder && ticket.dataDeclaration.crossBorderInvolved
+      const needsSecurity = cfg.securityForSensitive && ticket.dataDeclaration.containsSensitive
+      if (needsLegal) return 'in_legal_review'
+      if (needsSecurity) return 'in_security_review'
+      return 'approved'
+    }
+    if (role === 'legal') {
+      const needsSecurity = cfg.securityForSensitive && ticket.dataDeclaration.containsSensitive
+      return needsSecurity ? 'in_security_review' : 'approved'
+    }
     return 'approved'
   }
 

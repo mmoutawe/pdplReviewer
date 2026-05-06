@@ -47,6 +47,7 @@ function PageSkeleton() {
 function RootRedirect() {
   const { user, isSignedIn } = useStore(authStore)
   if (!isSignedIn) return <Navigate to="/sign-in" replace />
+  if (user.role === 'external_recipient') return <Navigate to="/external-portal" replace />
   if (user.role === 'data_management' || user.role === 'legal' || user.role === 'security') {
     return <Navigate to={`/queue/${user.role}`} replace />
   }

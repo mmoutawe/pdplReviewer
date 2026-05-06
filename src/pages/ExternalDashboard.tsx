@@ -44,13 +44,21 @@ export default function ExternalDashboard() {
 
       {/* Content */}
       <main style={{ flex: 1, padding: '32px 24px', maxWidth: 800, width: '100%', margin: '0 auto' }}>
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>
-            External Review Portal
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--ink-500)' }}>
-            Review and respond to data privacy requests shared with you.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>
+              External Review Portal
+            </h1>
+            <p style={{ fontSize: 14, color: 'var(--ink-500)' }}>
+              Review and respond to data privacy requests shared with you, or submit a new request.
+            </p>
+          </div>
+          <button className="btn btn-primary" onClick={() => navigate('/requests/new')}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            Submit new request
+          </button>
         </div>
 
         {!isSupabaseConfigured && (

@@ -15,6 +15,7 @@ import {
   toggleRevokeLink, deleteExternalLink,
   type AppSettings,
 } from '../api/adminSettings'
+import { getWorkflowSettings, setWorkflowSetting, type WorkflowSettings } from '../lib/workflowSettings'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -83,11 +84,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   const [newExpiry, setNewExpiry]           = useState('')
   const [creatingLink, setCreatingLink]     = useState(false)
   const [credentials, setCredentials]       = useState<{ email: string; tempPassword: string; portalUrl: string } | null>(null)
-  const [workflowConfig, setWorkflowConfig] = useState({
-    legalForCrossBorder: true,
-    securityForSensitive: true,
-    autoRouteLowRisk: false,
-  })
+  const [workflowConfig, setWorkflowConfig] = useState<WorkflowSettings>(() => getWorkflowSettings())
 
   const loadSettings = useCallback(async () => {
     if (!isSupabaseConfigured) return
@@ -105,12 +102,15 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   }, [tab, loadSettings, loadLinks])
 
   async function handleDocValidationToggle(value: boolean) {
-    if (!appSettings) return
-    try {
-      await updateDocValidationSetting(appSettings.id, value)
-      setAppSettings({ ...appSettings, requireDocumentValidation: value })
-      showToast(value ? 'Document validation required.' : 'Document validation optional.', 'success')
-    } catch (err) { showToast(err instanceof Error ? err.message : 'Update failed.', 'error') }
+    setWorkflowSetting('requireDocumentValidation', value)
+    setWorkflowConfig((prev) => ({ ...prev, requireDocumentValidation: value }))
+    if (appSettings) {
+      try {
+        await updateDocValidationSetting(appSettings.id, value)
+        setAppSettings({ ...appSettings, requireDocumentValidation: value })
+      } catch (err) { showToast(err instanceof Error ? err.message : 'Update failed.', 'error'); return }
+    }
+    showToast(value ? 'Document validation required.' : 'Document validation optional.', 'success')
   }
 
   async function handleCreateLink() {
@@ -441,20 +441,20 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                 </div>
                 <button
                   role="switch"
-                  aria-checked={appSettings?.requireDocumentValidation ?? true}
-                  onClick={() => isSupabaseConfigured && appSettings ? void handleDocValidationToggle(!appSettings.requireDocumentValidation) : undefined}
+                  aria-checked={workflowConfig.requireDocumentValidation}
+                  onClick={() => void handleDocValidationToggle(!workflowConfig.requireDocumentValidation)}
                   disabled={settingsLoading}
                   style={{
                     width: 44, height: 24, borderRadius: 12, border: 'none',
-                    cursor: isSupabaseConfigured ? 'pointer' : 'not-allowed',
-                    background: (appSettings?.requireDocumentValidation ?? true) ? 'var(--brand-700)' : 'var(--ink-200)',
+                    cursor: 'pointer',
+                    background: workflowConfig.requireDocumentValidation ? 'var(--brand-700)' : 'var(--ink-200)',
                     position: 'relative', transition: 'background var(--t-med)', flexShrink: 0, marginLeft: 24,
                     opacity: settingsLoading ? 0.5 : 1,
                   }}
                 >
                   <span style={{
                     position: 'absolute', top: 3,
-                    left: (appSettings?.requireDocumentValidation ?? true) ? 23 : 3,
+                    left: workflowConfig.requireDocumentValidation ? 23 : 3,
                     width: 18, height: 18, borderRadius: '50%', background: '#fff',
                     transition: 'left var(--t-med)', boxShadow: 'var(--shadow-sm)',
                   }} />
@@ -481,7 +481,11 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                       </div>
                       <button
                         role="switch" aria-checked={on}
-                        onClick={() => setWorkflowConfig((prev) => ({ ...prev, [key]: !on }))}
+                        onClick={() => {
+                          const next = !on
+                          setWorkflowSetting(key as keyof WorkflowSettings, next)
+                          setWorkflowConfig((prev) => ({ ...prev, [key]: next }))
+                        }}
                         style={{
                           width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
                           background: on ? 'var(--brand-700)' : 'var(--ink-200)',

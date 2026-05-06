@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RequestType } from '../../data/types'
-import { REQUEST_TYPE_LABELS } from '../../data/seed'
+import { REQUEST_TYPE_LABELS, VENDORS, PROJECTS } from '../../data/seed'
 
 const TYPE_DESCRIPTIONS: Record<RequestType, string> = {
   vendor_onboarding: 'Assess a new vendor or third-party service provider that will process personal data on your behalf.',
@@ -27,9 +27,25 @@ const TYPES: RequestType[] = [
   'cross_border_transfer',
 ]
 
+const selectSt: React.CSSProperties = {
+  padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)',
+  borderRadius: 'var(--r-sm)', background: 'var(--surface-0)',
+  color: 'var(--ink-900)', outline: 'none', flex: 1,
+}
+
 export default function WizardStepType() {
   useEffect(() => { document.title = 'New Request — PDPL Reviewer' }, [])
   const navigate = useNavigate()
+  const [vendorId, setVendorId] = useState('')
+  const [projectId, setProjectId] = useState('')
+
+  function handleSelectType(type: RequestType) {
+    const params = new URLSearchParams()
+    if (vendorId) params.set('vendorId', vendorId)
+    if (projectId) params.set('projectId', projectId)
+    const qs = params.toString()
+    navigate(`/requests/new/${type}/method${qs ? `?${qs}` : ''}`)
+  }
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 24px' }}>
@@ -41,14 +57,49 @@ export default function WizardStepType() {
       </nav>
 
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>New privacy request</h1>
-      <p style={{ color: 'var(--ink-500)', marginBottom: 28, fontSize: 14, lineHeight: 1.6 }}>
+      <p style={{ color: 'var(--ink-500)', marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
         Select the type of request you want to submit. Each type follows a tailored assessment process aligned with PDPL obligations.
       </p>
+
+      {/* Optional vendor + project linker */}
+      <div className="card" style={{ padding: '16px 20px', marginBottom: 24, background: 'var(--surface-1)', border: '1px solid var(--line)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 12 }}>
+          Link to vendor / project <span style={{ fontSize: 11.5, fontWeight: 400, color: 'var(--ink-400)' }}>(optional)</span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 200 }}>
+            <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-500)', letterSpacing: '0.02em' }}>VENDOR</label>
+            <select value={vendorId} onChange={(e) => setVendorId(e.target.value)} style={selectSt}>
+              <option value="">— None —</option>
+              {VENDORS.map((v) => (
+                <option key={v.id} value={v.id}>{v.tradeName}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 200 }}>
+            <label style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-500)', letterSpacing: '0.02em' }}>PROJECT</label>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={selectSt}>
+              <option value="">— None —</option>
+              {PROJECTS.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {(vendorId || projectId) && (
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--brand-700)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {vendorId && <span>Vendor: <strong>{VENDORS.find((v) => v.id === vendorId)?.tradeName}</strong></span>}
+            {projectId && <span>Project: <strong>{PROJECTS.find((p) => p.id === projectId)?.name}</strong></span>}
+            <button type="button" className="btn btn-ghost btn-sm" style={{ padding: '0 4px', fontSize: 11.5, color: 'var(--ink-400)', height: 'auto' }}
+              onClick={() => { setVendorId(''); setProjectId('') }}>Clear</button>
+          </div>
+        )}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {TYPES.map((type) => (
           <button key={type}
-            onClick={() => navigate(`/requests/new/${type}/method`)}
+            onClick={() => handleSelectType(type)}
             style={{
               display: 'flex', alignItems: 'center', gap: 16,
               padding: '18px 20px',

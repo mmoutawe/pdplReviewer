@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import type { RequestType, Ticket, TicketPayload } from '../../data/types'
 import { REQUEST_TYPE_LABELS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
 import { AICoPilotPanel } from '../../components/AICoPilotPanel'
 import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore } from '../../store'
+import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
 import { isSupabaseConfigured } from '../../lib/supabase'
 import { createTicket, submitTicket } from '../../api/tickets'
@@ -39,6 +40,22 @@ interface WizardState {
   crossBorder: boolean
   consentObtained: boolean
   tags: string
+  // linked vendor / project (optional, set from URL search params)
+  linkedVendorId: string
+  linkedProjectId: string
+  // type-specific questionnaire fields
+  certifications: string[]
+  subprocessors: string
+  contractRef: string
+  transferMechanism: string
+  hasSaudiCopy: boolean
+  docClassification: string
+  docExpiry: string
+  legalBasis: string
+  systemName: string
+  accessLevel: string
+  accessDuration: string
+  processingRoles: Array<{ role: string; party: string; description: string }>
 }
 
 const empty: WizardState = {
@@ -46,15 +63,29 @@ const empty: WizardState = {
   vendorName: '', vendorJurisdiction: 'KSA', hasDPA: false,
   dataCategories: [], estimatedSubjects: '', retentionDays: '',
   crossBorder: false, consentObtained: false, tags: '',
+  linkedVendorId: '', linkedProjectId: '',
+  certifications: [], subprocessors: '', contractRef: '',
+  transferMechanism: 'sccs', hasSaudiCopy: false,
+  docClassification: 'internal', docExpiry: '',
+  legalBasis: 'legitimate_interest',
+  systemName: '', accessLevel: 'read', accessDuration: '30d',
+  processingRoles: [],
 }
 
 export default function Wizard() {
   const { type, method: urlMethod } = useParams<{ type: RequestType; method: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useStore(authStore)
 
   const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'method' : 'initiation')
-  const [form, setForm] = useState<WizardState>(() => loadDraft<WizardState>() ?? { ...empty })
+  const [form, setForm] = useState<WizardState>(() => {
+    const draft = loadDraft<WizardState>()
+    const params = new URLSearchParams(location.search)
+    const linkedVendorId = params.get('vendorId') ?? ''
+    const linkedProjectId = params.get('projectId') ?? ''
+    return { ...(draft ?? empty), linkedVendorId, linkedProjectId }
+  })
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -196,6 +227,32 @@ export default function Wizard() {
     setForm((f) => ({ ...f, ...partial }))
   }
 
+  function defaultProcessingRoles(): WizardState['processingRoles'] {
+    const org = 'PDPL Reviewer Org'
+    const vendor = form.vendorName || 'Third Party'
+    if (requestType === 'vendor_onboarding') return [
+      { role: 'Controller', party: org, description: 'Determines purposes and means of processing' },
+      { role: 'Processor', party: vendor, description: 'Processes data on behalf of the controller per DPA' },
+    ]
+    if (requestType === 'cross_border_transfer') return [
+      { role: 'Data Exporter (Controller)', party: org, description: 'Transfers personal data outside KSA' },
+      { role: 'Data Importer', party: vendor, description: `Receives data in ${form.vendorJurisdiction}` },
+    ]
+    if (requestType === 'data_sharing_external') return [
+      { role: 'Disclosing Controller', party: org, description: 'Shares dataset with receiving party' },
+      { role: 'Receiving Party', party: vendor || 'External Org', description: 'Receives and uses the shared dataset' },
+    ]
+    if (requestType === 'external_document_sharing') return [
+      { role: 'Document Owner', party: org, description: 'Shares document under restricted access' },
+      { role: 'Recipient', party: vendor || 'External Recipient', description: 'Receives read access to the document' },
+    ]
+    if (requestType === 'internal_data_access') return [
+      { role: 'Data Owner', party: org, description: 'Owns and governs the dataset' },
+      { role: 'Accessor', party: user.fullName, description: `${form.systemName || 'System'} — ${form.accessLevel} access` },
+    ]
+    return []
+  }
+
   function validate(step: string): boolean {
     const e: typeof errors = {}
     if (step === 'initiation') {
@@ -213,6 +270,10 @@ export default function Wizard() {
   function next() {
     if (!validate(currentStep)) return
     const idx = StepIndex(currentStep)
+    const nextKey = STEPS[idx + 1]?.key
+    if (nextKey === 'confirm') {
+      update({ processingRoles: defaultProcessingRoles() })
+    }
     if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key)
   }
 
@@ -307,6 +368,8 @@ export default function Wizard() {
         const demoTicket: Ticket = {
           id: newId, type: requestType, state: 'in_data_management',
           title: form.title, description: form.description, requesterId: user.id,
+          vendorId: form.linkedVendorId || undefined,
+          projectId: form.linkedProjectId || undefined,
           createdAt: now, updatedAt: now, submittedAt: now,
           payload: payloadMap[requestType],
           dataDeclaration: {
@@ -333,9 +396,16 @@ export default function Wizard() {
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }
 
+        // Apply auto-route for low risk if setting is enabled
+        const cfg = getWorkflowSettings()
+        const isLowRisk = assessmentData && (assessmentData as Record<string,unknown>).riskLevel === 'low'
+        if (cfg.autoRouteLowRisk && isLowRisk) {
+          demoTicket.state = 'approved'
+        }
+
         demoAddTicket(demoTicket)
         clearDraft()
-        showToast('Request submitted successfully.', 'success')
+        showToast(cfg.autoRouteLowRisk && isLowRisk ? 'Auto-approved (low risk).' : 'Request submitted successfully.', 'success')
         navigate(`/requests/${newId}`)
       }
     } catch (err) {
@@ -618,7 +688,7 @@ export default function Wizard() {
                       placeholder="e.g. 730" />
                   </FormField>
                 </div>
-                <div style={{ display: 'flex', gap: 24 }}>
+                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
                     <input type="checkbox" checked={form.crossBorder} onChange={(e) => update({ crossBorder: e.target.checked })} />
                     Cross-border transfer involved
@@ -632,6 +702,122 @@ export default function Wizard() {
                     DPA signed
                   </label>
                 </div>
+
+                {/* ── Type-specific questionnaire ── */}
+                {requestType === 'vendor_onboarding' && (
+                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Vendor-specific details</div>
+                    <FormField label="Contract reference" id="ts-contractref">
+                      <input id="ts-contractref" className="input" value={form.contractRef}
+                        onChange={(e) => update({ contractRef: e.target.value })} placeholder="e.g. MSA-2026-0012" />
+                    </FormField>
+                    <FormField label="Sub-processors (comma-separated)" id="ts-subproc">
+                      <input id="ts-subproc" className="input" value={form.subprocessors}
+                        onChange={(e) => update({ subprocessors: e.target.value })} placeholder="e.g. AWS EU, Cloudflare" />
+                    </FormField>
+                    <FormField label="Certifications held by vendor" id="ts-certs">
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {['SOC 2 Type II', 'ISO 27001', 'ISO 27018', 'PCI DSS', 'NIA Approved', 'SAMA CSF'].map((cert) => {
+                          const checked = form.certifications.includes(cert)
+                          return (
+                            <label key={cert} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '4px 10px', borderRadius: 'var(--r-md)', border: `1px solid ${checked ? 'var(--brand-700)' : 'var(--line)'}`, background: checked ? 'var(--brand-50)' : 'var(--surface-0)', fontSize: 12, fontFamily: 'var(--font-mono)', transition: 'all var(--t-fast)' }}>
+                              <input type="checkbox" checked={checked} style={{ display: 'none' }}
+                                onChange={() => update({ certifications: checked ? form.certifications.filter((c) => c !== cert) : [...form.certifications, cert] })} />
+                              {cert}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </FormField>
+                  </div>
+                )}
+
+                {requestType === 'cross_border_transfer' && (
+                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Cross-border transfer details</div>
+                    <FormField label="Transfer mechanism" id="ts-mechanism">
+                      <select id="ts-mechanism" className="select" value={form.transferMechanism}
+                        onChange={(e) => update({ transferMechanism: e.target.value })}>
+                        <option value="sccs">Standard Contractual Clauses (SCCs)</option>
+                        <option value="bcr">Binding Corporate Rules (BCRs)</option>
+                        <option value="adequacy">Adequacy decision</option>
+                        <option value="consent">Data subject consent</option>
+                        <option value="other">Other legal basis</option>
+                      </select>
+                    </FormField>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
+                      <input type="checkbox" checked={form.hasSaudiCopy} onChange={(e) => update({ hasSaudiCopy: e.target.checked })} />
+                      Saudi-residency copy retained (PDPL Art. 30)
+                    </label>
+                  </div>
+                )}
+
+                {requestType === 'external_document_sharing' && (
+                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Document sharing details</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <FormField label="Document classification" id="ts-docclass">
+                        <select id="ts-docclass" className="select" value={form.docClassification}
+                          onChange={(e) => update({ docClassification: e.target.value })}>
+                          <option value="public">Public</option>
+                          <option value="internal">Internal</option>
+                          <option value="confidential">Confidential</option>
+                          <option value="restricted">Restricted</option>
+                        </select>
+                      </FormField>
+                      <FormField label="Access expiry date" id="ts-expiry">
+                        <input id="ts-expiry" className="input" type="date" value={form.docExpiry}
+                          onChange={(e) => update({ docExpiry: e.target.value })} />
+                      </FormField>
+                    </div>
+                  </div>
+                )}
+
+                {requestType === 'data_sharing_external' && (
+                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Data sharing details</div>
+                    <FormField label="Legal basis for sharing" id="ts-legalbasis">
+                      <select id="ts-legalbasis" className="select" value={form.legalBasis}
+                        onChange={(e) => update({ legalBasis: e.target.value })}>
+                        <option value="contract">Contractual necessity</option>
+                        <option value="legitimate_interest">Legitimate interest</option>
+                        <option value="legal_obligation">Legal obligation</option>
+                        <option value="vital_interests">Vital interests</option>
+                        <option value="consent">Data subject consent</option>
+                      </select>
+                    </FormField>
+                  </div>
+                )}
+
+                {requestType === 'internal_data_access' && (
+                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Access request details</div>
+                    <FormField label="System / dataset name" id="ts-sysname">
+                      <input id="ts-sysname" className="input" value={form.systemName}
+                        onChange={(e) => update({ systemName: e.target.value })} placeholder="e.g. Customer Analytics DW" />
+                    </FormField>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <FormField label="Access level" id="ts-accesslevel">
+                        <select id="ts-accesslevel" className="select" value={form.accessLevel}
+                          onChange={(e) => update({ accessLevel: e.target.value })}>
+                          <option value="read">Read only</option>
+                          <option value="read_write">Read / Write</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </FormField>
+                      <FormField label="Access duration" id="ts-duration">
+                        <select id="ts-duration" className="select" value={form.accessDuration}
+                          onChange={(e) => update({ accessDuration: e.target.value })}>
+                          <option value="30d">30 days</option>
+                          <option value="90d">90 days</option>
+                          <option value="180d">180 days</option>
+                          <option value="365d">1 year</option>
+                          <option value="indefinite">Indefinite</option>
+                        </select>
+                      </FormField>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           )}
@@ -705,6 +891,24 @@ export default function Wizard() {
                   <dd>{form.hasDPA ? 'Yes' : 'No'}</dd>
                 </dl>
               </div>
+              {/* Processing roles card */}
+              {form.processingRoles.length > 0 && (
+                <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Data processing roles</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {form.processingRoles.map((r, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                        <div style={{ flexShrink: 0, width: 130, fontSize: 11.5, fontWeight: 600, color: 'var(--brand-700)', paddingTop: 1 }}>{r.role}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{r.party}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>{r.description}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{
                 padding: '12px 16px', background: 'var(--amber-50)',
                 border: '1px solid #FDE68A', borderRadius: 'var(--r-md)',
