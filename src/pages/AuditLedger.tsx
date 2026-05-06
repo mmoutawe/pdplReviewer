@@ -49,6 +49,30 @@ export default function AuditLedger() {
 
   const uniqueActions = [...new Set(AUDIT.map((e) => e.action))].sort()
 
+  function exportCSV() {
+    const header = ['Timestamp', 'Actor ID', 'Actor Role', 'Action', 'Target Type', 'Target ID', 'Immutable Hash', 'Prev Hash']
+    const rows = visible.map((ev) => [
+      ev.ts,
+      ev.actorId,
+      ev.actorRole,
+      ev.action,
+      ev.targetType,
+      ev.targetId ?? '',
+      ev.immutableHash,
+      ev.prevHash ?? '',
+    ])
+    const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div className="page-header">
@@ -57,6 +81,13 @@ export default function AuditLedger() {
           <p className="page-subtitle">Append-only immutable record · {AUDIT.length} entries</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-ghost btn-sm" onClick={exportCSV} title="Export visible entries to CSV">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+              <path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M1.5 10.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            Export CSV
+          </button>
           <span style={{ fontSize: 11.5, background: 'var(--emerald-50)', color: 'var(--emerald-700)', border: '1px solid var(--emerald-200)', borderRadius: 'var(--radius-sm)', padding: '3px 10px', fontWeight: 500 }}>
             Hash-chained · Tamper-evident
           </span>
