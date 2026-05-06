@@ -55,10 +55,10 @@ export const VENDORS: Vendor[] = [
 ]
 
 export const PROJECTS: Project[] = [
-  { id: 'p-instalend', code: 'PRJ-2026-0008', name: 'InstaLend — BNPL launch',           businessUnit: 'Consumer Lending', ownerId: 'u-rana',   status: 'active',  dataInventoryCount: 47, ticketIds: [], description: 'Buy-now-pay-later product targeting Saudi residents. KYC + soft credit check + repayments.', startedAt: '2025-11-04' },
-  { id: 'p-velo',      code: 'PRJ-2026-0014', name: 'Velo — open banking aggregator',     businessUnit: 'Open Banking',     ownerId: 'u-faisal', status: 'active',  dataInventoryCount: 38, ticketIds: [], description: 'PSD2-style account aggregation under SAMA Open Banking framework.',                            startedAt: '2026-01-12' },
-  { id: 'p-noor',      code: 'PRJ-2025-0102', name: 'Noor — wealth management',           businessUnit: 'Wealth',           ownerId: 'u-noura',  status: 'on_hold', dataInventoryCount: 21, ticketIds: [], description: 'Robo-advisory product. Currently paused pending CMA licensing review.',                          startedAt: '2025-08-19' },
-  { id: 'p-shams',     code: 'PRJ-2026-0021', name: 'Shams — merchant onboarding',         businessUnit: 'SME',              ownerId: 'u-faisal', status: 'active',  dataInventoryCount: 19, ticketIds: [], description: 'Merchant onboarding portal with self-service KYB.',                                              startedAt: '2026-02-28' },
+  { id: 'p-instalend', code: 'PRJ-2026-0008', name: 'InstaLend — BNPL launch',           businessUnit: 'Consumer Lending', ownerId: 'u-rana',   vendorId: 'v-tasdeer', status: 'active',  dataInventoryCount: 47, ticketIds: [], description: 'Buy-now-pay-later product targeting Saudi residents. KYC + soft credit check + repayments.', startedAt: '2025-11-04' },
+  { id: 'p-velo',      code: 'PRJ-2026-0014', name: 'Velo — open banking aggregator',     businessUnit: 'Open Banking',     ownerId: 'u-faisal', vendorId: 'v-sahab',   status: 'active',  dataInventoryCount: 38, ticketIds: [], description: 'PSD2-style account aggregation under SAMA Open Banking framework.',                            startedAt: '2026-01-12' },
+  { id: 'p-noor',      code: 'PRJ-2025-0102', name: 'Noor — wealth management',           businessUnit: 'Wealth',           ownerId: 'u-noura',  vendorId: 'v-mada',    status: 'on_hold', dataInventoryCount: 21, ticketIds: [], description: 'Robo-advisory product. Currently paused pending CMA licensing review.',                          startedAt: '2025-08-19' },
+  { id: 'p-shams',     code: 'PRJ-2026-0021', name: 'Shams — merchant onboarding',         businessUnit: 'SME',              ownerId: 'u-faisal', vendorId: 'v-falcon',  status: 'active',  dataInventoryCount: 19, ticketIds: [], description: 'Merchant onboarding portal with self-service KYB.',                                              startedAt: '2026-02-28' },
 ]
 
 // ─────────── Attachments ───────────

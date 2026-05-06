@@ -348,6 +348,10 @@ export default function Wizard() {
     if (!validate(currentStep)) return
     const idx = StepIndex(currentStep)
     const nextKey = STEPS[idx + 1]?.key
+    if (currentStep === 'vendor_project' && form.linkedVendorId) {
+      const v = VENDORS.find((x) => x.id === form.linkedVendorId)
+      if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction })
+    }
     if (nextKey === 'confirm') {
       update({ processingRoles: defaultProcessingRoles() })
     }
@@ -614,38 +618,41 @@ export default function Wizard() {
                     <span aria-hidden="true">+</span> New Project
                   </button>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {PROJECTS.map((p) => {
-                      const selected = form.linkedProjectId === p.id
-                      return (
-                        <button key={p.id}
-                          onClick={() => update({ linkedProjectId: selected ? '' : p.id })}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-                            border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
-                            borderRadius: 'var(--r-md)',
-                            background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
-                            transition: 'all var(--t-fast)',
-                          }}>
-                          <div>
-                            <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{p.name}</div>
-                            <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{p.code} · {p.businessUnit}</div>
-                          </div>
-                          <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: p.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: p.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
-                            {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {(() => {
+                    const vendorProjects = PROJECTS.filter((p) => p.vendorId === form.linkedVendorId)
+                    if (vendorProjects.length === 0) {
+                      return <p style={{ fontSize: 13, color: 'var(--ink-400)', padding: '8px 0' }}>No projects linked to this vendor yet.</p>
+                    }
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {vendorProjects.map((p) => {
+                          const selected = form.linkedProjectId === p.id
+                          return (
+                            <button key={p.id}
+                              onClick={() => update({ linkedProjectId: selected ? '' : p.id })}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
+                                border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
+                                borderRadius: 'var(--r-md)',
+                                background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
+                                transition: 'all var(--t-fast)',
+                              }}>
+                              <div>
+                                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{p.name}</div>
+                                <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{p.code} · {p.businessUnit}</div>
+                              </div>
+                              <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: p.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: p.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
+                                {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
-                <button className="btn btn-ghost" onClick={() => { update({ linkedVendorId: '', linkedProjectId: '' }); next() }}>Skip</button>
-                <button className="btn btn-primary" onClick={next}>Continue →</button>
-              </div>
             </section>
           )}
 
@@ -1187,6 +1194,11 @@ export default function Wizard() {
               <button className="btn btn-ghost btn-sm" onClick={() => { saveDraft(form); showToast('Draft saved.', 'info') }}>
                 Save draft
               </button>
+              {currentStep === 'vendor_project' && (
+                <button className="btn btn-ghost" onClick={() => { update({ linkedVendorId: '', linkedProjectId: '' }); next() }}>
+                  Skip
+                </button>
+              )}
               {currentStep === 'confirm' ? (
                 <button className="btn btn-primary btn-lg" onClick={() => void submit()} disabled={submitting}>
                   {submitting ? 'Submitting…' : 'Submit request'}

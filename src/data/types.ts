@@ -336,6 +336,7 @@ export interface Project {
   name: string
   businessUnit: string
   ownerId: string
+  vendorId?: string                           // primary vendor association
   status: 'active' | 'on_hold' | 'closed'
   dataInventoryCount: number
   ticketIds: string[]
