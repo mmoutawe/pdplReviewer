@@ -45,16 +45,23 @@ function DocIcon() {
 function TemplateIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="2" width="12" height="3" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="2" y="7" width="5" height="7" rx="1" stroke="currentColor" strokeWidth="1.4"/><rect x="9" y="7" width="5" height="3.5" rx="1" stroke="currentColor" strokeWidth="1.4"/></svg>
 }
+function ProjectIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5 5V4a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+}
+function ChatIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+}
 
 function getNavItems(role: Role): NavItem[] {
   const base: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard', icon: <DashIcon />, exact: true },
   ]
   const requesterItems: NavItem[] = [
-    { label: 'My Requests', path: '/requests', icon: <TicketIcon /> },
+    { label: 'Vendors', path: '/vendors', icon: <VendorIcon /> },
+    { label: 'Projects', path: '/projects', icon: <ProjectIcon /> },
+    { label: 'Document Library', path: '/documents', icon: <DocIcon /> },
     { label: 'New Request', path: '/requests/new', icon: <NewIcon /> },
-    { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
-    { label: 'Documents', path: '/documents', icon: <DocIcon /> },
+    { label: 'Policy Assistant', path: '/policies', icon: <ChatIcon /> },
   ]
   const reviewerItems: NavItem[] = [
     { label: 'Queue', path: `/queue/${role}`, icon: <QueueIcon /> },
@@ -76,7 +83,7 @@ function getNavItems(role: Role): NavItem[] {
   ]
   const archItem: NavItem = { label: 'Architecture', path: '/architecture', icon: <ArchIcon /> }
 
-  if (role === 'requester') return [...base, ...requesterItems, archItem]
+  if (role === 'requester') return [...base, ...requesterItems]
   if (role === 'data_management' || role === 'legal' || role === 'security') return [...base, ...reviewerItems, archItem]
   if (role === 'admin') return [...base, ...adminItems, archItem]
   return base

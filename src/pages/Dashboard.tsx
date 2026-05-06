@@ -15,8 +15,8 @@ export default function Dashboard() {
 
   useEffect(() => { document.title = 'Dashboard — PDPL Reviewer' }, [])
 
+  // Only this user's notifications
   const myNotifs = notifs.filter((n) => n.userId === user.id && !n.read)
-  const recentAudit = [...AUDIT].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 6)
 
   // Role-specific ticket slices
   const myTickets = tickets.filter((t) => {
@@ -36,6 +36,17 @@ export default function Dashboard() {
   const approved = tickets.filter((t) => t.state === 'approved').length
   const rejected = tickets.filter((t) => t.state === 'rejected').length
 
+  // Requester-scoped KPIs
+  const myApproved = myTickets.filter((t) => t.state === 'approved').length
+  const myRejected = myTickets.filter((t) => t.state === 'rejected').length
+  const myPending  = myTickets.filter((t) => !['approved', 'rejected', 'archived', 'draft'].includes(t.state)).length
+  const myHighRisk = myTickets.filter((t) => {
+    const a = PRE_ASSESSMENTS.find((pa) => pa.ticketId === t.id)
+    return a?.overallRisk === 'high'
+  }).length
+
+  const recentAudit = [...AUDIT].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 6)
+
   function queuePath() {
     if (user.role === 'data_management') return '/queue/data_management'
     if (user.role === 'legal') return '/queue/legal'
@@ -43,9 +54,127 @@ export default function Dashboard() {
     return '/requests'
   }
 
+  // ── Requester dashboard ──────────────────────────────────────────────────────
+  if (user.role === 'requester') {
+    return (
+      <div>
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">
+              Good {hour() < 12 ? 'morning' : hour() < 17 ? 'afternoon' : 'evening'},{' '}
+              {user.fullName.split(' ')[0]}
+            </h1>
+            <p className="page-subtitle">
+              {ROLE_LABELS[user.role]} · {formatDate(new Date().toISOString(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+          <button className="btn btn-primary btn-lg" onClick={() => navigate('/requests/new')}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            + New Request
+          </button>
+        </div>
+
+        <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* KPI row — Pending / Approved / High Risk / Rejected */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <KPI label="Pending"   value={myPending}  sub="Awaiting action" />
+            <KPI label="Approved"  value={myApproved} color="var(--emerald-700)" />
+            <KPI label="High Risk" value={myHighRisk} color={myHighRisk > 0 ? 'var(--red-700)' : undefined} />
+            <KPI label="Rejected"  value={myRejected} color={myRejected > 0 ? 'var(--amber-700)' : undefined} />
+          </div>
+
+          {/* Compliance at a glance */}
+          <section className="card" aria-labelledby="compliance-heading" style={{ padding: '18px 24px' }}>
+            <h2 id="compliance-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 20 }}>
+              Compliance at a glance
+            </h2>
+            <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap', alignItems: 'center' }}>
+              <ComplianceRing
+                rate={myApproved + myRejected > 0 ? Math.round((myApproved / (myApproved + myRejected)) * 100) : 0}
+                label="Approval rate"
+                sublabel={`${myApproved} of ${myApproved + myRejected} decisions`}
+              />
+              <ComplianceRing
+                rate={myPending > 0 ? Math.round(((myPending - slaAtRisk.length) / myPending) * 100) : 100}
+                label="SLA compliance"
+                sublabel={`${Math.max(0, myPending - slaAtRisk.length)} of ${myPending} on track`}
+              />
+              <div style={{ flex: 1, minWidth: 180, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { label: 'Approved',    count: myApproved,           color: 'var(--emerald-700)', bg: 'var(--emerald-50)' },
+                  { label: 'Rejected',    count: myRejected,           color: 'var(--red-700)',     bg: 'var(--red-50)' },
+                  { label: 'In review',   count: myPending,            color: 'var(--amber-700)',   bg: 'var(--amber-50)' },
+                  { label: 'SLA at risk', count: slaAtRisk.length,     color: 'var(--red-700)',     bg: 'var(--red-50)' },
+                ].map(({ label, count, color, bg }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12.5, color: 'var(--ink-600)', flex: 1 }}>{label}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color, background: bg, borderRadius: 4, padding: '1px 8px', fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* My Requests table */}
+          <section className="card" aria-labelledby="my-requests-heading">
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 id="my-requests-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>My Requests</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/requests')}>View all</button>
+            </div>
+            {myTickets.length === 0 ? (
+              <EmptyState title="No tickets found" body="Submit a new request to get started." icon="📋" />
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--surface-1)', borderBottom: '1px solid var(--line)' }}>
+                      {['ID', 'Title', 'Status', 'Risk', 'Date'].map((h) => (
+                        <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--ink-500)', fontSize: 12, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {myTickets.slice(0, 8).map((t, i) => {
+                      const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === t.id)
+                      return (
+                        <tr key={t.id}
+                          style={{ borderBottom: i < Math.min(myTickets.length, 8) - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer', transition: 'background var(--t-fast)' }}
+                          onClick={() => navigate(`/requests/${t.id}`)}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--surface-1)' }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}>
+                          <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--ink-500)', whiteSpace: 'nowrap' }}>{t.id}</td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontWeight: 500, color: 'var(--ink-800)' }}>{t.title}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--ink-400)', marginTop: 2 }}>{REQUEST_TYPE_LABELS[t.type]}</div>
+                          </td>
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            <StatusPill state={t.state} size="sm" />
+                          </td>
+                          <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                            {assessment ? <RiskBadge level={assessment.overallRisk} compact /> : <span style={{ color: 'var(--ink-300)', fontSize: 12 }}>—</span>}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--ink-400)', whiteSpace: 'nowrap' }}>
+                            {t.submittedAt ? formatDate(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Reviewer / Admin dashboard ───────────────────────────────────────────────
   return (
     <div>
-      {/* Page header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">
@@ -56,21 +185,9 @@ export default function Dashboard() {
             {ROLE_LABELS[user.role]} · {formatDate(new Date().toISOString(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {user.role === 'requester' && (
-            <button className="btn btn-primary btn-lg" onClick={() => navigate('/requests/new')}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path d="M7 2v10M2 7h10" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              New request
-            </button>
-          )}
-          {(user.role === 'data_management' || user.role === 'legal' || user.role === 'security') && (
-            <button className="btn btn-primary btn-lg" onClick={() => navigate(queuePath())}>
-              Open queue
-            </button>
-          )}
-        </div>
+        {(user.role === 'data_management' || user.role === 'legal' || user.role === 'security') && (
+          <button className="btn btn-primary btn-lg" onClick={() => navigate(queuePath())}>Open queue</button>
+        )}
       </div>
 
       <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -117,15 +234,11 @@ export default function Dashboard() {
         </section>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1fr)', gap: 16 }}>
-          {/* My open tickets */}
+          {/* Open tickets */}
           <section className="card" aria-labelledby="open-tickets-heading">
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 id="open-tickets-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>
-                {user.role === 'requester' ? 'My requests' : 'In my queue'}
-              </h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate(user.role === 'requester' ? '/requests' : queuePath())}>
-                View all
-              </button>
+              <h2 id="open-tickets-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>In my queue</h2>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate(queuePath())}>View all</button>
             </div>
             {open.length === 0 ? (
               <EmptyState title="All clear" body="No open requests right now." icon="✓" />
@@ -138,7 +251,7 @@ export default function Dashboard() {
             )}
           </section>
 
-          {/* Right column: SLA at risk + Recent activity */}
+          {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* SLA at risk */}
             <section className="card" aria-labelledby="sla-heading">
@@ -195,32 +308,6 @@ export default function Dashboard() {
             </section>
           </div>
         </div>
-
-        {/* Unread notifications strip */}
-        {myNotifs.length > 0 && (
-          <section className="card" aria-labelledby="notif-heading">
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between' }}>
-              <h2 id="notif-heading" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>
-                Unread notifications
-              </h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/notifications')}>View all</button>
-            </div>
-            <ul>
-              {myNotifs.slice(0, 4).map((n) => (
-                <li key={n.id} style={{ padding: '10px 18px', borderBottom: '1px solid var(--line-soft)', fontSize: 13 }}>
-                  <strong style={{ color: 'var(--ink-800)' }}>{n.title}</strong>{' — '}
-                  <span style={{ color: 'var(--ink-500)' }}>{n.body}</span>
-                  {n.link && (
-                    <button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }}
-                      onClick={() => navigate(n.link!)}>
-                      {n.actionLabel ?? 'Open'}
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
       </div>
     </div>
   )
