@@ -25,6 +25,7 @@ export default function ReviewerQueue() {
   const [sortBy, setSortBy] = useState<'sla' | 'date'>('sla')
   const [liveTickets, setLiveTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const queueRole = role as Role
   const states = ROLE_QUEUE_STATE[role ?? ''] ?? []
@@ -36,7 +37,7 @@ export default function ReviewerQueue() {
     setLoading(true)
     fetchTickets({ state: states })
       .then(setLiveTickets)
-      .catch(console.error)
+      .catch((err) => setFetchError(err instanceof Error ? err.message : 'Failed to load queue'))
       .finally(() => setLoading(false))
 
     return subscribeToTickets((updated) => {
@@ -101,7 +102,12 @@ export default function ReviewerQueue() {
         }
       />
 
-      {loading ? (
+      {fetchError ? (
+        <div style={{ margin: '24px', padding: '14px 16px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span>Failed to load queue: {fetchError}</span>
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setFetchError(null); setLoading(true); fetchTickets({ state: states }).then(setLiveTickets).catch((err) => setFetchError(err instanceof Error ? err.message : 'Failed to load queue')).finally(() => setLoading(false)) }}>Retry</button>
+        </div>
+      ) : loading ? (
         <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading queue…</div>
       ) : visible.length === 0 ? (
         <EmptyState title="Queue is empty" body="No tickets are currently assigned to this queue." icon="✓" />

@@ -191,6 +191,10 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
               </div>
               <div style={{ padding: 4 }}>
                 <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
+                  onClick={() => { navigate('/profile'); setUserMenuOpen(false) }}>
+                  My profile
+                </button>
+                <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}
                   onClick={() => { navigate('/notifications'); setUserMenuOpen(false) }}>
                   Notifications
                 </button>

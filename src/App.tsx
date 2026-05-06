@@ -33,6 +33,7 @@ const ChangePassword  = lazy(() => import('./pages/ChangePassword'))
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'))
 const ExternalDashboard = lazy(() => import('./pages/ExternalDashboard'))
 const NotFound        = lazy(() => import('./pages/NotFound'))
+const Profile         = lazy(() => import('./pages/Profile'))
 
 function PageSkeleton() {
   return (
@@ -112,6 +113,7 @@ export default function App() {
           <Route path="/templates" element={<RequireAuth><TemplatesLibrary /></RequireAuth>} />
 
           {/* User account */}
+          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/notifications/preferences" element={<RequireAuth><NotificationPreferences /></RequireAuth>} />
           <Route path="/external-portal" element={<RequireAuth><ExternalDashboard /></RequireAuth>} />
