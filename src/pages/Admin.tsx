@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { USERS, POLICIES } from '../data/seed'
+import { USERS, POLICIES, AUDIT } from '../data/seed'
 import { Avatar, RoleBadge, KPI } from '../components/primitives'
 import { Tabs } from '../components/overlays'
 import { formatDate, formatDateTime } from '../lib/utils'
@@ -36,6 +36,15 @@ const AI_SETTINGS = [
   { key: 'ai_evaluate_reply', label: 'Evaluate Reply', description: 'Scores requester responses to return comments using AI confidence scoring.', enabled: true },
 ]
 
+type AuditPerm = { canView: boolean; canExport: boolean }
+const DEFAULT_AUDIT_PERMS: Record<string, AuditPerm> = {
+  admin:              { canView: true,  canExport: true  },
+  data_management:    { canView: true,  canExport: false },
+  legal:              { canView: false, canExport: false },
+  security:           { canView: false, canExport: false },
+  requester:          { canView: false, canExport: false },
+}
+
 const RETENTION_POLICIES = [
   { category: 'Active tickets', retention: '7 years', basis: 'PDPL Art.18 — retention period matches data subject rights window' },
   { category: 'Archived tickets', retention: '5 years', basis: 'PDPL Art.18 — post-approval archival period' },
@@ -64,6 +73,11 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   // ── Policies tab ──
   const [localPolicies, setLocalPolicies] = useState<Policy[]>([...POLICIES])
   const [showNewPolicy, setShowNewPolicy] = useState(false)
+  const [editingPolicy, setEditingPolicy] = useState<Policy | null>(null)
+
+  // ── Audit Access tab ──
+  const [auditPerms, setAuditPerms] = useState<Record<string, AuditPerm>>({ ...DEFAULT_AUDIT_PERMS })
+  const [editingAuditRole, setEditingAuditRole] = useState<string | null>(null)
 
   // ── All Tickets tab ──
   const [ticketSearch, setTicketSearch] = useState('')
@@ -72,6 +86,21 @@ export default function Admin({ tab: initialTab }: AdminProps) {
     const q = ticketSearch.toLowerCase()
     return t.id.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)
   })
+  function exportFullLedger() {
+    const header = ['Timestamp', 'Actor ID', 'Actor Role', 'Action', 'Target Type', 'Target ID', 'Immutable Hash', 'Prev Hash']
+    const rows = [...AUDIT].sort((a, b) => b.ts.localeCompare(a.ts)).map((ev) => [
+      ev.ts, ev.actorId, ev.actorRole, ev.action, ev.targetType ?? '',
+      ev.targetId ?? '', ev.immutableHash, ev.prevHash ?? '',
+    ])
+    const csv = [header, ...rows].map((r) => r.join(',')).join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `audit-ledger-full-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   async function handleDeleteTicket(id: string, title: string) {
     if (!confirm(`Delete ticket "${title}"? This cannot be undone.`)) return
     try {
@@ -258,6 +287,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                     {pol.embeddingsBuilt ? '⬡ Searchable' : '⬡ Pending indexing'}
                   </span>
                   <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-sm btn-ghost" onClick={() => setEditingPolicy(pol)}>Edit</button>
                     <button className="btn btn-sm btn-ghost"
                       onClick={() => setLocalPolicies((prev) => prev.map((p) => p.id === pol.id ? { ...p, status: (p.status === 'active' ? 'retired' : 'active') as Policy['status'] } : p))}>
                       {pol.status === 'active' ? 'Retire' : 'Restore'}
@@ -351,8 +381,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(['admin', 'data_management', 'legal', 'security', 'requester'] as Role[]).map((role) => {
-                const canView = ['admin', 'data_management'].includes(role)
-                const canExport = role === 'admin'
+                const perm = auditPerms[role] ?? { canView: false, canExport: false }
                 return (
                   <div key={role} className="card" style={{ padding: '12px 16px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
                     <RoleBadge role={role} size="sm" />
@@ -360,23 +389,28 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                       <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{ROLE_LABELS[role]}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 12, fontSize: 12.5 }}>
-                      <span style={{ color: canView ? 'var(--emerald-700)' : 'var(--ink-300)' }}>
-                        {canView ? '✓' : '✕'} View ledger
+                      <span style={{ color: perm.canView ? 'var(--emerald-700)' : 'var(--ink-300)' }}>
+                        {perm.canView ? '✓' : '✕'} View ledger
                       </span>
-                      <span style={{ color: canExport ? 'var(--emerald-700)' : 'var(--ink-300)' }}>
-                        {canExport ? '✓' : '✕'} Export CSV
+                      <span style={{ color: perm.canExport ? 'var(--emerald-700)' : 'var(--ink-300)' }}>
+                        {perm.canExport ? '✓' : '✕'} Export CSV
                       </span>
-                      <span style={{ color: 'var(--emerald-700)' }}>
-                        ✓ Own-ticket audit
-                      </span>
+                      <span style={{ color: 'var(--emerald-700)' }}>✓ Own-ticket audit</span>
                     </div>
-                    <button className="btn btn-sm btn-ghost">Edit</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => setEditingAuditRole(role)}>Edit</button>
                   </div>
                 )
               })}
             </div>
             <div style={{ marginTop: 16 }}>
-              <button className="btn btn-sm btn-ghost">Export full ledger as CSV</button>
+              <button className="btn btn-sm btn-ghost" onClick={exportFullLedger}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                  <path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M1.5 10.5h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+                Export full ledger as CSV
+              </button>
             </div>
           </div>
         )}
@@ -663,6 +697,33 @@ export default function Admin({ tab: initialTab }: AdminProps) {
           }}
         />
       )}
+
+      {/* ── Edit policy dialog ── */}
+      {editingPolicy && (
+        <EditPolicyDialog
+          policy={editingPolicy}
+          onClose={() => setEditingPolicy(null)}
+          onSave={(updated) => {
+            setLocalPolicies((prev) => prev.map((p) => p.id === updated.id ? updated : p))
+            setEditingPolicy(null)
+            showToast('Policy updated.', 'success')
+          }}
+        />
+      )}
+
+      {/* ── Edit audit access dialog ── */}
+      {editingAuditRole && (
+        <EditAuditAccessDialog
+          roleLabel={ROLE_LABELS[editingAuditRole as Role] ?? editingAuditRole}
+          perm={auditPerms[editingAuditRole] ?? { canView: false, canExport: false }}
+          onClose={() => setEditingAuditRole(null)}
+          onSave={(perm) => {
+            setAuditPerms((prev) => ({ ...prev, [editingAuditRole]: perm }))
+            setEditingAuditRole(null)
+            showToast('Audit access updated.', 'success')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -912,6 +973,134 @@ function NewPolicyDialog({ onClose, onCreated }: {
             <button type="submit" className="btn btn-primary">Create policy</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function EditPolicyDialog({ policy, onClose, onSave }: {
+  policy: Policy; onClose: () => void; onSave: (p: Policy) => void
+}) {
+  const [title, setTitle] = useState(policy.title)
+  const [code, setCode] = useState(policy.code)
+  const [version, setVersion] = useState(policy.version)
+  const [category, setCategory] = useState<Policy['category']>(policy.category)
+  const [ownerDept, setOwnerDept] = useState(policy.ownerDept)
+  const [effectiveDate, setEffectiveDate] = useState(policy.effectiveDate.slice(0, 10))
+  const [summary, setSummary] = useState(policy.summary ?? '')
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 520, padding: '28px 32px', zIndex: 1, maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Edit policy</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={dlgLabelSt}>POLICY CODE</label>
+            <input value={code} onChange={(e) => setCode(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div>
+            <label style={dlgLabelSt}>VERSION</label>
+            <input value={version} onChange={(e) => setVersion(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={dlgLabelSt}>TITLE</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div>
+            <label style={dlgLabelSt}>CATEGORY</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value as Policy['category'])} style={dlgInputSt}>
+              <option value="internal">Internal</option>
+              <option value="pdpl">PDPL</option>
+              <option value="sama">SAMA</option>
+              <option value="cma">CMA</option>
+              <option value="iso27001">ISO 27001</option>
+            </select>
+          </div>
+          <div>
+            <label style={dlgLabelSt}>OWNER DEPARTMENT</label>
+            <input value={ownerDept} onChange={(e) => setOwnerDept(e.target.value)} style={dlgInputSt}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={dlgLabelSt}>EFFECTIVE DATE</label>
+            <input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} style={dlgInputSt} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={dlgLabelSt}>SUMMARY</label>
+            <textarea value={summary} onChange={(e) => setSummary(e.target.value)} rows={3}
+              style={{ ...dlgInputSt, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+        </div>
+        {!isSupabaseConfigured && (
+          <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px', marginTop: 12 }}>
+            Demo mode — changes apply this session only.
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => onSave({
+            ...policy, code: code.trim().toUpperCase(), title: title.trim(),
+            category, version: version.trim(), ownerDept: ownerDept.trim(),
+            effectiveDate, summary: summary.trim(), body: summary.trim(),
+          })}>Save changes</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EditAuditAccessDialog({ roleLabel, perm, onClose, onSave }: {
+  roleLabel: string; perm: AuditPerm
+  onClose: () => void; onSave: (p: AuditPerm) => void
+}) {
+  const [canView, setCanView] = useState(perm.canView)
+  const [canExport, setCanExport] = useState(perm.canExport)
+
+  const toggleSt = (on: boolean): React.CSSProperties => ({
+    width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer',
+    background: on ? 'var(--brand-700)' : 'var(--ink-200)',
+    position: 'relative', transition: 'background var(--t-med)', flexShrink: 0,
+  })
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 400, padding: '28px 32px', zIndex: 1 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 4 }}>Edit audit access</h2>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginBottom: 20 }}>{roleLabel}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[
+            { label: 'View full audit ledger', desc: 'Can browse all events in /audit', value: canView, set: setCanView },
+            { label: 'Export ledger as CSV', desc: 'Can download audit records to CSV', value: canExport, set: setCanExport },
+          ].map(({ label, desc, value, set }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)' }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-900)' }}>{label}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>{desc}</div>
+              </div>
+              <button role="switch" aria-checked={value} onClick={() => set(!value)} style={toggleSt(value)}>
+                <span style={{ position: 'absolute', top: 2, left: value ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left var(--t-med)', boxShadow: 'var(--shadow-sm)' }} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', fontSize: 11.5, color: 'var(--amber-700)' }}>
+          Demo mode — changes apply this session only. In production these would persist to your access-control store.
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => onSave({ canView, canExport })}>Save</button>
+        </div>
       </div>
     </div>
   )
