@@ -99,6 +99,9 @@ export default function Wizard() {
   const [xlsxFile, setXlsxFile] = useState<File | null>(null)
   const [xlsxParsing, setXlsxParsing] = useState(false)
   const [vendorSearch, setVendorSearch] = useState('')
+  const [extraVendors, setExtraVendors] = useState<typeof VENDORS>([])
+  const [showNewVendorModal, setShowNewVendorModal] = useState(false)
+  const [newVendorForm, setNewVendorForm] = useState({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -228,6 +231,26 @@ export default function Wizard() {
 
   function update(partial: Partial<WizardState>) {
     setForm((f) => ({ ...f, ...partial }))
+  }
+
+  function handleCreateVendor() {
+    if (!newVendorForm.name.trim()) return
+    const id = `v-new-${Date.now()}`
+    const vendor: typeof VENDORS[number] = {
+      id, tradeName: newVendorForm.name.trim(),
+      legalName: newVendorForm.legalName.trim() || newVendorForm.name.trim(),
+      jurisdiction: newVendorForm.jurisdiction.trim() || 'KSA',
+      category: newVendorForm.category,
+      primaryContact: newVendorForm.contactEmail.trim(),
+      riskScore: 50, riskTier: 'medium', status: 'pending',
+      certifications: [], hasDPA: false,
+      lastReviewedAt: new Date().toISOString().slice(0, 10),
+      ticketIds: [], notes: '',
+    }
+    setExtraVendors((prev) => [...prev, vendor])
+    update({ linkedVendorId: id, linkedProjectId: '' })
+    setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
+    setShowNewVendorModal(false)
   }
 
   function downloadTemplate() {
@@ -568,14 +591,14 @@ export default function Wizard() {
                       style={{ width: '100%', padding: '7px 10px 7px 28px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
                     />
                   </div>
-                  <button className="btn btn-ghost btn-sm" style={{ whiteSpace: 'nowrap', gap: 4 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ whiteSpace: 'nowrap', gap: 4 }} onClick={() => setShowNewVendorModal(true)}>
                     <span aria-hidden="true">+</span> New Vendor
                   </button>
                 </div>
 
                 {/* Vendor list */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {VENDORS.filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
+                  {[...VENDORS, ...extraVendors].filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
                     const selected = form.linkedVendorId === v.id
                     return (
                       <button key={v.id}
@@ -651,6 +674,78 @@ export default function Wizard() {
                       </div>
                     )
                   })()}
+                </div>
+              )}
+
+              {/* ── New Vendor Modal ── */}
+              {showNewVendorModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={(e) => { if (e.target === e.currentTarget) setShowNewVendorModal(false) }}>
+                  <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+                      <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>New Vendor</h3>
+                      <button onClick={() => setShowNewVendorModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 20, lineHeight: 1, padding: 2 }}>×</button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
+                      {/* Name */}
+                      <div style={{ gridColumn: '1' }}>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>
+                          Name <span style={{ color: 'var(--red-600)' }}>*</span>
+                        </label>
+                        <input value={newVendorForm.name} onChange={(e) => setNewVendorForm((f) => ({ ...f, name: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: `1px solid ${!newVendorForm.name.trim() && showNewVendorModal ? 'var(--brand-700)' : 'var(--line)'}`, borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
+                          autoFocus />
+                      </div>
+
+                      {/* Legal Name */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Legal Name</label>
+                        <input value={newVendorForm.legalName} onChange={(e) => setNewVendorForm((f) => ({ ...f, legalName: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+
+                      {/* Type */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Type</label>
+                        <select value={newVendorForm.category} onChange={(e) => setNewVendorForm((f) => ({ ...f, category: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}>
+                          {['Technology', 'IaaS / hosting', 'Payments processing', 'Marketing analytics', 'KYC / identity verification', 'Survey & research', 'Customer relationship mgmt.', 'Legal & compliance', 'Other'].map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Country */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Country</label>
+                        <input value={newVendorForm.jurisdiction} onChange={(e) => setNewVendorForm((f) => ({ ...f, jurisdiction: e.target.value }))}
+                          placeholder="e.g. KSA, UAE, US"
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+
+                      {/* Contact Name */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Contact Name</label>
+                        <input value={newVendorForm.contactName} onChange={(e) => setNewVendorForm((f) => ({ ...f, contactName: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+
+                      {/* Contact Email */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Contact Email</label>
+                        <input type="email" value={newVendorForm.contactEmail} onChange={(e) => setNewVendorForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+                      <button className="btn btn-ghost" onClick={() => setShowNewVendorModal(false)}>Cancel</button>
+                      <button className="btn btn-primary" onClick={handleCreateVendor} disabled={!newVendorForm.name.trim()}>
+                        Create Vendor
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
