@@ -102,6 +102,9 @@ export default function Wizard() {
   const [extraVendors, setExtraVendors] = useState<typeof VENDORS>([])
   const [showNewVendorModal, setShowNewVendorModal] = useState(false)
   const [newVendorForm, setNewVendorForm] = useState({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
+  const [extraProjects, setExtraProjects] = useState<typeof PROJECTS>([])
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false)
+  const [newProjectForm, setNewProjectForm] = useState({ name: '', businessUnit: '', serviceType: '', description: '' })
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -231,6 +234,27 @@ export default function Wizard() {
 
   function update(partial: Partial<WizardState>) {
     setForm((f) => ({ ...f, ...partial }))
+  }
+
+  function handleCreateProject() {
+    if (!newProjectForm.name.trim()) return
+    const id = `p-new-${Date.now()}`
+    const code = `PRJ-${new Date().getFullYear()}-${String(extraProjects.length + 100).padStart(4, '0')}`
+    const project: typeof PROJECTS[number] = {
+      id, code, name: newProjectForm.name.trim(),
+      businessUnit: newProjectForm.businessUnit.trim() || newProjectForm.serviceType.trim() || '—',
+      ownerId: user.id,
+      vendorId: form.linkedVendorId || undefined,
+      status: 'active',
+      dataInventoryCount: 0,
+      ticketIds: [],
+      description: newProjectForm.description.trim(),
+      startedAt: new Date().toISOString().slice(0, 10),
+    }
+    setExtraProjects((prev) => [...prev, project])
+    update({ linkedProjectId: id })
+    setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
+    setShowNewProjectModal(false)
   }
 
   function handleCreateVendor() {
@@ -637,12 +661,12 @@ export default function Wizard() {
                     </span>
                   </div>
 
-                  <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10, gap: 4 }}>
+                  <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10, gap: 4 }} onClick={() => setShowNewProjectModal(true)}>
                     <span aria-hidden="true">+</span> New Project
                   </button>
 
                   {(() => {
-                    const vendorProjects = PROJECTS.filter((p) => p.vendorId === form.linkedVendorId)
+                    const vendorProjects = [...PROJECTS, ...extraProjects].filter((p) => p.vendorId === form.linkedVendorId)
                     if (vendorProjects.length === 0) {
                       return <p style={{ fontSize: 13, color: 'var(--ink-400)', padding: '8px 0' }}>No projects linked to this vendor yet.</p>
                     }
@@ -674,6 +698,61 @@ export default function Wizard() {
                       </div>
                     )
                   })()}
+                </div>
+              )}
+
+              {/* ── New Project Modal ── */}
+              {showNewProjectModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onClick={(e) => { if (e.target === e.currentTarget) setShowNewProjectModal(false) }}>
+                  <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+                      <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>
+                        New Project under {VENDORS.find((v) => v.id === form.linkedVendorId)?.tradeName ?? [...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}
+                      </h3>
+                      <button onClick={() => setShowNewProjectModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 20, lineHeight: 1, padding: 2 }}>×</button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {/* Project Name */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>
+                          Project Name <span style={{ color: 'var(--red-600)' }}>*</span>
+                        </label>
+                        <input value={newProjectForm.name} onChange={(e) => setNewProjectForm((f) => ({ ...f, name: e.target.value }))}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
+                          autoFocus />
+                      </div>
+
+                      {/* Business Unit + Service Type */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Business Unit</label>
+                          <input value={newProjectForm.businessUnit} onChange={(e) => setNewProjectForm((f) => ({ ...f, businessUnit: e.target.value }))}
+                            style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Service Type</label>
+                          <input value={newProjectForm.serviceType} onChange={(e) => setNewProjectForm((f) => ({ ...f, serviceType: e.target.value }))}
+                            style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }} />
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 5 }}>Description</label>
+                        <textarea value={newProjectForm.description} onChange={(e) => setNewProjectForm((f) => ({ ...f, description: e.target.value }))} rows={3}
+                          style={{ width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+                      <button className="btn btn-ghost" onClick={() => setShowNewProjectModal(false)}>Cancel</button>
+                      <button className="btn btn-primary" onClick={handleCreateProject} disabled={!newProjectForm.name.trim()}>
+                        Create Project
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
