@@ -64,6 +64,46 @@ interface WizardState {
   accessLevel: string
   accessDuration: string
   processingRoles: Array<{ role: string; party: string; description: string }>
+  // ── Questionnaire fields ──
+  qPersonalDataShared: boolean
+  qDataTypes: string[]
+  qDataElements: string[]
+  qDataElementsOther: string
+  qSensitiveDataInvolved: boolean
+  qPurpose: string
+  qWhyRequired: string
+  qCanDeliverWithout: boolean
+  qCanAnonymize: 'yes' | 'no' | 'partially'
+  qCanAnonymizeDetails: string
+  qDeterminesPurpose: 'company' | 'vendor' | 'both'
+  qDeterminesHow: 'company' | 'vendor' | 'both'
+  qUsesSubProcessors: boolean
+  qStorageLocation: 'inside_ksa' | 'outside_ksa'
+  qStorageCountry: string
+  qCloudUsed: boolean
+  qCloudProvider: string
+  qWhoCanAccess: string
+  qRbacEnabled: boolean
+  qAccessLogging: boolean
+  qEncryptionAtRest: 'yes' | 'no' | 'partially'
+  qEncryptionAtRestDetails: string
+  qEncryptionInTransit: 'yes' | 'no' | 'partially'
+  qEncryptionInTransitDetails: string
+  qAccessControls: 'yes' | 'no' | 'partially'
+  qAccessControlsDetails: string
+  qDataMasking: 'yes' | 'no' | 'partially'
+  qDataMaskingDetails: string
+  qPdplCompliant: boolean
+  qDataProtectionPolicies: boolean
+  qIso27001: boolean
+  qBreachResponseProcess: boolean
+  qNdaSigned: boolean
+  qDpaExists: boolean
+  qDataProtectionClauses: boolean
+  qRetentionPeriod: string
+  qDeletedAfterEngagement: boolean
+  qDeletionMethod: string
+  qDocClassification: string
 }
 
 const empty: WizardState = {
@@ -81,6 +121,21 @@ const empty: WizardState = {
   legalBasis: 'legitimate_interest',
   systemName: '', accessLevel: 'read', accessDuration: '30d',
   processingRoles: [],
+  qPersonalDataShared: false, qDataTypes: [], qDataElements: [], qDataElementsOther: '',
+  qSensitiveDataInvolved: false, qPurpose: '', qWhyRequired: '',
+  qCanDeliverWithout: false, qCanAnonymize: 'no', qCanAnonymizeDetails: '',
+  qDeterminesPurpose: 'company', qDeterminesHow: 'company',
+  qUsesSubProcessors: false, qStorageLocation: 'inside_ksa', qStorageCountry: '',
+  qCloudUsed: false, qCloudProvider: '', qWhoCanAccess: '',
+  qRbacEnabled: false, qAccessLogging: false,
+  qEncryptionAtRest: 'no', qEncryptionAtRestDetails: '',
+  qEncryptionInTransit: 'no', qEncryptionInTransitDetails: '',
+  qAccessControls: 'no', qAccessControlsDetails: '',
+  qDataMasking: 'no', qDataMaskingDetails: '',
+  qPdplCompliant: false, qDataProtectionPolicies: false, qIso27001: false, qBreachResponseProcess: false,
+  qNdaSigned: false, qDpaExists: false, qDataProtectionClauses: false,
+  qRetentionPeriod: '', qDeletedAfterEngagement: false, qDeletionMethod: '',
+  qDocClassification: 'internal',
 }
 
 export default function Wizard() {
@@ -116,6 +171,10 @@ export default function Wizard() {
   const [extraProjects, setExtraProjects] = useState<typeof PROJECTS>([])
   const [showNewProjectModal, setShowNewProjectModal] = useState(false)
   const [newProjectForm, setNewProjectForm] = useState({ name: '', businessUnit: '', serviceType: '', description: '' })
+  const [qOpenSections, setQOpenSections] = useState<Record<string, boolean>>({
+    dataUsage: true, purposeNecessity: true, processingRoles: true, storageHosting: true,
+    dataAccess: true, securityControls: true, complianceGovernance: true, contractualSafeguards: true, dataLifecycle: true,
+  })
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -165,6 +224,32 @@ export default function Wizard() {
         crossBorder:       form.crossBorder,
         consentObtained:   form.consentObtained,
         hasDPA:            form.hasDPA,
+        // Questionnaire step data
+        personalDataShared:       form.qPersonalDataShared,
+        dataTypes:                form.qDataTypes,
+        dataElements:             form.qDataElements,
+        sensitiveDataInvolved:    form.qSensitiveDataInvolved,
+        purpose:                  form.qPurpose,
+        whyRequired:              form.qWhyRequired,
+        canAnonymize:             form.qCanAnonymize,
+        determinesPurpose:        form.qDeterminesPurpose,
+        determinesHow:            form.qDeterminesHow,
+        usesSubProcessors:        form.qUsesSubProcessors,
+        storageLocation:          form.qStorageLocation,
+        cloudUsed:                form.qCloudUsed,
+        cloudProvider:            form.qCloudProvider,
+        rbacEnabled:              form.qRbacEnabled,
+        accessLogging:            form.qAccessLogging,
+        encryptionAtRest:         form.qEncryptionAtRest,
+        encryptionInTransit:      form.qEncryptionInTransit,
+        accessControls:           form.qAccessControls,
+        dataMasking:              form.qDataMasking,
+        pdplCompliant:            form.qPdplCompliant,
+        iso27001:                 form.qIso27001,
+        ndaSigned:                form.qNdaSigned,
+        dpaExists:                form.qDpaExists,
+        retentionPeriod:          form.qRetentionPeriod,
+        deletedAfterEngagement:   form.qDeletedAfterEngagement,
       }
       const data = await runPresubmitAssessment(requestType as PresubmitRequestType, initiation, questionnaire)
       setAssessmentData(data)
@@ -266,6 +351,10 @@ export default function Wizard() {
     update({ linkedProjectId: id })
     setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
     setShowNewProjectModal(false)
+  }
+
+  function toggleQSection(key: string) {
+    setQOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
   function handleCreateVendor() {
@@ -395,10 +484,6 @@ export default function Wizard() {
       if (!form.description.trim()) e.description = 'Service description is required.'
       if (!form.businessUnit.trim()) e.businessUnit = 'Business unit is required.'
       if (!form.purposeOfSharing.trim()) e.purposeOfSharing = 'Purpose of sharing is required.'
-    }
-    if (step === 'declaration') {
-      if (!form.estimatedSubjects || isNaN(Number(form.estimatedSubjects))) e.estimatedSubjects = 'Enter a valid number.'
-      if (!form.retentionDays || isNaN(Number(form.retentionDays))) e.retentionDays = 'Enter a valid number.'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -1171,182 +1256,645 @@ export default function Wizard() {
             </section>
           )}
 
-          {/* ── Step: Data declaration ── */}
+          {/* ── Step: Questionnaire / Data Declaration ── */}
           {currentStep === 'declaration' && (
             <section aria-labelledby="step-decl">
-              <h2 id="step-decl" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Data declaration</h2>
+              <h2 id="step-decl" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+                {requestType === 'vendor_onboarding' ? 'Vendor Data & Compliance Questionnaire' : `${REQUEST_TYPE_LABELS[requestType]} — Questionnaire`}
+              </h2>
               <p style={{ color: 'var(--ink-500)', marginBottom: 22, fontSize: 13.5 }}>
-                Describe the personal data involved. This information drives the AI PDPL assessment.
+                {requestType === 'vendor_onboarding'
+                  ? 'Complete all sections to enable AI compliance assessment.'
+                  : 'Answer the focused questions below. The AI will use them to assess this request.'}
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <FormField label="Data categories (select all that apply)" id="req-cats">
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {['name', 'national_id', 'email', 'phone', 'iban', 'transaction_history', 'device_id', 'location', 'biometric', 'health'].map((cat) => {
-                      const checked = form.dataCategories.includes(cat)
-                      return (
-                        <label key={cat} style={{
-                          display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                          padding: '5px 10px', borderRadius: 'var(--r-md)',
-                          border: `1px solid ${checked ? 'var(--brand-700)' : 'var(--line)'}`,
-                          background: checked ? 'var(--brand-50)' : 'var(--surface-0)',
-                          fontSize: 12.5, fontFamily: 'var(--font-mono)',
-                          transition: 'all var(--t-fast)',
-                        }}>
-                          <input type="checkbox" checked={checked} style={{ display: 'none' }}
-                            onChange={() => update({
-                              dataCategories: checked
-                                ? form.dataCategories.filter((c) => c !== cat)
-                                : [...form.dataCategories, cat],
-                            })} />
-                          {cat.replace(/_/g, ' ')}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </FormField>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <FormField label="Estimated data subjects" required error={errors.estimatedSubjects} id="req-subj">
-                    <input id="req-subj" className="input" type="number" min="0"
-                      value={form.estimatedSubjects} onChange={(e) => update({ estimatedSubjects: e.target.value })}
-                      placeholder="e.g. 50000" />
-                  </FormField>
-                  <FormField label="Retention period (days)" required error={errors.retentionDays} id="req-ret">
-                    <input id="req-ret" className="input" type="number" min="1"
-                      value={form.retentionDays} onChange={(e) => update({ retentionDays: e.target.value })}
-                      placeholder="e.g. 730" />
-                  </FormField>
-                </div>
-                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
-                    <input type="checkbox" checked={form.crossBorder} onChange={(e) => update({ crossBorder: e.target.checked })} />
-                    Cross-border transfer involved
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
-                    <input type="checkbox" checked={form.consentObtained} onChange={(e) => update({ consentObtained: e.target.checked })} />
-                    Data subject consent obtained
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
-                    <input type="checkbox" checked={form.hasDPA} onChange={(e) => update({ hasDPA: e.target.checked })} />
-                    DPA signed
-                  </label>
-                </div>
 
-                {/* ── Type-specific questionnaire ── */}
-                {requestType === 'vendor_onboarding' && (
-                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Vendor-specific details</div>
-                    <FormField label="Contract reference" id="ts-contractref">
-                      <input id="ts-contractref" className="input" value={form.contractRef}
-                        onChange={(e) => update({ contractRef: e.target.value })} placeholder="e.g. MSA-2026-0012" />
-                    </FormField>
-                    <FormField label="Sub-processors (comma-separated)" id="ts-subproc">
-                      <input id="ts-subproc" className="input" value={form.subprocessors}
-                        onChange={(e) => update({ subprocessors: e.target.value })} placeholder="e.g. AWS EU, Cloudflare" />
-                    </FormField>
-                    <FormField label="Certifications held by vendor" id="ts-certs">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {['SOC 2 Type II', 'ISO 27001', 'ISO 27018', 'PCI DSS', 'NIA Approved', 'SAMA CSF'].map((cert) => {
-                          const checked = form.certifications.includes(cert)
-                          return (
-                            <label key={cert} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '4px 10px', borderRadius: 'var(--r-md)', border: `1px solid ${checked ? 'var(--brand-700)' : 'var(--line)'}`, background: checked ? 'var(--brand-50)' : 'var(--surface-0)', fontSize: 12, fontFamily: 'var(--font-mono)', transition: 'all var(--t-fast)' }}>
-                              <input type="checkbox" checked={checked} style={{ display: 'none' }}
-                                onChange={() => update({ certifications: checked ? form.certifications.filter((c) => c !== cert) : [...form.certifications, cert] })} />
-                              {cert}
-                            </label>
-                          )
-                        })}
+              {/* ── vendor_onboarding: 9-section questionnaire ── */}
+              {requestType === 'vendor_onboarding' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                  {/* S1 — Data Usage */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('dataUsage')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 1 — Data Usage</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.dataUsage ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.dataUsage && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Will personal data be shared?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {([true, false] as const).map((val) => (
+                              <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-pds" checked={form.qPersonalDataShared === val} onChange={() => update({ qPersonalDataShared: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {val ? 'Yes' : 'No'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        {form.qPersonalDataShared && (
+                          <>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Data Types</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                {['Customer data', 'Employee data', 'Vendor data'].map((t) => {
+                                  const c = form.qDataTypes.includes(t)
+                                  return (
+                                    <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '5px 10px', borderRadius: 'var(--r-md)', border: `1px solid ${c ? 'var(--brand-700)' : 'var(--line)'}`, background: c ? 'var(--brand-50)' : 'var(--surface-0)', fontSize: 12.5, transition: 'all var(--t-fast)' }}>
+                                      <input type="checkbox" checked={c} style={{ display: 'none' }} onChange={() => update({ qDataTypes: c ? form.qDataTypes.filter((x) => x !== t) : [...form.qDataTypes, t] })} />
+                                      {t}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Data Elements</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                {['Names', 'National IDs', 'Contact details', 'Financial data', 'Location data', 'Other'].map((el) => {
+                                  const c = form.qDataElements.includes(el)
+                                  return (
+                                    <label key={el} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '5px 10px', borderRadius: 'var(--r-md)', border: `1px solid ${c ? 'var(--brand-700)' : 'var(--line)'}`, background: c ? 'var(--brand-50)' : 'var(--surface-0)', fontSize: 12.5, transition: 'all var(--t-fast)' }}>
+                                      <input type="checkbox" checked={c} style={{ display: 'none' }} onChange={() => update({ qDataElements: c ? form.qDataElements.filter((x) => x !== el) : [...form.qDataElements, el] })} />
+                                      {el}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                              {form.qDataElements.includes('Other') && (
+                                <textarea value={form.qDataElementsOther} onChange={(e) => update({ qDataElementsOther: e.target.value })} placeholder="Describe the other data elements that may be exposed" className="textarea" rows={2} style={{ marginTop: 8, width: '100%', boxSizing: 'border-box' }} />
+                              )}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is sensitive personal data involved?</div>
+                              <div style={{ display: 'flex', gap: 16 }}>
+                                {([true, false] as const).map((val) => (
+                                  <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                    <input type="radio" name="q-sdi" checked={form.qSensitiveDataInvolved === val} onChange={() => update({ qSensitiveDataInvolved: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                    {val ? 'Yes' : 'No'}
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    </FormField>
+                    )}
                   </div>
-                )}
 
-                {requestType === 'cross_border_transfer' && (
-                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Cross-border transfer details</div>
-                    <FormField label="Transfer mechanism" id="ts-mechanism">
-                      <select id="ts-mechanism" className="select" value={form.transferMechanism}
-                        onChange={(e) => update({ transferMechanism: e.target.value })}>
-                        <option value="sccs">Standard Contractual Clauses (SCCs)</option>
-                        <option value="bcr">Binding Corporate Rules (BCRs)</option>
-                        <option value="adequacy">Adequacy decision</option>
-                        <option value="consent">Data subject consent</option>
-                        <option value="other">Other legal basis</option>
-                      </select>
-                    </FormField>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13.5 }}>
-                      <input type="checkbox" checked={form.hasSaudiCopy} onChange={(e) => update({ hasSaudiCopy: e.target.checked })} />
-                      Saudi-residency copy retained (PDPL Art. 30)
-                    </label>
+                  {/* S2 — Purpose & Necessity */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('purposeNecessity')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 2 — Purpose &amp; Necessity</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.purposeNecessity ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.purposeNecessity && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Purpose of data sharing</label>
+                          <textarea value={form.qPurpose} onChange={(e) => update({ qPurpose: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Why is the data required?</label>
+                          <textarea value={form.qWhyRequired} onChange={(e) => update({ qWhyRequired: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Can service be delivered without personal data?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {([true, false] as const).map((val) => (
+                              <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-cdw" checked={form.qCanDeliverWithout === val} onChange={() => update({ qCanDeliverWithout: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {val ? 'Yes' : 'No'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Can data be anonymized or minimized?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {(['yes', 'no', 'partially'] as const).map((v) => (
+                              <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-can" checked={form.qCanAnonymize === v} onChange={() => update({ qCanAnonymize: v })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {v.charAt(0).toUpperCase() + v.slice(1)}
+                              </label>
+                            ))}
+                          </div>
+                          {form.qCanAnonymize === 'partially' && (
+                            <textarea value={form.qCanAnonymizeDetails} onChange={(e) => update({ qCanAnonymizeDetails: e.target.value })} placeholder="Please provide details..." className="textarea" rows={2} style={{ marginTop: 8, width: '100%', boxSizing: 'border-box' }} />
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {requestType === 'external_document_sharing' && (
-                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Document sharing details</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                      <FormField label="Document classification" id="ts-docclass">
-                        <select id="ts-docclass" className="select" value={form.docClassification}
-                          onChange={(e) => update({ docClassification: e.target.value })}>
+                  {/* S3 — Data Processing Roles */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('processingRoles')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 3 — Data Processing Roles</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.processingRoles ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.processingRoles && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Who determines purpose of processing?</label>
+                            <select className="select" value={form.qDeterminesPurpose} onChange={(e) => update({ qDeterminesPurpose: e.target.value as 'company' | 'vendor' | 'both' })}>
+                              <option value="company">Company</option>
+                              <option value="vendor">Vendor</option>
+                              <option value="both">Both</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Who determines how data is processed?</label>
+                            <select className="select" value={form.qDeterminesHow} onChange={(e) => update({ qDeterminesHow: e.target.value as 'company' | 'vendor' | 'both' })}>
+                              <option value="company">Company</option>
+                              <option value="vendor">Vendor</option>
+                              <option value="both">Both</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Will vendor use sub-processors?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {([true, false] as const).map((val) => (
+                              <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-usp" checked={form.qUsesSubProcessors === val} onChange={() => update({ qUsesSubProcessors: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {val ? 'Yes' : 'No'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S4 — Storage & Hosting */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('storageHosting')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 4 — Data Storage &amp; Hosting</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.storageHosting ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.storageHosting && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Data storage location</label>
+                          <select className="select" value={form.qStorageLocation} onChange={(e) => update({ qStorageLocation: e.target.value as 'inside_ksa' | 'outside_ksa' })}>
+                            <option value="inside_ksa">Inside KSA</option>
+                            <option value="outside_ksa">Outside KSA</option>
+                          </select>
+                        </div>
+                        {form.qStorageLocation === 'outside_ksa' && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Country</label>
+                            <select className="select" value={form.qStorageCountry} onChange={(e) => update({ qStorageCountry: e.target.value })}>
+                              <option value="">Select country</option>
+                              {['UAE', 'Bahrain', 'Kuwait', 'Oman', 'Qatar', 'Jordan', 'Egypt', 'United States', 'United Kingdom', 'Germany', 'France', 'India', 'Singapore', 'Other'].map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is cloud used?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {([true, false] as const).map((val) => (
+                              <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-cu" checked={form.qCloudUsed === val} onChange={() => update({ qCloudUsed: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {val ? 'Yes' : 'No'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        {form.qCloudUsed && (
+                          <div>
+                            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Cloud Provider</label>
+                            <input className="input" value={form.qCloudProvider} onChange={(e) => update({ qCloudProvider: e.target.value })} placeholder="e.g., AWS, Azure, GCP" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S5 — Data Access */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('dataAccess')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 5 — Data Access</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.dataAccess ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.dataAccess && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Who can access the data?</label>
+                          <input className="input" value={form.qWhoCanAccess} onChange={(e) => update({ qWhoCanAccess: e.target.value })} placeholder="e.g., Project team, IT administrators" />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Role-based access control?</div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {([true, false] as const).map((val) => (
+                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                  <input type="radio" name="q-rbac" checked={form.qRbacEnabled === val} onChange={() => update({ qRbacEnabled: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                  {val ? 'Yes' : 'No'}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Access logging enabled?</div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {([true, false] as const).map((val) => (
+                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                  <input type="radio" name="q-al" checked={form.qAccessLogging === val} onChange={() => update({ qAccessLogging: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                  {val ? 'Yes' : 'No'}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S6 — Security Controls */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('securityControls')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 6 — Security Controls</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.securityControls ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.securityControls && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        {([
+                          { label: 'Encryption at rest?', radioName: 'q-ear', field: 'qEncryptionAtRest' as const, detailField: 'qEncryptionAtRestDetails' as const },
+                          { label: 'Encryption in transit?', radioName: 'q-eit', field: 'qEncryptionInTransit' as const, detailField: 'qEncryptionInTransitDetails' as const },
+                          { label: 'Access controls implemented?', radioName: 'q-ac', field: 'qAccessControls' as const, detailField: 'qAccessControlsDetails' as const },
+                          { label: 'Data masking/anonymization used?', radioName: 'q-dm', field: 'qDataMasking' as const, detailField: 'qDataMaskingDetails' as const },
+                        ]).map(({ label, radioName, field, detailField }) => (
+                          <div key={field}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {(['yes', 'no', 'partially'] as const).map((v) => (
+                                <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                  <input type="radio" name={radioName} checked={form[field] === v} onChange={() => update({ [field]: v })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                                </label>
+                              ))}
+                            </div>
+                            {form[field] === 'partially' && (
+                              <textarea value={form[detailField] as string} onChange={(e) => update({ [detailField]: e.target.value })} placeholder="Please provide details..." className="textarea" rows={2} style={{ marginTop: 8, width: '100%', boxSizing: 'border-box' }} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S7 — Compliance & Governance */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('complianceGovernance')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 7 — Compliance &amp; Governance</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.complianceGovernance ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.complianceGovernance && (
+                      <div style={{ padding: '16px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, borderTop: '1px solid var(--line)' }}>
+                        {([
+                          { field: 'qPdplCompliant' as const, name: 'q-pc', label: 'Vendor complies with PDPL?' },
+                          { field: 'qDataProtectionPolicies' as const, name: 'q-dpp', label: 'Data protection policies exist?' },
+                          { field: 'qIso27001' as const, name: 'q-iso', label: 'ISO 27001 or equivalent?' },
+                          { field: 'qBreachResponseProcess' as const, name: 'q-brp', label: 'Breach response process exists?' },
+                        ]).map(({ field, name, label }) => (
+                          <div key={field}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {([true, false] as const).map((val) => (
+                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                  <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                  {val ? 'Yes' : 'No'}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S8 — Contractual Safeguards */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('contractualSafeguards')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 8 — Contractual Safeguards</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.contractualSafeguards ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.contractualSafeguards && (
+                      <div style={{ padding: '16px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, borderTop: '1px solid var(--line)' }}>
+                        {([
+                          { field: 'qNdaSigned' as const, name: 'q-nda', label: 'NDA signed?' },
+                          { field: 'qDpaExists' as const, name: 'q-dpa', label: 'Data Processing Agreement (DPA)?' },
+                          { field: 'qDataProtectionClauses' as const, name: 'q-dpc', label: 'Contract includes data protection clauses?' },
+                        ]).map(({ field, name, label }) => (
+                          <div key={field}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              {([true, false] as const).map((val) => (
+                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                  <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                  {val ? 'Yes' : 'No'}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* S9 — Data Lifecycle */}
+                  <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden' }}>
+                    <button type="button" onClick={() => toggleQSection('dataLifecycle')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px 16px', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Section 9 — Data Lifecycle</span>
+                      <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.dataLifecycle ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
+                    </button>
+                    {qOpenSections.dataLifecycle && (
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--line)' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Data retention period</label>
+                          <input className="input" value={form.qRetentionPeriod} onChange={(e) => update({ qRetentionPeriod: e.target.value })} placeholder="e.g., 12 months, 3 years" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Data deleted after engagement?</div>
+                          <div style={{ display: 'flex', gap: 16 }}>
+                            {([true, false] as const).map((val) => (
+                              <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                <input type="radio" name="q-dae" checked={form.qDeletedAfterEngagement === val} onChange={() => update({ qDeletedAfterEngagement: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                {val ? 'Yes' : 'No'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Deletion method</label>
+                          <input className="input" value={form.qDeletionMethod} onChange={(e) => update({ qDeletionMethod: e.target.value })} placeholder="e.g., Secure wipe, cryptographic erasure" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              )}
+
+              {/* ── other types: typed questionnaire ── */}
+              {requestType !== 'vendor_onboarding' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                  {/* external_document_sharing */}
+                  {requestType === 'external_document_sharing' && (
+                    <>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Does the document contain personal data?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-pds" checked={form.qPersonalDataShared === val} onChange={() => update({ qPersonalDataShared: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Does it contain sensitive personal data (financial, health, biometric, etc.)?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-sdi" checked={form.qSensitiveDataInvolved === val} onChange={() => update({ qSensitiveDataInvolved: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Document classification</label>
+                        <select className="select" value={form.qDocClassification} onChange={(e) => update({ qDocClassification: e.target.value })}>
                           <option value="public">Public</option>
                           <option value="internal">Internal</option>
                           <option value="confidential">Confidential</option>
-                          <option value="restricted">Restricted</option>
+                          <option value="restricted">Restricted / Secret</option>
                         </select>
-                      </FormField>
-                      <FormField label="Access expiry date" id="ts-expiry">
-                        <input id="ts-expiry" className="input" type="date" value={form.docExpiry}
-                          onChange={(e) => update({ docExpiry: e.target.value })} />
-                      </FormField>
-                    </div>
-                  </div>
-                )}
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Why is this document being shared?</label>
+                        <textarea value={form.qPurpose} onChange={(e) => update({ qPurpose: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Business justification" />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Has the document been redacted or minimized to only what's necessary?</label>
+                        <textarea value={form.qCanAnonymizeDetails} onChange={(e) => update({ qCanAnonymizeDetails: e.target.value })} className="textarea" rows={2} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Describe redactions or minimization steps" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is an NDA in place with the recipient?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-nda" checked={form.qNdaSigned === val} onChange={() => update({ qNdaSigned: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
-                {requestType === 'data_sharing_external' && (
-                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Data sharing details</div>
-                    <FormField label="Legal basis for sharing" id="ts-legalbasis">
-                      <select id="ts-legalbasis" className="select" value={form.legalBasis}
-                        onChange={(e) => update({ legalBasis: e.target.value })}>
-                        <option value="contract">Contractual necessity</option>
-                        <option value="legitimate_interest">Legitimate interest</option>
-                        <option value="legal_obligation">Legal obligation</option>
-                        <option value="vital_interests">Vital interests</option>
-                        <option value="consent">Data subject consent</option>
-                      </select>
-                    </FormField>
-                  </div>
-                )}
+                  {/* data_sharing_external */}
+                  {requestType === 'data_sharing_external' && (
+                    <>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Does the dataset contain personal data?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-pds" checked={form.qPersonalDataShared === val} onChange={() => update({ qPersonalDataShared: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Does it contain sensitive personal data?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-sdi" checked={form.qSensitiveDataInvolved === val} onChange={() => update({ qSensitiveDataInvolved: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Approximate record count / volume</label>
+                        <input className="input" value={form.qRetentionPeriod} onChange={(e) => update({ qRetentionPeriod: e.target.value })} placeholder="e.g., ~10,000 customer records" />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Lawful basis for sharing</label>
+                        <textarea value={form.qWhyRequired} onChange={(e) => update({ qWhyRequired: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Consent / contract / legitimate interest / regulator request" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is the data minimized to the strict minimum needed?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-min" checked={form.qCanDeliverWithout === !val} onChange={() => update({ qCanDeliverWithout: !val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is the transfer encrypted in transit?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-eit" checked={(form.qEncryptionInTransit === 'yes') === val} onChange={() => update({ qEncryptionInTransit: val ? 'yes' : 'no' })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is a Data Sharing Agreement / DPA signed with the recipient?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-dpa" checked={form.qDpaExists === val} onChange={() => update({ qDpaExists: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
-                {requestType === 'internal_data_access' && (
-                  <div style={{ marginTop: 8, padding: '16px 18px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)' }}>Access request details</div>
-                    <FormField label="System / dataset name" id="ts-sysname">
-                      <input id="ts-sysname" className="input" value={form.systemName}
-                        onChange={(e) => update({ systemName: e.target.value })} placeholder="e.g. Customer Analytics DW" />
-                    </FormField>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                      <FormField label="Access level" id="ts-accesslevel">
-                        <select id="ts-accesslevel" className="select" value={form.accessLevel}
-                          onChange={(e) => update({ accessLevel: e.target.value })}>
-                          <option value="read">Read only</option>
-                          <option value="read_write">Read / Write</option>
-                          <option value="admin">Admin</option>
+                  {/* internal_data_access */}
+                  {requestType === 'internal_data_access' && (
+                    <>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Sensitivity level of the dataset</label>
+                        <select className="select" value={form.qSensitiveDataInvolved ? 'high' : (form.qDocClassification || 'medium')} onChange={(e) => update({ qSensitiveDataInvolved: e.target.value === 'high', qDocClassification: e.target.value })}>
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High (sensitive)</option>
                         </select>
-                      </FormField>
-                      <FormField label="Access duration" id="ts-duration">
-                        <select id="ts-duration" className="select" value={form.accessDuration}
-                          onChange={(e) => update({ accessDuration: e.target.value })}>
-                          <option value="30d">30 days</option>
-                          <option value="90d">90 days</option>
-                          <option value="180d">180 days</option>
-                          <option value="365d">1 year</option>
-                          <option value="indefinite">Indefinite</option>
-                        </select>
-                      </FormField>
-                    </div>
-                  </div>
-                )}
-              </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Detailed business justification</label>
+                        <textarea value={form.qWhyRequired} onChange={(e) => update({ qWhyRequired: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Why does this user/team need this data?" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Will access follow least-privilege (only required fields &amp; rows)?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-lp" checked={form.qCanDeliverWithout === val} onChange={() => update({ qCanDeliverWithout: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is access logging / audit trail enabled?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-al" checked={form.qAccessLogging === val} onChange={() => update({ qAccessLogging: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is RBAC enforced for this dataset?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-rbac" checked={form.qRbacEnabled === val} onChange={() => update({ qRbacEnabled: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Access duration</label>
+                        <input className="input" value={form.qRetentionPeriod} onChange={(e) => update({ qRetentionPeriod: e.target.value })} placeholder="e.g., 6 months, until 2026-04-30" />
+                      </div>
+                    </>
+                  )}
+
+                  {/* cross_border_transfer */}
+                  {requestType === 'cross_border_transfer' && (
+                    <>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Does the data include sensitive personal data?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-sdi" checked={form.qSensitiveDataInvolved === val} onChange={() => update({ qSensitiveDataInvolved: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Lawful basis for the cross-border transfer</label>
+                        <textarea value={form.qWhyRequired} onChange={(e) => update({ qWhyRequired: e.target.value })} className="textarea" rows={3} style={{ width: '100%', boxSizing: 'border-box' }} placeholder="Cite PDPL article and basis" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is the destination country recognized as adequate by SDAIA?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-adq" checked={form.qPdplCompliant === val} onChange={() => update({ qPdplCompliant: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Are SCCs / BCRs in place with the recipient?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-scc" checked={form.qDpaExists === val} onChange={() => update({ qDpaExists: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Has the data subject given explicit consent (where required)?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-cons" checked={form.qDataProtectionClauses === val} onChange={() => update({ qDataProtectionClauses: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Is the data encrypted in transit and at rest at destination?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {([true, false] as const).map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="qt-enc" checked={(form.qEncryptionInTransit === 'yes' && form.qEncryptionAtRest === 'yes') === val} onChange={() => update({ qEncryptionInTransit: val ? 'yes' : 'no', qEncryptionAtRest: val ? 'yes' : 'no' })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 6 }}>Retention at destination</label>
+                        <input className="input" value={form.qRetentionPeriod} onChange={(e) => update({ qRetentionPeriod: e.target.value })} placeholder="e.g., 12 months, then deletion" />
+                      </div>
+                    </>
+                  )}
+
+                </div>
+              )}
             </section>
           )}
 
