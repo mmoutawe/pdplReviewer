@@ -146,7 +146,7 @@ export default function Wizard() {
   const [currentStep, setCurrentStep] = useState(urlMethod === 'method' ? 'method' : 'initiation')
   const [form, setForm] = useState<WizardState>(() => {
     const draft = loadDraft<WizardState>()
-    return draft ?? empty
+    return draft ? { ...empty, ...draft } : empty
   })
   const [errors, setErrors] = useState<Partial<Record<keyof WizardState, string>>>({})
   const [submitted, setSubmitted] = useState(false)
@@ -685,9 +685,9 @@ export default function Wizard() {
           {/* ── Step: Vendor & Project ── */}
           {currentStep === 'vendor_project' && (
             <section aria-labelledby="step-vendor-project">
-              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Select Vendor &amp; Project</h2>
+              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Select Vendor &amp; Project <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink-400)' }}>(optional)</span></h2>
               <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
-                Choose the vendor and project for this compliance review request.
+                Link this request to an existing vendor and project, or click Continue to skip.
               </p>
 
               {/* Vendor card */}
@@ -1184,18 +1184,11 @@ export default function Wizard() {
                           placeholder="Why is this data/document being shared?" />
                       </FormField>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                        <FormField label="External Recipient Name" required id="req-recip">
-                          <input id="req-recip" className="input" value={form.vendorName}
-                            onChange={(e) => update({ vendorName: e.target.value })}
-                            placeholder="Individual or entity name" />
-                        </FormField>
-                        <FormField label="Recipient Organization" required id="req-org">
-                          <input id="req-org" className="input" value={form.recipientOrganization}
-                            onChange={(e) => update({ recipientOrganization: e.target.value })}
-                            placeholder="Organization name" />
-                        </FormField>
-                      </div>
+                      <FormField label="Recipient Organization" id="req-org">
+                        <input id="req-org" className="input" value={form.recipientOrganization}
+                          onChange={(e) => update({ recipientOrganization: e.target.value })}
+                          placeholder="Organization name" />
+                      </FormField>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                         <FormField label="Recipient Type" required id="req-rtype">
@@ -1244,11 +1237,6 @@ export default function Wizard() {
                         )}
                       </div>
 
-                      <FormField label="Tags" id="req-tags" help="Comma-separated labels, e.g. restricted-data, tier-1-vendor">
-                        <input id="req-tags" className="input" value={form.tags}
-                          onChange={(e) => update({ tags: e.target.value })}
-                          placeholder="restricted-data, tier-1-vendor" />
-                      </FormField>
                     </div>
                   </div>
                 </div>
@@ -2003,11 +1991,6 @@ export default function Wizard() {
               <button className="btn btn-ghost btn-sm" onClick={() => { saveDraft(form); showToast('Draft saved.', 'info') }}>
                 Save draft
               </button>
-              {currentStep === 'vendor_project' && (
-                <button className="btn btn-ghost" onClick={() => { update({ linkedVendorId: '', linkedProjectId: '' }); next() }}>
-                  Skip
-                </button>
-              )}
               {currentStep === 'confirm' ? (
                 <button className="btn btn-primary btn-lg" onClick={() => void submit()} disabled={submitting}>
                   {submitting ? 'Submitting…' : 'Submit request'}
