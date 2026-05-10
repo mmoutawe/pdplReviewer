@@ -31,8 +31,17 @@ function StepIndex(step: string) { return STEPS.findIndex((s) => s.key === step)
 interface WizardState {
   method: Method
   title: string
-  description: string
-  vendorName: string
+  description: string          // Section B — Service Description
+  engagementObjective: string  // Section B — Engagement Objective
+  vendorAccessesSystems: boolean
+  vendorProcessesPersonalData: boolean
+  documentType: string
+  businessUnit: string
+  purposeOfSharing: string
+  vendorName: string           // External Recipient Name
+  recipientOrganization: string
+  recipientType: string
+  sharingLocation: string
   vendorJurisdiction: string
   hasDPA: boolean
   dataCategories: string[]
@@ -41,10 +50,8 @@ interface WizardState {
   crossBorder: boolean
   consentObtained: boolean
   tags: string
-  // linked vendor / project (optional, set from URL search params)
   linkedVendorId: string
   linkedProjectId: string
-  // type-specific questionnaire fields
   certifications: string[]
   subprocessors: string
   contractRef: string
@@ -61,7 +68,10 @@ interface WizardState {
 
 const empty: WizardState = {
   method: 'manual', title: '', description: '',
-  vendorName: '', vendorJurisdiction: 'KSA', hasDPA: false,
+  engagementObjective: '', vendorAccessesSystems: false, vendorProcessesPersonalData: true,
+  documentType: 'contract', businessUnit: '', purposeOfSharing: '',
+  vendorName: '', recipientOrganization: '', recipientType: 'partner', sharingLocation: 'inside_ksa',
+  vendorJurisdiction: 'KSA', hasDPA: false,
   dataCategories: [], estimatedSubjects: '', retentionDays: '',
   crossBorder: false, consentObtained: false, tags: '',
   linkedVendorId: '', linkedProjectId: '',
@@ -99,6 +109,7 @@ export default function Wizard() {
   const [xlsxFile, setXlsxFile] = useState<File | null>(null)
   const [xlsxParsing, setXlsxParsing] = useState(false)
   const [vendorSearch, setVendorSearch] = useState('')
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [extraVendors, setExtraVendors] = useState<typeof VENDORS>([])
   const [showNewVendorModal, setShowNewVendorModal] = useState(false)
   const [newVendorForm, setNewVendorForm] = useState({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
@@ -380,8 +391,10 @@ export default function Wizard() {
   function validate(step: string): boolean {
     const e: typeof errors = {}
     if (step === 'initiation') {
-      if (!form.title.trim()) e.title = 'Title is required.'
-      if (!form.description.trim()) e.description = 'Description is required.'
+      if (!form.title.trim()) e.title = 'Request title is required.'
+      if (!form.description.trim()) e.description = 'Service description is required.'
+      if (!form.businessUnit.trim()) e.businessUnit = 'Business unit is required.'
+      if (!form.purposeOfSharing.trim()) e.purposeOfSharing = 'Purpose of sharing is required.'
     }
     if (step === 'declaration') {
       if (!form.estimatedSubjects || isNaN(Number(form.estimatedSubjects))) e.estimatedSubjects = 'Enter a valid number.'
@@ -396,8 +409,9 @@ export default function Wizard() {
     const idx = StepIndex(currentStep)
     const nextKey = STEPS[idx + 1]?.key
     if (currentStep === 'vendor_project' && form.linkedVendorId) {
-      const v = VENDORS.find((x) => x.id === form.linkedVendorId)
-      if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction })
+      const v = VENDORS.find((x) => x.id === form.linkedVendorId) ?? extraVendors.find((x) => x.id === form.linkedVendorId)
+      const p = [...PROJECTS, ...extraProjects].find((x) => x.id === form.linkedProjectId)
+      if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction, businessUnit: p?.businessUnit ?? form.businessUnit })
     }
     if (nextKey === 'confirm') {
       update({ processingRoles: defaultProcessingRoles() })
@@ -928,159 +942,232 @@ export default function Wizard() {
           {/* ── Step: Initiation ── */}
           {currentStep === 'initiation' && (
             <section aria-labelledby="step-init">
-              <h2 id="step-init" style={{ fontSize: 18, fontWeight: 700, marginBottom: form.method === 'ai' ? 8 : 20 }}>Request details</h2>
+              <h2 id="step-init" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Request Initiation</h2>
+              <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
+                Provide vendor details and engagement information for compliance assessment.
+              </p>
 
-              {/* AI builder chat — shown only when method === 'ai' */}
-              {form.method === 'ai' && (
+              {/* AI builder chat — shown only when method === 'ai' and not done */}
+              {form.method === 'ai' && !chatDone && (
                 <div style={{ marginBottom: 24 }}>
-                  <div style={{
-                    border: '1px solid var(--brand-200)', borderRadius: 'var(--r-lg)',
-                    overflow: 'hidden', background: 'var(--surface-0)',
-                  }}>
-                    {/* Header */}
-                    <div style={{
-                      padding: '10px 14px', background: 'var(--brand-50)',
-                      borderBottom: '1px solid var(--brand-200)',
-                      fontSize: 13, fontWeight: 600, color: 'var(--brand-800)',
-                      display: 'flex', alignItems: 'center', gap: 6,
-                    }}>
+                  <div style={{ border: '1px solid var(--brand-200)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: 'var(--surface-0)' }}>
+                    <div style={{ padding: '10px 14px', background: 'var(--brand-50)', borderBottom: '1px solid var(--brand-200)', fontSize: 13, fontWeight: 600, color: 'var(--brand-800)', display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span aria-hidden="true">✨</span> AI Request Builder
-                      <button className="btn btn-sm" style={{ marginLeft: 'auto', fontSize: 12 }}
-                        onClick={() => update({ method: 'manual' })}>
-                        Fill manually
-                      </button>
+                      <button className="btn btn-sm" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => update({ method: 'manual' })}>Fill manually</button>
                     </div>
-
-                    {/* Messages */}
-                    <div ref={chatScrollRef} style={{
-                      maxHeight: 300, overflowY: 'auto', padding: '12px 14px',
-                      display: 'flex', flexDirection: 'column', gap: 10,
-                    }}>
+                    <div ref={chatScrollRef} style={{ maxHeight: 300, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {chatMessages.length === 0 && chatLoading && (
                         <div style={{ fontSize: 13, color: 'var(--ink-400)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }} aria-hidden="true">⏳</span>
-                          Starting conversation…
+                          <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }} aria-hidden="true">⏳</span> Starting conversation…
                         </div>
                       )}
                       {chatMessages.map((msg, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                          <div style={{
-                            maxWidth: '85%', padding: '8px 12px', fontSize: 13, lineHeight: 1.5,
-                            borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                            background: msg.role === 'user' ? 'var(--brand-700)' : 'var(--surface-1)',
-                            color: msg.role === 'user' ? '#fff' : 'var(--ink-800)',
-                            border: msg.role === 'user' ? 'none' : '1px solid var(--line)',
-                          }}>
+                          <div style={{ maxWidth: '85%', padding: '8px 12px', fontSize: 13, lineHeight: 1.5, borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: msg.role === 'user' ? 'var(--brand-700)' : 'var(--surface-1)', color: msg.role === 'user' ? '#fff' : 'var(--ink-800)', border: msg.role === 'user' ? 'none' : '1px solid var(--line)' }}>
                             {msg.content}
                           </div>
                         </div>
                       ))}
                       {chatMessages.length > 0 && chatLoading && (
                         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                          <div style={{
-                            padding: '8px 12px', borderRadius: '12px 12px 12px 2px',
-                            background: 'var(--surface-1)', border: '1px solid var(--line)',
-                            fontSize: 18, letterSpacing: 2, color: 'var(--ink-400)',
-                          }}>···</div>
+                          <div style={{ padding: '8px 12px', borderRadius: '12px 12px 12px 2px', background: 'var(--surface-1)', border: '1px solid var(--line)', fontSize: 18, letterSpacing: 2, color: 'var(--ink-400)' }}>···</div>
                         </div>
                       )}
                     </div>
-
-                    {/* Error */}
                     {chatError && (
-                      <div role="alert" style={{
-                        padding: '8px 14px', background: 'var(--red-50)',
-                        borderTop: '1px solid #FECACA', fontSize: 12.5, color: 'var(--red-700)',
-                        display: 'flex', gap: 8, alignItems: 'center',
-                      }}>
+                      <div role="alert" style={{ padding: '8px 14px', background: 'var(--red-50)', borderTop: '1px solid #FECACA', fontSize: 12.5, color: 'var(--red-700)', display: 'flex', gap: 8, alignItems: 'center' }}>
                         {chatError}
                         <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => void startChat()}>Retry</button>
                       </div>
                     )}
-
-                    {/* Done banner */}
-                    {chatDone && (
-                      <div style={{
-                        padding: '8px 14px', background: '#F0FDF4',
-                        borderTop: '1px solid #BBF7D0',
-                        fontSize: 12.5, color: '#166534', display: 'flex', gap: 8, alignItems: 'center',
-                      }}>
-                        <span aria-hidden="true">✓</span> Form pre-filled — review and edit the fields below.
-                        <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => {
-                          setChatMessages([]); setChatDone(false); setChatError(null); void startChat()
-                        }}>
-                          Start over
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Input */}
                     {!chatDone && (
-                      <div style={{
-                        padding: '10px 14px', borderTop: '1px solid var(--line)',
-                        display: 'flex', gap: 8, background: 'var(--surface-0)',
-                      }}>
-                        <input
-                          ref={chatInputRef}
-                          className="input"
-                          style={{ flex: 1, fontSize: 13 }}
-                          value={chatInput}
+                      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--line)', display: 'flex', gap: 8, background: 'var(--surface-0)' }}>
+                        <input ref={chatInputRef} className="input" style={{ flex: 1, fontSize: 13 }} value={chatInput}
                           onChange={(e) => setChatInput(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendChatMessage() } }}
-                          placeholder="Type your answer…"
-                          disabled={chatLoading || chatMessages.length === 0}
-                        />
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => void sendChatMessage()}
-                          disabled={!chatInput.trim() || chatLoading || chatMessages.length === 0}
-                        >
-                          Send
-                        </button>
+                          placeholder="Type your answer…" disabled={chatLoading || chatMessages.length === 0} />
+                        <button className="btn btn-primary btn-sm" onClick={() => void sendChatMessage()} disabled={!chatInput.trim() || chatLoading || chatMessages.length === 0}>Send</button>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <FormField label="Request title" required error={errors.title} id="req-title">
-                  <input id="req-title" className="input" value={form.title}
-                    onChange={(e) => update({ title: e.target.value })}
-                    placeholder="e.g. Sahab Cloud — primary IaaS hosting" />
-                </FormField>
-                <FormField label="Description" required error={errors.description} id="req-desc"
-                  help="Explain what data is involved, why this request is needed, and what business purpose it serves.">
-                  <textarea id="req-desc" className="textarea" rows={5} value={form.description}
-                    onChange={(e) => update({ description: e.target.value })}
-                    placeholder="Describe the data processing activity, the parties involved, and the intended use case…" />
-                </FormField>
-                {(requestType === 'vendor_onboarding' || requestType === 'data_sharing_external') && (
-                  <FormField label="Vendor / recipient name" id="req-vendor">
-                    <input id="req-vendor" className="input" value={form.vendorName}
-                      onChange={(e) => update({ vendorName: e.target.value })}
-                      placeholder="Legal entity name" />
-                  </FormField>
-                )}
-                {(requestType === 'cross_border_transfer' || requestType === 'vendor_onboarding') && (
-                  <FormField label="Jurisdiction" id="req-jur" help="Country where the vendor/recipient is based.">
-                    <select id="req-jur" className="select" value={form.vendorJurisdiction}
-                      onChange={(e) => update({ vendorJurisdiction: e.target.value })}>
-                      <option value="KSA">Kingdom of Saudi Arabia</option>
-                      <option value="UAE">United Arab Emirates</option>
-                      <option value="United States">United States</option>
-                      <option value="United Kingdom">United Kingdom</option>
-                      <option value="EU">European Union</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </FormField>
-                )}
-                <FormField label="Tags" id="req-tags" help="Comma-separated labels, e.g. restricted-data, tier-1-vendor">
-                  <input id="req-tags" className="input" value={form.tags}
-                    onChange={(e) => update({ tags: e.target.value })}
-                    placeholder="restricted-data, tier-1-vendor" />
-                </FormField>
-              </div>
+              {/* AI done banner */}
+              {form.method === 'ai' && chatDone && (
+                <div style={{ padding: '8px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 'var(--r-md)', fontSize: 12.5, color: '#166534', display: 'flex', gap: 8, alignItems: 'center', marginBottom: 20 }}>
+                  <span aria-hidden="true">✓</span> Form pre-filled — review and edit the fields below.
+                  <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setChatMessages([]); setChatDone(false); setChatError(null); void startChat() }}>Start over</button>
+                </div>
+              )}
+
+              {/* Show form for manual/xlsx, or after AI chat is done */}
+              {(form.method !== 'ai' || chatDone) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Vendor & Project Summary */}
+                  {form.linkedVendorId && (() => {
+                    const v = [...VENDORS, ...extraVendors].find((x) => x.id === form.linkedVendorId)
+                    const p = [...PROJECTS, ...extraProjects].find((x) => x.id === form.linkedProjectId)
+                    if (!v) return null
+                    return (
+                      <div className="card" style={{ padding: '16px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>Vendor &amp; Project Summary</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', fontSize: 13 }}>
+                          <div><span style={{ color: 'var(--ink-500)' }}>Vendor: </span><strong>{v.tradeName}</strong></div>
+                          <div><span style={{ color: 'var(--ink-500)' }}>Type: </span>{v.category}</div>
+                          <div><span style={{ color: 'var(--ink-500)' }}>Country: </span>{v.jurisdiction}</div>
+                          <div><span style={{ color: 'var(--ink-500)' }}>Contact: </span>{v.primaryContact || '—'}</div>
+                          {p && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--ink-500)' }}>Business Unit: </span>{p.businessUnit}</div>}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Section B — Engagement Overview */}
+                  <div className="card" style={{ padding: '18px 20px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Section B — Engagement Overview</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <FormField label="Service Description" required error={errors.description} id="req-desc">
+                        <textarea id="req-desc" className="textarea" rows={3} value={form.description}
+                          onChange={(e) => update({ description: e.target.value })}
+                          placeholder="Describe the service the vendor will provide…" />
+                      </FormField>
+                      <FormField label="Engagement Objective" id="req-obj">
+                        <textarea id="req-obj" className="textarea" rows={3} value={form.engagementObjective}
+                          onChange={(e) => update({ engagementObjective: e.target.value })}
+                          placeholder="State the business objective of this engagement…" />
+                      </FormField>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor access internal systems?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {[true, false].map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="vendorAccess" checked={form.vendorAccessesSystems === val} onChange={() => update({ vendorAccessesSystems: val })}
+                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor process data on behalf of the company?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {[true, false].map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="vendorProcesses" checked={form.vendorProcessesPersonalData === val} onChange={() => update({ vendorProcessesPersonalData: val })}
+                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section C — Request Details */}
+                  <div className="card" style={{ padding: '18px 20px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Section C — Request Details</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      <FormField label="Request Title" required error={errors.title} id="req-title">
+                        <input id="req-title" className="input" value={form.title}
+                          onChange={(e) => update({ title: e.target.value })}
+                          placeholder="e.g. Sahab Cloud — primary IaaS hosting" />
+                      </FormField>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                        <FormField label="Document Type" required id="req-doctype">
+                          <select id="req-doctype" className="select" value={form.documentType} onChange={(e) => update({ documentType: e.target.value })}>
+                            <option value="contract">Contract</option>
+                            <option value="nda">NDA</option>
+                            <option value="dpa">DPA</option>
+                            <option value="sow">Statement of Work</option>
+                            <option value="sla">SLA</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </FormField>
+                        <FormField label="Business Unit" required error={errors.businessUnit} id="req-bu">
+                          <input id="req-bu" className="input" value={form.businessUnit}
+                            onChange={(e) => update({ businessUnit: e.target.value })}
+                            placeholder="e.g. Customer Experience" />
+                        </FormField>
+                      </div>
+
+                      <FormField label="Purpose of Sharing" required error={errors.purposeOfSharing} id="req-purpose">
+                        <input id="req-purpose" className="input" value={form.purposeOfSharing}
+                          onChange={(e) => update({ purposeOfSharing: e.target.value })}
+                          placeholder="Why is this data/document being shared?" />
+                      </FormField>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                        <FormField label="External Recipient Name" required id="req-recip">
+                          <input id="req-recip" className="input" value={form.vendorName}
+                            onChange={(e) => update({ vendorName: e.target.value })}
+                            placeholder="Individual or entity name" />
+                        </FormField>
+                        <FormField label="Recipient Organization" required id="req-org">
+                          <input id="req-org" className="input" value={form.recipientOrganization}
+                            onChange={(e) => update({ recipientOrganization: e.target.value })}
+                            placeholder="Organization name" />
+                        </FormField>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                        <FormField label="Recipient Type" required id="req-rtype">
+                          <select id="req-rtype" className="select" value={form.recipientType} onChange={(e) => update({ recipientType: e.target.value })}>
+                            <option value="partner">Partner</option>
+                            <option value="client">Client</option>
+                            <option value="regulator">Regulator</option>
+                            <option value="vendor">Vendor</option>
+                            <option value="internal">Internal</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </FormField>
+                        <FormField label="Sharing Location" required id="req-loc">
+                          <select id="req-loc" className="select" value={form.sharingLocation} onChange={(e) => update({ sharingLocation: e.target.value })}>
+                            <option value="inside_ksa">Inside KSA</option>
+                            <option value="outside_ksa">Outside KSA</option>
+                          </select>
+                        </FormField>
+                      </div>
+
+                      {/* Upload Documents */}
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 8, letterSpacing: '0.02em' }}>Upload Documents</div>
+                        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 16px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', cursor: 'pointer', background: 'var(--surface-1)', transition: 'all var(--t-fast)' }}
+                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--brand-700)'; e.currentTarget.style.background = 'var(--brand-50)' }}
+                          onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--surface-1)' }}
+                          onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--surface-1)'; const files = Array.from(e.dataTransfer.files); setUploadedFiles((prev) => [...prev, ...files]) }}>
+                          <input type="file" multiple accept=".pdf,.docx,.xlsx" style={{ display: 'none' }}
+                            onChange={(e) => { if (e.target.files) setUploadedFiles((prev) => [...prev, ...Array.from(e.target.files!)]) }} />
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)' }}>
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                          <span style={{ fontSize: 13, color: 'var(--ink-600)', fontWeight: 500 }}>Drag and drop files here, or click to browse</span>
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>PDF, DOCX, XLSX up to 20MB</span>
+                        </label>
+                        {uploadedFiles.length > 0 && (
+                          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {uploadedFiles.map((f, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', fontSize: 12.5 }}>
+                                <span style={{ flex: 1, color: 'var(--ink-800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                                <span style={{ color: 'var(--ink-400)', flexShrink: 0 }}>{(f.size / 1024).toFixed(0)} KB</span>
+                                <button onClick={() => setUploadedFiles((prev) => prev.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <FormField label="Tags" id="req-tags" help="Comma-separated labels, e.g. restricted-data, tier-1-vendor">
+                        <input id="req-tags" className="input" value={form.tags}
+                          onChange={(e) => update({ tags: e.target.value })}
+                          placeholder="restricted-data, tier-1-vendor" />
+                      </FormField>
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
