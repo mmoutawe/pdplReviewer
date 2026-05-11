@@ -101,6 +101,9 @@ export default function TicketWorkspace() {
     recipientIsAppropriate: false, attachmentsReviewed: false,
   })
   const [dmSaving, setDmSaving] = useState(false)
+  const [requesterReply, setRequesterReply] = useState('')
+  const [requesterReplying, setRequesterReplying] = useState(false)
+  const [requesterAttachments, setRequesterAttachments] = useState<Attachment[]>([])
 
   useEffect(() => {
     document.title = ticket ? `${ticket.id} — PDPL Reviewer` : 'Ticket — PDPL Reviewer'
@@ -205,6 +208,26 @@ export default function TicketWorkspace() {
     } finally { setDmSaving(false) }
   }
 
+  async function handleRequesterSubmit() {
+    if (!ticket) return
+    setRequesterReplying(true)
+    try {
+      if (isSupabaseConfigured) {
+        if (requesterReply.trim()) await addReturnComment(ticket.id, requesterReply)
+        const updated = await transitionTicket(ticket.id, 'in_data_management', 'Resubmitted after addressing return comments')
+        updateTicket(updated.id, updated)
+        await refreshTickets()
+      } else {
+        if (requesterReply.trim()) demoAddReturnComment(ticket.id, requesterReply, 'requester', user.fullName)
+        updateTicket(ticket.id, { state: 'in_data_management' })
+      }
+      setRequesterReply('')
+      showToast('Response submitted. Ticket sent back to reviewer.', 'success')
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Submission failed.', 'error')
+    } finally { setRequesterReplying(false) }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
@@ -268,9 +291,96 @@ export default function TicketWorkspace() {
       <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 16 : 24, minHeight: 0 }}>
 
         {!canViewCurrentStep ? (
-          <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--ink-400)', fontSize: 14 }}>This step is not accessible for your role.</p>
-          </div>
+          // Requester on step 4 when ticket is returned for clarification
+          ticket.state === 'returned_to_requester' && user.role === 'requester' ? (
+            <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px', background: 'var(--amber-50)', border: '1px solid #FDE68A', borderRadius: 'var(--r-lg)' }}>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>🔁</span>
+                <div>
+                  <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--amber-800)', marginBottom: 4 }}>Request Returned for Clarification</h2>
+                  <p style={{ fontSize: 13, color: 'var(--amber-700)', lineHeight: 1.6 }}>The reviewer has returned your request with comments. Please review and respond.</p>
+                </div>
+              </div>
+
+              {/* Reviewer feedback thread */}
+              {ticket.returnThread.length > 0 && (
+                <div className="card" style={{ padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <span style={{ fontSize: 16 }}>⚠</span>
+                    <h3 style={{ fontSize: 14, fontWeight: 600 }}>Reviewer Feedback</h3>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {ticket.returnThread.map((entry, i) => (
+                      <div key={i} style={{ background: entry.byRole === 'requester' ? 'var(--brand-50)' : 'var(--amber-50)', border: `1px solid ${entry.byRole === 'requester' ? '#C7D7FD' : '#FDE68A'}`, borderRadius: 'var(--r-md)', padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>{entry.by}</span>
+                          <RoleBadge role={entry.byRole as Role} />
+                          <span style={{ fontSize: 11, color: 'var(--ink-400)', marginLeft: 'auto' }}>{formatDateTime(entry.createdAt)}</span>
+                        </div>
+                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink-700)' }}>{entry.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Edit shortcut buttons */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-sm" onClick={() => setWizardStep(1)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3l9-9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  Edit Initiation Details
+                </button>
+                <button className="btn btn-sm" onClick={() => setWizardStep(2)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3l9-9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  Edit Questionnaire
+                </button>
+              </div>
+
+              {/* Your response */}
+              <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 2L2 7l5 2 2 5 5-12z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  <h3 style={{ fontSize: 14, fontWeight: 600 }}>Your Response</h3>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-600)', display: 'block', marginBottom: 6 }}>Reply</label>
+                  <textarea
+                    className="input"
+                    style={{ width: '100%', minHeight: 110, resize: 'vertical', fontSize: 13, lineHeight: 1.6 }}
+                    placeholder="Address the reviewer's feedback…"
+                    value={requesterReply}
+                    onChange={(e) => setRequesterReply(e.target.value)}
+                    disabled={requesterReplying}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-600)', display: 'block', marginBottom: 8 }}>Attach Supporting Documents</label>
+                  <EvidenceUploader
+                    attachments={requesterAttachments}
+                    ticketId={ticket.id}
+                    onUploaded={(a) => setRequesterAttachments((prev) => [...prev, a])}
+                    onRemove={(aid) => setRequesterAttachments((prev) => prev.filter((a) => a.id !== aid))}
+                  />
+                </div>
+                <div>
+                  <button
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    onClick={() => void handleRequesterSubmit()}
+                    disabled={requesterReplying}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 2L2 7l5 2 2 5 5-12z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                    {requesterReplying ? 'Submitting…' : 'Submit Response'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card" style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <p style={{ color: 'var(--ink-400)', fontSize: 14 }}>This step is not accessible for your role.</p>
+            </div>
+          )
         ) : <>
 
         {/* ── Step 0: Vendor & Project ── */}
