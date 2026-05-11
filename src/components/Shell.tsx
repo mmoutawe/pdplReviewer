@@ -21,9 +21,6 @@ function TicketIcon() {
 function QueueIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
 }
-function PolicyIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="1" width="10" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 5.5h5M5.5 8.5h5M5.5 11.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-}
 function VendorIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 14v-3l1-1h8l1 1v3" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><circle cx="8" cy="6" r="3" stroke="currentColor" strokeWidth="1.4"/></svg>
 }
@@ -32,9 +29,6 @@ function AuditIcon() {
 }
 function AdminIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2l1.5 3.5 3.5.5-2.5 2.5.5 3.5L8 10.5 5 12l.5-3.5L3 6l3.5-.5L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-}
-function ArchIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 13L7 3l3 7 2-3 2 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
 }
 function NewIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -49,7 +43,11 @@ function ProjectIcon() {
   return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2" y="5" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5 5V4a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
 }
 function ChatIcon() {
-  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v6A1.5 1.5 0 0112.5 11H9l-3 3v-3H3.5A1.5 1.5 0 012 9.5v-6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
+
+function SettingsIcon() {
+  return <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" strokeWidth="1.3"/><path d="M13.3 8a5.7 5.7 0 01-.07.85l1.3 1-.9 1.56-1.56-.63a5.3 5.3 0 01-1.47.85L10.3 13h-1.8l-.3-1.37a5.3 5.3 0 01-1.47-.85l-1.56.63-.9-1.56 1.3-1A5.7 5.7 0 014.5 8a5.7 5.7 0 01.07-.85l-1.3-1 .9-1.56 1.56.63a5.3 5.3 0 011.47-.85L7.5 3h1.8l.3 1.37a5.3 5.3 0 011.47.85l1.56-.63.9 1.56-1.3 1c.04.28.07.56.07.85z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
 }
 
 function getNavItems(role: Role): NavItem[] {
@@ -63,29 +61,32 @@ function getNavItems(role: Role): NavItem[] {
     { label: 'New Request', path: '/requests/new', icon: <NewIcon /> },
     { label: 'Policy Assistant', path: '/policies', icon: <ChatIcon /> },
   ]
+  // Matches Lovable: Dashboard, Vendors, Projects, Document Library, Templates Library, Review Queue, Audit Logs, Settings, Policy Assistant
   const reviewerItems: NavItem[] = [
-    { label: 'Queue', path: `/queue/${role}`, icon: <QueueIcon /> },
-    { label: 'All Requests', path: '/requests', icon: <TicketIcon /> },
-    { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
     { label: 'Vendors', path: '/vendors', icon: <VendorIcon /> },
-    { label: 'Documents', path: '/documents', icon: <DocIcon /> },
-    { label: 'Templates', path: '/templates', icon: <TemplateIcon /> },
-    { label: 'Audit Ledger', path: '/audit', icon: <AuditIcon /> },
+    { label: 'Projects', path: '/projects', icon: <ProjectIcon /> },
+    { label: 'Document Library', path: '/documents', icon: <DocIcon /> },
+    { label: 'Templates Library', path: '/templates', icon: <TemplateIcon /> },
+    { label: 'Review Queue', path: `/queue/${role}`, icon: <QueueIcon /> },
+    { label: 'Audit Logs', path: '/audit', icon: <AuditIcon /> },
+    { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
+    { label: 'Policy Assistant', path: '/policies', icon: <ChatIcon /> },
   ]
   const adminItems: NavItem[] = [
     { label: 'All Requests', path: '/requests', icon: <TicketIcon /> },
-    { label: 'Policies', path: '/policies', icon: <PolicyIcon /> },
     { label: 'Vendors', path: '/vendors', icon: <VendorIcon /> },
+    { label: 'Projects', path: '/projects', icon: <ProjectIcon /> },
     { label: 'Documents', path: '/documents', icon: <DocIcon /> },
     { label: 'Templates', path: '/templates', icon: <TemplateIcon /> },
-    { label: 'Audit Ledger', path: '/audit', icon: <AuditIcon /> },
+    { label: 'Audit Logs', path: '/audit', icon: <AuditIcon /> },
+    { label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
+    { label: 'Policy Assistant', path: '/policies', icon: <ChatIcon /> },
     { label: 'Admin', path: '/admin', icon: <AdminIcon /> },
   ]
-  const archItem: NavItem = { label: 'Architecture', path: '/architecture', icon: <ArchIcon /> }
 
   if (role === 'requester') return [...base, ...requesterItems]
-  if (role === 'data_management' || role === 'legal' || role === 'security') return [...base, ...reviewerItems, archItem]
-  if (role === 'admin') return [...base, ...adminItems, archItem]
+  if (role === 'data_management' || role === 'legal' || role === 'security') return [...base, ...reviewerItems]
+  if (role === 'admin') return [...base, ...adminItems]
   return base
 }
 
@@ -234,9 +235,14 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
 // ─── LeftRail ─────────────────────────────────────────────────────────────────
 interface RailProps { collapsed: boolean; isMobile: boolean; onClose: () => void }
 
+function SignOutIcon() {
+  return <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true"><path d="M6 2H3a1 1 0 00-1 1v9a1 1 0 001 1h3M10 10l3-3-3-3M13 7H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+}
+
 function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
   const { user } = useStore(authStore)
   const location = useLocation()
+  const navigate = useNavigate()
   const navItems = getNavItems(user.role)
 
   // Close mobile drawer on route change
@@ -298,19 +304,33 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
         </ul>
       </nav>
 
-      {/* Bottom: user info strip */}
-      {!collapsed && (
-        <div style={{
-          padding: '12px 14px', borderTop: '1px solid var(--line)',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <Avatar initials={user.initials} color={user.avatarColor} size={28} />
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.fullName}</div>
-            <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>{ROLE_LABELS[user.role]}</div>
+      {/* Bottom: user info + sign out */}
+      <div style={{ borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+        {!collapsed && (
+          <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Avatar initials={user.initials} color={user.avatarColor} size={28} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.fullName}</div>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>{ROLE_LABELS[user.role]}</div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => { signOut(); navigate('/sign-in') }}
+          style={{
+            width: '100%', padding: collapsed ? '10px 0' : '8px 14px',
+            display: 'flex', alignItems: 'center', gap: 8, justifyContent: collapsed ? 'center' : 'flex-start',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: 13, color: 'var(--ink-500)',
+            transition: 'background var(--t-fast)',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+        >
+          <SignOutIcon />
+          {!collapsed && <span>Sign Out</span>}
+        </button>
+      </div>
     </aside>
   )
 }

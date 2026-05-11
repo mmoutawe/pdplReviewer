@@ -31,6 +31,7 @@ const DocumentLibrary = lazy(() => import('./pages/DocumentLibrary'))
 const TemplatesLibrary = lazy(() => import('./pages/TemplatesLibrary'))
 const ChangePassword  = lazy(() => import('./pages/ChangePassword'))
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'))
+const Settings = lazy(() => import('./pages/Settings'))
 const ExternalDashboard = lazy(() => import('./pages/ExternalDashboard'))
 const NotFound        = lazy(() => import('./pages/NotFound'))
 const Profile         = lazy(() => import('./pages/Profile'))
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="/admin/ai" element={<RequireAuth><Admin tab="ai" /></RequireAuth>} />
           <Route path="/admin/audit-access" element={<RequireAuth><Admin tab="audit" /></RequireAuth>} />
           <Route path="/admin/settings" element={<RequireAuth><Admin tab="settings" /></RequireAuth>} />
+          <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
 
           {/* Architecture deliverable */}
           <Route path="/architecture" element={<RequireAuth><Architecture /></RequireAuth>} />

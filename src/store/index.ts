@@ -6,7 +6,7 @@
  * works with zero backend setup.
  */
 
-import type { Ticket, User, Role, ReturnThreadEntry } from '../data/types'
+import type { Ticket, User, Role, ReturnThreadEntry, Vendor, Project } from '../data/types'
 import {
   NOTIFICATIONS as SEED_NOTIFS,
   TICKETS as SEED_TICKETS,
@@ -135,6 +135,27 @@ export function updateTicket(id: string, partial: Partial<Ticket>) {
 
 export function demoAddTicket(ticket: Ticket) {
   ticketStore.setState({ tickets: [ticket, ...ticketStore.getState().tickets] })
+}
+
+// ─── Dynamic vendor / project store (wizard-created records) ─────────────────
+
+export const dynamicVendorStore = createStore({ vendors: [] as Vendor[] })
+export const dynamicProjectStore = createStore({ projects: [] as Project[] })
+
+export function demoAddVendor(vendor: Vendor) {
+  dynamicVendorStore.setState({ vendors: [vendor, ...dynamicVendorStore.getState().vendors] })
+}
+
+export function demoAddProject(project: Project) {
+  dynamicProjectStore.setState({ projects: [project, ...dynamicProjectStore.getState().projects] })
+}
+
+export function lookupVendor(id: string): Vendor | undefined {
+  return dynamicVendorStore.getState().vendors.find((v) => v.id === id)
+}
+
+export function lookupProject(id: string): Project | undefined {
+  return dynamicProjectStore.getState().projects.find((p) => p.id === id)
 }
 
 export function demoDeleteTicket(id: string) {

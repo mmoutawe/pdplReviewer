@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PROJECTS, TICKETS } from '../data/seed'
+import { PROJECTS, TICKETS, VENDORS } from '../data/seed'
 import type { Project } from '../data/types'
-import { FilterBar } from '../components/table'
-import { formatDate } from '../lib/utils'
-
-const STATUS_COLORS: Record<string, string> = {
-  active: 'pill-emerald',
-  on_hold: 'pill-amber',
-  closed: 'pill-slate',
-}
 
 const inputSt: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13,
@@ -18,12 +10,30 @@ const inputSt: React.CSSProperties = {
   outline: 'none', boxSizing: 'border-box',
 }
 
+function StatusBadge({ status }: { status: Project['status'] }) {
+  const map = {
+    active:  { bg: 'var(--emerald-50)', color: 'var(--emerald-700)', border: 'var(--emerald-200)', label: 'Active' },
+    on_hold: { bg: 'var(--amber-50)',   color: 'var(--amber-700)',   border: 'var(--amber-200)',   label: 'On Hold' },
+    closed:  { bg: 'var(--surface-2)', color: 'var(--ink-500)',      border: 'var(--line)',        label: 'Closed' },
+  }
+  const s = map[status] ?? map.closed
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
+      borderRadius: 'var(--r-full)', fontSize: 12, fontWeight: 500,
+      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
+    }}>
+      {s.label}
+    </span>
+  )
+}
+
 function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
-  const [name, setName] = useState('')
+  const [name, setName]               = useState('')
   const [businessUnit, setBusinessUnit] = useState('')
   const [description, setDescription] = useState('')
-  const [status, setStatus] = useState<Project['status']>('active')
-  const [error, setError] = useState<string | null>(null)
+  const [status, setStatus]           = useState<Project['status']>('active')
+  const [error, setError]             = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -33,14 +43,9 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
     const newProject: Project = {
       id: `p-new-${Date.now()}`,
       code: `PROJ-${Date.now().toString(36).toUpperCase().slice(-6)}`,
-      name: name.trim(),
-      businessUnit: businessUnit.trim(),
-      description: description.trim(),
-      status,
-      ownerId: '',
-      dataInventoryCount: 0,
-      ticketIds: [],
-      startedAt: now,
+      name: name.trim(), businessUnit: businessUnit.trim(),
+      description: description.trim(), status,
+      ownerId: '', dataInventoryCount: 0, ticketIds: [], startedAt: now,
     }
     onCreated(newProject)
     onClose()
@@ -60,7 +65,7 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>BUSINESS UNIT *</label>
-            <input value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} placeholder="e.g. Engineering, Product, Finance" style={inputSt}
+            <input value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} placeholder="Engineering, Product, Finance…" style={inputSt}
               onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
               onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
           </div>
@@ -94,82 +99,152 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
 
 export default function ProjectLibrary() {
   useEffect(() => { document.title = 'Projects — PDPL Reviewer' }, [])
-  const navigate = useNavigate()
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [projects, setProjects] = useState<Project[]>([...PROJECTS])
-  const [showCreate, setShowCreate] = useState(false)
+  const navigate  = useNavigate()
+  const [search, setSearch]           = useState('')
+  const [vendorFilter, setVendorFilter] = useState('')
+  const [projects, setProjects]       = useState<Project[]>([...PROJECTS])
+  const [showCreate, setShowCreate]   = useState(false)
 
-  const ticketCountByProject = Object.fromEntries(
-    projects.map((p) => [p.id, TICKETS.filter((t) => t.projectId === p.id).length])
+  // Derive cross-border flag from ticket types associated with each project
+  const crossBorderProjects = new Set(
+    TICKETS.filter((t) => t.type === 'cross_border_transfer' && t.projectId).map((t) => t.projectId!)
   )
 
   const visible = projects.filter((p) => {
-    if (filterStatus && p.status !== filterStatus) return false
-    if (search) {
-      const q = search.toLowerCase()
-      return p.name.toLowerCase().includes(q) || p.businessUnit.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
-    }
-    return true
+    if (vendorFilter && p.vendorId !== vendorFilter) return false
+    if (!search) return true
+    const q = search.toLowerCase()
+    return p.name.toLowerCase().includes(q) || p.businessUnit.toLowerCase().includes(q)
   })
 
   return (
     <div>
-      <div className="page-header">
+      {/* ── Page header ── */}
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">Project Library</h1>
-          <p className="page-subtitle">{visible.length} project{visible.length !== 1 ? 's' : ''}</p>
+          <h1 className="page-title">Projects</h1>
+          <p className="page-subtitle">Manage vendor projects and engagements</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M6 1v10M1 6h10" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+        <button
+          className="btn btn-primary"
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', fontSize: 14, fontWeight: 600 }}
+          onClick={() => setShowCreate(true)}
+        >
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+            <path d="M6.5 1.5v10M1.5 6.5h10" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
-          New project
+          New Project
         </button>
       </div>
-      <FilterBar
-        search={search} onSearch={setSearch} placeholder="Search by project name or business unit…"
-        filters={[{
-          key: 'status', label: 'Status',
-          options: [
-            { value: 'active', label: 'Active' },
-            { value: 'on_hold', label: 'On Hold' },
-            { value: 'closed', label: 'Closed' },
-          ],
-          value: filterStatus, onChange: setFilterStatus,
-        }]}
-      />
-      <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {visible.map((proj) => {
-          const ticketCount = ticketCountByProject[proj.id] ?? 0
-          return (
-            <button key={proj.id} onClick={() => navigate(`/projects/${proj.id}`)}
-              className="card card-hover"
-              style={{ padding: '16px 20px', textAlign: 'left', width: '100%', display: 'flex', gap: 16, alignItems: 'flex-start', background: 'var(--surface-0)', border: '1px solid var(--line)', cursor: 'pointer' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink-900)' }}>{proj.name}</span>
-                  <span className={`pill pill-no-dot ${STATUS_COLORS[proj.status] ?? 'pill-slate'}`}
-                    style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>{proj.status.replace('_', ' ')}</span>
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 6, lineHeight: 1.6 }}>{proj.description}</div>
-                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--ink-400)', flexWrap: 'wrap' }}>
-                  <span>Unit: {proj.businessUnit}</span>
-                  {proj.ownerId && <span>Owner: {proj.ownerId}</span>}
-                  <span>{ticketCount} request{ticketCount !== 1 ? 's' : ''}</span>
-                  <span>Created {formatDate(proj.startedAt)}</span>
-                </div>
-              </div>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)', marginTop: 4, flexShrink: 0 }}>
-                <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+
+      {/* ── Table card ── */}
+      <div className="page-content">
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Search + vendor filter */}
+          <div style={{ display: 'flex', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"
+                style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-400)', pointerEvents: 'none' }}>
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M9.5 9.5l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
-            </button>
-          )
-        })}
-        {visible.length === 0 && (
-          <p style={{ padding: '32px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>No projects match your filters.</p>
-        )}
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search projects..."
+                style={{ ...inputSt, paddingLeft: 32 }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }}
+              />
+            </div>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={vendorFilter}
+                onChange={(e) => setVendorFilter(e.target.value)}
+                style={{
+                  padding: '8px 32px 8px 12px', fontSize: 13, border: '1px solid var(--line)',
+                  borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-700)',
+                  outline: 'none', cursor: 'pointer', appearance: 'none', minWidth: 140,
+                }}
+              >
+                <option value="">All Vendors</option>
+                {VENDORS.map((v) => (
+                  <option key={v.id} value={v.id}>{v.tradeName}</option>
+                ))}
+              </select>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-400)', pointerEvents: 'none' }}>
+                <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Table */}
+          {visible.length === 0 ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>
+              No projects match your filters.
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--line)' }}>
+                  {['Project', 'Vendor', 'Business Unit', 'Status', 'Cross-border'].map((h) => (
+                    <th key={h} style={{ padding: '11px 20px', textAlign: 'left', fontWeight: 600, color: 'var(--ink-500)', fontSize: 12.5, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((p, i) => {
+                  const vendor = p.vendorId ? VENDORS.find((v) => v.id === p.vendorId) : null
+                  const hasCrossBorder = crossBorderProjects.has(p.id)
+                  return (
+                    <tr
+                      key={p.id}
+                      style={{ borderBottom: i < visible.length - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
+                      onClick={() => navigate(`/projects/${p.id}`)}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--surface-1)' }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
+                    >
+                      {/* Project name */}
+                      <td style={{ padding: '14px 20px', fontWeight: 600, color: 'var(--ink-900)' }}>
+                        {p.name}
+                      </td>
+                      {/* Vendor */}
+                      <td style={{ padding: '14px 20px' }}>
+                        {vendor ? (
+                          <span
+                            style={{ color: 'var(--brand-700)', fontWeight: 500, cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/vendors/${vendor.id}`) }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLSpanElement).style.textDecoration = 'underline' }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLSpanElement).style.textDecoration = 'none' }}
+                          >
+                            {vendor.tradeName}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--ink-400)' }}>—</span>
+                        )}
+                      </td>
+                      {/* Business Unit */}
+                      <td style={{ padding: '14px 20px', color: 'var(--ink-700)' }}>
+                        {p.businessUnit}
+                      </td>
+                      {/* Status */}
+                      <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
+                        <StatusBadge status={p.status} />
+                      </td>
+                      {/* Cross-border */}
+                      <td style={{ padding: '14px 20px', color: hasCrossBorder ? 'var(--amber-700)' : 'var(--ink-500)', fontWeight: hasCrossBorder ? 600 : 400 }}>
+                        {hasCrossBorder ? 'Yes' : 'No'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
+
       {showCreate && (
         <CreateProjectDialog
           onClose={() => setShowCreate(false)}

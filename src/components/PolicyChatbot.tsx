@@ -95,19 +95,16 @@ export default function PolicyChatbot() {
           background: open ? 'var(--ink-700)' : 'var(--brand-700)',
           color: '#fff', cursor: 'pointer', boxShadow: 'var(--shadow-lg)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background var(--t-med), transform var(--t-fast)',
-          transform: open ? 'rotate(45deg)' : 'none',
+          transition: 'background var(--t-med)',
         }}
       >
         {open ? (
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M5 5l10 10M15 5l-10 10" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M18 6L6 18M6 6l12 12" stroke="white" strokeWidth="2" strokeLinecap="round"/>
           </svg>
         ) : (
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-            <path d="M4 6h14M4 10h10M4 14h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-            <circle cx="17" cy="15" r="4" fill="var(--violet-600)"/>
-            <path d="M15.5 15h3M17 13.5v3" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )}
       </button>

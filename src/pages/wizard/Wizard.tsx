@@ -4,8 +4,7 @@ import type { RequestType, Ticket, TicketPayload } from '../../data/types'
 import { REQUEST_TYPE_LABELS, VENDORS, PROJECTS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
-import { AICoPilotPanel } from '../../components/AICoPilotPanel'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore, demoAddVendor, demoAddProject } from '../../store'
 import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
 import { isSupabaseConfigured } from '../../lib/supabase'
@@ -23,7 +22,6 @@ const STEPS = [
   { key: 'initiation',     label: 'Initiation' },
   { key: 'declaration',    label: 'Data declaration' },
   { key: 'assessment',     label: 'AI assessment' },
-  { key: 'confirm',        label: 'Confirm & submit' },
 ]
 
 function StepIndex(step: string) { return STEPS.findIndex((s) => s.key === step) }
@@ -175,6 +173,7 @@ export default function Wizard() {
     dataUsage: true, purposeNecessity: true, processingRoles: true, storageHosting: true,
     dataAccess: true, securityControls: true, complianceGovernance: true, contractualSafeguards: true, dataLifecycle: true,
   })
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -348,6 +347,7 @@ export default function Wizard() {
       startedAt: new Date().toISOString().slice(0, 10),
     }
     setExtraProjects((prev) => [...prev, project])
+    demoAddProject(project)
     update({ linkedProjectId: id })
     setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
     setShowNewProjectModal(false)
@@ -372,6 +372,7 @@ export default function Wizard() {
       ticketIds: [], notes: '',
     }
     setExtraVendors((prev) => [...prev, vendor])
+    demoAddVendor(vendor)
     update({ linkedVendorId: id, linkedProjectId: '' })
     setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
     setShowNewVendorModal(false)
@@ -451,34 +452,12 @@ export default function Wizard() {
     }
   }
 
-  function defaultProcessingRoles(): WizardState['processingRoles'] {
-    const org = 'PDPL Reviewer Org'
-    const vendor = form.vendorName || 'Third Party'
-    if (requestType === 'vendor_onboarding') return [
-      { role: 'Controller', party: org, description: 'Determines purposes and means of processing' },
-      { role: 'Processor', party: vendor, description: 'Processes data on behalf of the controller per DPA' },
-    ]
-    if (requestType === 'cross_border_transfer') return [
-      { role: 'Data Exporter (Controller)', party: org, description: 'Transfers personal data outside KSA' },
-      { role: 'Data Importer', party: vendor, description: `Receives data in ${form.vendorJurisdiction}` },
-    ]
-    if (requestType === 'data_sharing_external') return [
-      { role: 'Disclosing Controller', party: org, description: 'Shares dataset with receiving party' },
-      { role: 'Receiving Party', party: vendor || 'External Org', description: 'Receives and uses the shared dataset' },
-    ]
-    if (requestType === 'external_document_sharing') return [
-      { role: 'Document Owner', party: org, description: 'Shares document under restricted access' },
-      { role: 'Recipient', party: vendor || 'External Recipient', description: 'Receives read access to the document' },
-    ]
-    if (requestType === 'internal_data_access') return [
-      { role: 'Data Owner', party: org, description: 'Owns and governs the dataset' },
-      { role: 'Accessor', party: user.fullName, description: `${form.systemName || 'System'} — ${form.accessLevel} access` },
-    ]
-    return []
-  }
-
   function validate(step: string): boolean {
     const e: typeof errors = {}
+    if (step === 'vendor_project') {
+      if (!form.linkedVendorId) e.linkedVendorId = 'Please select or create a vendor.'
+      if (!form.linkedProjectId) e.linkedProjectId = 'Please select or create a project.'
+    }
     if (step === 'initiation') {
       if (!form.title.trim()) e.title = 'Request title is required.'
       if (!form.description.trim()) e.description = 'Service description is required.'
@@ -492,14 +471,10 @@ export default function Wizard() {
   function next() {
     if (!validate(currentStep)) return
     const idx = StepIndex(currentStep)
-    const nextKey = STEPS[idx + 1]?.key
-    if (currentStep === 'vendor_project' && form.linkedVendorId) {
+    if (currentStep === 'vendor_project') {
       const v = VENDORS.find((x) => x.id === form.linkedVendorId) ?? extraVendors.find((x) => x.id === form.linkedVendorId)
       const p = [...PROJECTS, ...extraProjects].find((x) => x.id === form.linkedProjectId)
       if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction, businessUnit: p?.businessUnit ?? form.businessUnit })
-    }
-    if (nextKey === 'confirm') {
-      update({ processingRoles: defaultProcessingRoles() })
     }
     if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key)
   }
@@ -685,9 +660,9 @@ export default function Wizard() {
           {/* ── Step: Vendor & Project ── */}
           {currentStep === 'vendor_project' && (
             <section aria-labelledby="step-vendor-project">
-              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Select Vendor &amp; Project <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink-400)' }}>(optional)</span></h2>
+              <h2 id="step-vendor-project" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Select Vendor &amp; Project</h2>
               <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
-                Link this request to an existing vendor and project, or click Continue to skip.
+                You must link this request to a vendor and a project before proceeding.
               </p>
 
               {/* Vendor card */}
@@ -746,6 +721,9 @@ export default function Wizard() {
                   })}
                 </div>
               </div>
+              {errors.linkedVendorId && (
+                <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginBottom: 10, marginTop: -8 }}>{errors.linkedVendorId}</p>
+              )}
 
               {/* Project card — only shown after a vendor is selected */}
               {form.linkedVendorId && (
@@ -798,6 +776,9 @@ export default function Wizard() {
                     )
                   })()}
                 </div>
+              )}
+              {errors.linkedProjectId && (
+                <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginBottom: 10 }}>{errors.linkedProjectId}</p>
               )}
 
               {/* ── New Project Modal ── */}
@@ -1182,6 +1163,11 @@ export default function Wizard() {
                         <input id="req-purpose" className="input" value={form.purposeOfSharing}
                           onChange={(e) => update({ purposeOfSharing: e.target.value })}
                           placeholder="Why is this data/document being shared?" />
+                      </FormField>
+
+                      <FormField label="External Recipient Name" id="req-recip">
+                        <input id="req-recip" className="input" value={form.vendorName}
+                          onChange={(e) => update({ vendorName: e.target.value })} />
                       </FormField>
 
                       <FormField label="Recipient Organization" id="req-org">
@@ -1925,61 +1911,38 @@ export default function Wizard() {
                   <button className="btn btn-sm" onClick={() => void runAssessment()}>Retry</button>
                 </div>
               )}
-            </section>
-          )}
 
-          {/* ── Step: Confirm ── */}
-          {currentStep === 'confirm' && (
-            <section aria-labelledby="step-confirm">
-              <h2 id="step-confirm" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Review and submit</h2>
-              <p style={{ color: 'var(--ink-500)', marginBottom: 22, fontSize: 13.5 }}>
-                Verify the details below before submitting. Once submitted, the request will be routed to the Data Management queue.
-              </p>
-              <div className="card" style={{ padding: '18px 20px', marginBottom: 20 }}>
-                <dl style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '10px 16px', fontSize: 13.5 }}>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Type</dt>
-                  <dd>{REQUEST_TYPE_LABELS[requestType]}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Title</dt>
-                  <dd style={{ fontWeight: 500 }}>{form.title || <em style={{ color: 'var(--ink-400)' }}>Not set</em>}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Requester</dt>
-                  <dd>{user.fullName}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Data categories</dt>
-                  <dd>{form.dataCategories.length > 0 ? form.dataCategories.join(', ') : '—'}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Est. subjects</dt>
-                  <dd>{form.estimatedSubjects || '—'}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Retention (days)</dt>
-                  <dd>{form.retentionDays || '—'}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>Cross-border</dt>
-                  <dd>{form.crossBorder ? 'Yes' : 'No'}</dd>
-                  <dt style={{ color: 'var(--ink-500)', fontWeight: 500 }}>DPA signed</dt>
-                  <dd>{form.hasDPA ? 'Yes' : 'No'}</dd>
-                </dl>
-              </div>
-              {/* Processing roles card */}
-              {form.processingRoles.length > 0 && (
-                <div className="card" style={{ padding: '16px 20px', marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Data processing roles</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {form.processingRoles.map((r, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                        <div style={{ flexShrink: 0, width: 130, fontSize: 11.5, fontWeight: 600, color: 'var(--brand-700)', paddingTop: 1 }}>{r.role}</div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{r.party}</div>
-                          <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>{r.description}</div>
-                        </div>
-                      </div>
-                    ))}
+              {/* Action bar */}
+              {!assessmentLoading && (
+                <div style={{
+                  marginTop: 24, padding: '14px 18px',
+                  background: 'var(--surface-1)', border: '1px solid var(--line)',
+                  borderRadius: 'var(--r-lg)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <p style={{ fontSize: 13.5, color: 'var(--ink-600)', margin: 0 }}>
+                    Review the findings above and choose an action.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setCurrentStep('initiation')}>
+                      Edit Initiation
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setCurrentStep('declaration')}>
+                      Edit My Answers
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => setShowSubmitModal(true)}
+                      disabled={submitting || assessmentLoading}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+                        <path d="M1.5 6.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Submit for Review
+                    </button>
                   </div>
                 </div>
               )}
-
-              <div style={{
-                padding: '12px 16px', background: 'var(--amber-50)',
-                border: '1px solid #FDE68A', borderRadius: 'var(--r-md)',
-                fontSize: 13, color: 'var(--amber-700)', marginBottom: 20,
-              }}>
-                <strong>Submitting is final.</strong> You cannot retract a submitted request; only a reviewer can return it to you. Ensure all details are accurate.
-              </div>
             </section>
           )}
 
@@ -1991,44 +1954,53 @@ export default function Wizard() {
               <button className="btn btn-ghost btn-sm" onClick={() => { saveDraft(form); showToast('Draft saved.', 'info') }}>
                 Save draft
               </button>
-              {currentStep === 'confirm' ? (
-                <button className="btn btn-primary btn-lg" onClick={() => void submit()} disabled={submitting}>
-                  {submitting ? 'Submitting…' : 'Submit request'}
-                </button>
-              ) : (
-                <button
-                  className="btn btn-primary"
-                  onClick={next}
-                  disabled={currentStep === 'assessment' && (assessmentLoading || !!assessmentError)}
-                >
-                  {currentStep === 'assessment' && assessmentLoading ? 'Generating…' : 'Continue →'}
+              {currentStep !== 'assessment' && (
+                <button className="btn btn-primary" onClick={next}>
+                  Continue →
                 </button>
               )}
             </div>
           )}
         </div>
 
-        {/* AI side panel — shown during declaration and assessment steps */}
-        {(currentStep === 'declaration' || currentStep === 'assessment') && (
-          <aside style={{
-            width: 340, flexShrink: 0, borderLeft: '1px solid var(--line)',
-            display: 'flex', flexDirection: 'column', padding: 16,
-            background: 'var(--surface-0)',
-          }} aria-label="AI guidance panel">
-            <AICoPilotPanel
-              title="PDPL Policy Guidance"
-              cannedKey="policy_chat_pdpl29"
-              initialText={
-                currentStep === 'assessment'
-                  ? 'Assessment complete — ask any follow-up question about PDPL requirements for this request type.'
-                  : undefined
-              }
-              context={`${REQUEST_TYPE_LABELS[requestType]} — ${form.title || 'Untitled'}`}
-              feature="policy_chat"
-            />
-          </aside>
-        )}
       </div>
+
+      {/* Submit confirmation modal */}
+      {showSubmitModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSubmitModal(false) }}
+        >
+          <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: 460, maxWidth: '92vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 10 }}>Submit for Formal Review</h3>
+            <p style={{ fontSize: 13.5, color: 'var(--ink-600)', marginBottom: 16, lineHeight: 1.6 }}>
+              You are about to submit this request for formal compliance review by the Data Management team. Once submitted, it will enter the review queue and you will receive notifications as it progresses.
+            </p>
+
+            {(assessmentData as Record<string, unknown>)?.riskLevel === 'high' && (
+              <div style={{
+                padding: '12px 14px', background: 'var(--red-50)',
+                border: '1px solid #FECACA', borderRadius: 'var(--r-md)',
+                fontSize: 13, color: 'var(--red-700)', marginBottom: 16, lineHeight: 1.55,
+              }}>
+                <strong>⚠️ High-Risk Request</strong><br />
+                This request has been classified as High Risk. Please ensure all required approvals, documentation, and safeguards are in place before proceeding. The review team will scrutinize this submission closely.
+              </div>
+            )}
+
+            <div style={{ padding: '12px 14px', background: 'var(--amber-50)', border: '1px solid #FDE68A', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--amber-700)', marginBottom: 22 }}>
+              <strong>Submitting is final.</strong> You cannot retract a submitted request; only a reviewer can return it to you.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="btn btn-ghost" onClick={() => setShowSubmitModal(false)}>Cancel</button>
+              <button className="btn btn-primary" onClick={() => { setShowSubmitModal(false); void submit() }} disabled={submitting}>
+                {submitting ? 'Submitting…' : 'Submit for Review'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
