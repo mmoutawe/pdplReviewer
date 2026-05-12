@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchDocuments, uploadDocument, downloadDocument, deleteDocument } from '../api/documentLibrary'
 import { FilterBar } from '../components/table'
 import { EmptyState } from '../components/primitives'
-import { showToast } from '../store'
+import { showToast, authStore } from '../store'
+import { useStore } from '../hooks/useStore'
 import { VENDORS, PROJECTS } from '../data/seed'
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '../data/types'
 import type { ProjectDocument, ProjectDocumentType, ProjectDocumentStatus } from '../data/types'
@@ -18,6 +19,7 @@ const STATUS_PILL: Record<ProjectDocumentStatus, string> = {
 
 export default function DocumentLibrary() {
   useEffect(() => { document.title = 'Document Library — PDPL Reviewer' }, [])
+  const { user } = useStore(authStore)
 
   const [docs, setDocs]           = useState<ProjectDocument[]>([])
   const [loading, setLoading]     = useState(isSupabaseConfigured)
@@ -69,7 +71,7 @@ export default function DocumentLibrary() {
         description: upDesc.trim() || undefined,
         project_id: upProject || undefined,
         vendor_id:  upVendor  || undefined,
-      })
+      }, user?.id)
       setDocs((prev) => [doc, ...prev])
       setShowUpload(false)
       setUpTitle(''); setUpDesc(''); setUpVendor(''); setUpProject(''); setUpFile(null)
@@ -92,7 +94,7 @@ export default function DocumentLibrary() {
 
   async function handleDownload(doc: ProjectDocument) {
     try {
-      await downloadDocument(doc.file_path, doc.title)
+      await downloadDocument(doc)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Download failed.', 'error')
     }

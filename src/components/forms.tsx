@@ -1,8 +1,9 @@
-import { type ReactNode, useRef, useState } from 'react'
+﻿import { type ReactNode, useRef, useState } from 'react'
 import { fileSize } from '../lib/utils'
 import type { Attachment } from '../data/types'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { uploadAttachment, deleteAttachment } from '../api/attachments'
+import { authStore } from '../store'
 
 // ─── FormField ────────────────────────────────────────────────────────────────
 interface FieldProps {
@@ -88,9 +89,10 @@ export function EvidenceUploader({
     await Promise.allSettled(
       fileArray.map(async (file, i) => {
         try {
+          const currentUser = authStore.getState().user
           const attachment = await uploadAttachment(ticketId, file, 'evidence', (p) => {
             setUploading((prev) => prev.map((u, j) => j === i ? { ...u, percent: p.percent } : u))
-          })
+          }, currentUser?.id)
           onUploaded?.(attachment)
           setUploading((prev) => prev.filter((_, j) => j !== i))
         } catch (err) {

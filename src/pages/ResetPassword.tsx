@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo'
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { apiUpdatePassword } from '../api/auth'
 
 type Phase = 'waiting' | 'ready' | 'success' | 'error'
@@ -16,24 +16,12 @@ export default function ResetPassword() {
 
   useEffect(() => { document.title = 'Set new password — PDPL Reviewer' }, [])
 
-  // Listen for Supabase's PASSWORD_RECOVERY auth event.
-  // When the user follows the reset link, Supabase parses the
-  // URL fragment and fires this event automatically.
+  // With Entra ID, password reset is handled via the Microsoft self-service
+  // password reset flow — there is no in-app recovery token to verify.
+  // Treat the page as immediately ready when Dataverse is configured.
   useEffect(() => {
-    if (!supabase) { setPhase('error'); return }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setPhase('ready')
-    })
-
-    // If the page loaded with an existing recovery session already active
-    // (e.g. page reload), check for it immediately.
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && phase === 'waiting') setPhase('ready')
-    })
-
-    return () => subscription.unsubscribe()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!isSupabaseConfigured) { setPhase('error'); return }
+    setPhase('ready')
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {

@@ -1,59 +1,85 @@
-import { supabase } from '../lib/supabase'
+import { dvList, dvUpdate, dvDelete, T } from '../lib/dataverse'
+import { getDataverseToken } from './auth'
 import type { AdminExternalLink } from '../data/types'
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const env = (import.meta as any).env as Record<string, string | undefined>
+
+type DvRow = Record<string, unknown>
 
 export interface AppSettings { id: string; requireDocumentValidation: boolean }
 
+function toAppSettings(r: DvRow): AppSettings {
+  return {
+    id: r['pdplr_appsettingsid'] as string,
+    requireDocumentValidation: !!(r['pdplr_requiredocumentvalidation']),
+  }
+}
+
+function toAdminExternalLink(r: DvRow): AdminExternalLink {
+  return {
+    id:              r['pdplr_externallinkid'] as string,
+    token:           r['pdplr_token'] as string,
+    label:           r['pdplr_label'] as string,
+    created_at:      r['createdon'] as string,
+    expires_at:      (r['pdplr_expiresat'] as string) ?? null,
+    revoked:         !!(r['pdplr_revoked']),
+    recipient_email: (r['pdplr_recipientemail'] as string) ?? null,
+    recipient_name:  (r['pdplr_recipientname'] as string) ?? null,
+    status:          r['pdplr_status'] as string,
+    approved_at:     (r['pdplr_approvedat'] as string) ?? null,
+  }
+}
+
 export async function fetchAppSettings(): Promise<AppSettings | null> {
-  if (!supabase) return null
-  const { data, error } = await (supabase as any)
-    .from('app_settings')
-    .select('id, require_document_validation')
-    .limit(1)
-    .maybeSingle()
-  if (error || !data) return null
-  return { id: data.id, requireDocumentValidation: data.require_document_validation }
+  const rows = await dvList<DvRow>(T.appSettings, '$top=1').catch(() => [])
+  return rows.length ? toAppSettings(rows[0]) : null
 }
 
 export async function updateDocValidationSetting(settingsId: string, value: boolean): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data: { user } } = await supabase.auth.getUser()
-  const { error } = await (supabase as any)
-    .from('app_settings')
-    .update({ require_document_validation: value, updated_by: user?.id ?? null })
-    .eq('id', settingsId)
-  if (error) throw error
+  await dvUpdate(T.appSettings, settingsId, { pdplr_requiredocumentvalidation: value })
 }
 
 export async function fetchExternalLinks(): Promise<AdminExternalLink[]> {
-  if (!supabase) return []
-  const { data, error } = await (supabase as any)
-    .from('external_request_links')
-    .select('*')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as AdminExternalLink[]
+  const rows = await dvList<DvRow>(T.externalLinks, '$orderby=createdon desc').catch(() => [])
+  return rows.map(toAdminExternalLink)
 }
 
+/**
+ * Calls a Power Automate HTTP-triggered cloud flow to create a new external account.
+ * Set VITE_PA_CREATE_ACCOUNT_URL to your flow's HTTP trigger URL.
+ */
 export async function createExternalAccount(params: {
-  email: string; fullName: string; label: string; expiresAt: string | null
+  email: string
+  fullName: string
+  label: string
+  expiresAt: string | null
 }): Promise<{ tempPassword: string; portalUrl: string }> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase.functions.invoke('create-external-account', { body: params })
-  if (error || (data as any)?.error) throw new Error((data as any)?.error ?? error?.message ?? 'Failed')
-  return data as { tempPassword: string; portalUrl: string }
+  const url = env.VITE_PA_CREATE_ACCOUNT_URL
+  if (!url) throw new Error('VITE_PA_CREATE_ACCOUNT_URL is not configured')
+
+  const tok = await getDataverseToken()
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${tok}`,
+    },
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => 'Unknown error')
+    throw new Error(err)
+  }
+
+  return res.json() as Promise<{ tempPassword: string; portalUrl: string }>
 }
 
 export async function toggleRevokeLink(id: string, currentRevoked: boolean): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { error } = await (supabase as any)
-    .from('external_request_links')
-    .update({ revoked: !currentRevoked })
-    .eq('id', id)
-  if (error) throw error
+  await dvUpdate(T.externalLinks, id, { pdplr_revoked: !currentRevoked })
 }
 
 export async function deleteExternalLink(id: string): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { error } = await (supabase as any).from('external_request_links').delete().eq('id', id)
-  if (error) throw error
+  await dvDelete(T.externalLinks, id)
 }

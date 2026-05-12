@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { externalLinkByToken, ticketById, userById } from '../data/seed'
 import Logo from '../components/Logo'
 import { StatusPill } from '../components/primitives'
 import { REQUEST_TYPE_LABELS } from '../data/seed'
 import { formatDate, formatDateTime } from '../lib/utils'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { submitExternalDecision } from '../api/ai'
 
 type Decision = 'approved' | 'rejected' | null

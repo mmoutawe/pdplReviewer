@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authStore, showToast } from '../store'
 import { useStore } from '../hooks/useStore'
 import { Avatar, RoleBadge } from '../components/primitives'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 
 const inputSt: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13,

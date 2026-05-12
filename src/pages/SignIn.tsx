@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { authStore, signIn } from '../store'
 import { useStore } from '../hooks/useStore'
 import Logo from '../components/Logo'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { apiSignIn } from '../api/auth'
 
 // ── Demo credentials (used in both Supabase and demo mode) ───────────────────
@@ -61,23 +61,9 @@ function SupabaseSignIn() {
 
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault()
-    setError(null)
-    setLoading(true)
-    try {
-      const { supabase } = await import('../lib/supabase')
-      const { error: signUpError } = await supabase!.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: fullName } },
-      })
-      if (signUpError) throw signUpError
-      setSuccess('Account created! Check your email to confirm your address.')
-      setEmail(''); setPassword(''); setFullName('')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-up failed')
-    } finally {
-      setLoading(false)
-    }
+    // User accounts are managed in Microsoft Entra ID.
+    // Self-registration is not supported — contact your administrator.
+    setError('Account creation is managed through Microsoft Entra ID. Please contact your administrator.')
   }
 
   const tabBtn = (tab: 'signin' | 'signup', label: string) => (

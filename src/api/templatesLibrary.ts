@@ -1,11 +1,29 @@
-import { supabase } from '../lib/supabase'
+import {
+  dvList, dvCreate, dvUpdate, dvDelete, dvUploadFile, dvDownloadFile,
+  T,
+} from '../lib/dataverse'
 import type { ReviewerTemplate } from '../data/types'
 
+type DvRow = Record<string, unknown>
+
+function toReviewerTemplate(r: DvRow): ReviewerTemplate {
+  return {
+    id:           r['pdplr_reviewertemplateid'] as string,
+    title:        r['pdplr_title'] as string,
+    description:  (r['pdplr_description'] as string) ?? null,
+    file_path:    r['pdplr_filepath'] as string,
+    file_type:    r['pdplr_filetype'] as string,
+    category:     r['pdplr_category'] as ReviewerTemplate['category'],
+    is_active:    !!(r['pdplr_isactive']),
+    uploaded_by:  (r['pdplr_uploadedby'] as string) ?? null,
+    created_at:   r['createdon'] as string,
+    updated_at:   r['modifiedon'] as string,
+  }
+}
+
 export async function fetchTemplates(): Promise<ReviewerTemplate[]> {
-  if (!supabase) return []
-  const { data, error } = await (supabase as any).from('reviewer_templates').select('*').order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as ReviewerTemplate[]
+  const rows = await dvList<DvRow>(T.reviewerTemplates, '$orderby=createdon desc')
+  return rows.map(toReviewerTemplate)
 }
 
 export async function uploadTemplate(
@@ -13,45 +31,34 @@ export async function uploadTemplate(
   meta: { title: string; description?: string; category: ReviewerTemplate['category'] },
   uploadedBy: string,
 ): Promise<ReviewerTemplate> {
-  if (!supabase) throw new Error('Supabase not configured')
+  const templateId = crypto.randomUUID()
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'txt'
-  const path = `templates/${Date.now()}_${file.name}`
-  const { error: uploadErr } = await supabase.storage.from('policy-documents').upload(path, file)
-  if (uploadErr) throw uploadErr
-  const { data, error } = await (supabase as any).from('reviewer_templates').insert({
-    title: meta.title,
-    description: meta.description ?? null,
-    category: meta.category,
-    file_path: path,
-    file_type: ext,
-    uploaded_by: uploadedBy,
-  }).select().single()
-  if (error) throw error
-  return data as ReviewerTemplate
+
+  const row = await dvCreate<DvRow>(T.reviewerTemplates, {
+    pdplr_reviewertemplateid: templateId,
+    pdplr_title:              meta.title,
+    pdplr_description:        meta.description ?? null,
+    pdplr_category:           meta.category,
+    pdplr_filepath:           `templates/${templateId}/${file.name}`,
+    pdplr_filetype:           ext,
+    pdplr_isactive:           true,
+    pdplr_uploadedby:         uploadedBy,
+  })
+
+  await dvUploadFile(T.reviewerTemplates, templateId, 'pdplr_filecontent', file)
+
+  return toReviewerTemplate(row)
 }
 
 export async function toggleTemplateActive(id: string, isActive: boolean): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { error } = await (supabase as any).from('reviewer_templates').update({ is_active: isActive }).eq('id', id)
-  if (error) throw error
+  await dvUpdate(T.reviewerTemplates, id, { pdplr_isactive: isActive })
 }
 
 export async function deleteTemplate(template: ReviewerTemplate): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  await supabase.storage.from('policy-documents').remove([template.file_path])
-  const { error } = await (supabase as any).from('reviewer_templates').delete().eq('id', template.id)
-  if (error) throw error
+  await dvDelete(T.reviewerTemplates, template.id)
 }
 
 export async function downloadTemplate(template: ReviewerTemplate): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase.storage.from('policy-documents').download(template.file_path)
-  if (error || !data) throw error ?? new Error('No file data')
-  const fileName = template.file_path.split('/').pop() ?? `${template.title}.${template.file_type}`
-  const url = URL.createObjectURL(data)
-  const a = document.createElement('a')
-  a.href = url; a.download = fileName
-  document.body.appendChild(a); a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  const filename = template.file_path.split('/').pop() ?? `${template.title}.${template.file_type}`
+  await dvDownloadFile(T.reviewerTemplates, template.id, 'pdplr_filecontent', filename)
 }

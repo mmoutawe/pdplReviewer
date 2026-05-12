@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment } from '../store'
 import { useStore } from '../hooks/useStore'
@@ -7,7 +7,7 @@ import { EvidenceUploader } from '../components/forms'
 import type { Attachment } from '../data/types'
 import { EmptyState } from '../components/primitives'
 import { EvaluateReplyView } from '../components/EvaluateReplyView'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { addReturnComment, transitionTicket } from '../api/tickets'
 import { evaluateReply, type ReplyEvaluation } from '../api/aiEvaluateReply'
 
@@ -22,6 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function ReturnedResponse() {
   const { id } = useParams<{ id: string }>()
   const { tickets } = useStore(ticketStore)
+  const { user }    = useStore(authStore)
   const navigate = useNavigate()
   const [submitted, setSubmitted]     = useState(false)
   const [submitting, setSubmitting]   = useState(false)
@@ -47,7 +48,7 @@ export default function ReturnedResponse() {
   async function handleReply(msg: string) {
     if (isSupabaseConfigured) {
       try {
-        await addReturnComment(ticket!.id, msg)
+        await addReturnComment(ticket!.id, msg, undefined, user.id, user.role)
         await refreshTickets()
         showToast('Comment added.', 'success')
       } catch (err) {

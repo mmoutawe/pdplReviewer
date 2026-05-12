@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { externalLinkByToken, ticketById } from '../data/seed'
 import Logo from '../components/Logo'
 import { formatDateTime } from '../lib/utils'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { redeemExternalLink } from '../api/ai'
 
 interface LiveLinkData {

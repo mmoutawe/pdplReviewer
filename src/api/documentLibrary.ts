@@ -1,57 +1,85 @@
-import { supabase } from '../lib/supabase'
+import {
+  dvList, dvCreate, dvUpdate, dvDelete, dvUploadFile, dvDownloadFile,
+  T,
+} from '../lib/dataverse'
 import type { ProjectDocument } from '../data/types'
 
+type DvRow = Record<string, unknown>
+
+function toProjectDocument(r: DvRow): ProjectDocument {
+  return {
+    id:                 r['pdplr_projectdocumentid'] as string,
+    project_id:         (r['pdplr_projectid'] as string) ?? null,
+    vendor_id:          (r['pdplr_vendorid'] as string) ?? null,
+    parent_document_id: (r['pdplr_parentdocumentid'] as string) ?? null,
+    title:              r['pdplr_title'] as string,
+    document_type:      r['pdplr_documenttype'] as ProjectDocument['document_type'],
+    version:            r['pdplr_version'] as number ?? 1,
+    status:             r['pdplr_status'] as ProjectDocument['status'],
+    file_path:          r['pdplr_filepath'] as string,
+    file_type:          r['pdplr_filetype'] as string,
+    file_size:          r['pdplr_filesize'] as number ?? 0,
+    description:        (r['pdplr_description'] as string) ?? null,
+    tags:               r['pdplr_tags'] ? (r['pdplr_tags'] as string).split(',').filter(Boolean) : null,
+    effective_date:     (r['pdplr_effectivedate'] as string) ?? null,
+    expiry_date:        (r['pdplr_expirydate'] as string) ?? null,
+    uploaded_by:        (r['pdplr_uploadedby'] as string) ?? null,
+    created_at:         r['createdon'] as string,
+    updated_at:         r['modifiedon'] as string,
+  }
+}
+
 export async function fetchDocuments(filters?: { projectId?: string; vendorId?: string }): Promise<ProjectDocument[]> {
-  if (!supabase) return []
-  let q = supabase.from('project_documents' as never).select('*').order('created_at', { ascending: false })
-  if (filters?.projectId) q = (q as any).eq('project_id', filters.projectId)
-  if (filters?.vendorId)  q = (q as any).eq('vendor_id',  filters.vendorId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []) as ProjectDocument[]
+  const parts: string[] = []
+  if (filters?.projectId) parts.push(`pdplr_projectid eq '${filters.projectId}'`)
+  if (filters?.vendorId)  parts.push(`pdplr_vendorid eq '${filters.vendorId}'`)
+
+  const query = `$orderby=createdon desc${parts.length ? `&$filter=${parts.join(' and ')}` : ''}`
+  const rows = await dvList<DvRow>(T.projectDocuments, query)
+  return rows.map(toProjectDocument)
 }
 
 export async function uploadDocument(
   file: File,
-  meta: { title: string; document_type: ProjectDocument['document_type']; description?: string; project_id?: string; vendor_id?: string },
+  meta: {
+    title: string
+    document_type: ProjectDocument['document_type']
+    description?: string
+    project_id?: string
+    vendor_id?: string
+  },
+  uploadedBy?: string,
 ): Promise<ProjectDocument> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const path = `projects/${meta.project_id ?? 'general'}/${Date.now()}_${file.name}`
-  const { error: uploadErr } = await supabase.storage.from('policy-documents').upload(path, file)
-  if (uploadErr) throw uploadErr
-  const { data, error } = await (supabase as any).from('project_documents').insert({
-    ...meta,
-    file_path: path,
-    file_type: file.type || 'application/octet-stream',
-    file_size: file.size,
-    version: 1,
-    status: 'draft',
-  }).select().single()
-  if (error) throw error
-  return data as ProjectDocument
+  const docId = crypto.randomUUID()
+
+  const row = await dvCreate<DvRow>(T.projectDocuments, {
+    pdplr_projectdocumentid: docId,
+    pdplr_title:             meta.title,
+    pdplr_documenttype:      meta.document_type,
+    pdplr_description:       meta.description ?? null,
+    pdplr_projectid:         meta.project_id ?? null,
+    pdplr_vendorid:          meta.vendor_id ?? null,
+    pdplr_filepath:          `${meta.project_id ?? 'general'}/${docId}/${file.name}`,
+    pdplr_filetype:          file.type || 'application/octet-stream',
+    pdplr_filesize:          file.size,
+    pdplr_version:           1,
+    pdplr_status:            'draft',
+    pdplr_uploadedby:        uploadedBy ?? null,
+  })
+
+  await dvUploadFile(T.projectDocuments, docId, 'pdplr_filecontent', file)
+
+  return toProjectDocument(row)
 }
 
-export async function downloadDocument(filePath: string, filename: string): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase.storage.from('policy-documents').download(filePath)
-  if (error || !data) throw error ?? new Error('No file data')
-  const url = URL.createObjectURL(data)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename
-  document.body.appendChild(a); a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+export async function downloadDocument(doc: ProjectDocument): Promise<void> {
+  await dvDownloadFile(T.projectDocuments, doc.id, 'pdplr_filecontent', doc.file_path.split('/').pop() ?? doc.title)
 }
 
 export async function deleteDocument(doc: ProjectDocument): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  await supabase.storage.from('policy-documents').remove([doc.file_path])
-  const { error } = await (supabase as any).from('project_documents').delete().eq('id', doc.id)
-  if (error) throw error
+  await dvDelete(T.projectDocuments, doc.id)
 }
 
 export async function updateDocumentStatus(id: string, status: ProjectDocument['status']): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { error } = await (supabase as any).from('project_documents').update({ status }).eq('id', id)
-  if (error) throw error
+  await dvUpdate(T.projectDocuments, id, { pdplr_status: status })
 }

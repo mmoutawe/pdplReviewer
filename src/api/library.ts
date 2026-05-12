@@ -1,52 +1,42 @@
-import { supabase, toPolicy, toVendor, toProject, toAuditEvent } from '../lib/supabase'
+import { dvList, dvGet, T, toPolicy, toVendor, toProject, toAuditEvent } from '../lib/dataverse'
 import type { Policy, Vendor, Project, AuditEvent } from '../data/types'
+
+type DvRow = Record<string, unknown>
 
 // ── Policies ──────────────────────────────────────────────
 
 export async function fetchPolicies(): Promise<Policy[]> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase
-    .from('policies').select('*').order('code')
-  if (error) throw error
-  return (data ?? []).map(toPolicy)
+  const rows = await dvList<DvRow>(T.policies, '$orderby=pdplr_code asc')
+  return rows.map(toPolicy)
 }
 
 export async function fetchPolicyById(id: string): Promise<Policy | null> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data } = await supabase.from('policies').select('*').eq('id', id).single()
-  return data ? toPolicy(data) : null
+  const row = await dvGet<DvRow>(T.policies, id)
+  return row ? toPolicy(row) : null
 }
 
 // ── Vendors ───────────────────────────────────────────────
 
 export async function fetchVendors(): Promise<Vendor[]> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase
-    .from('vendors').select('*').order('trade_name')
-  if (error) throw error
-  return (data ?? []).map(toVendor)
+  const rows = await dvList<DvRow>(T.vendors, '$orderby=pdplr_tradename asc')
+  return rows.map(toVendor)
 }
 
 export async function fetchVendorById(id: string): Promise<Vendor | null> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data } = await supabase.from('vendors').select('*').eq('id', id).single()
-  return data ? toVendor(data) : null
+  const row = await dvGet<DvRow>(T.vendors, id)
+  return row ? toVendor(row) : null
 }
 
 // ── Projects ──────────────────────────────────────────────
 
 export async function fetchProjects(): Promise<Project[]> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data, error } = await supabase
-    .from('projects').select('*').order('name')
-  if (error) throw error
-  return (data ?? []).map(toProject)
+  const rows = await dvList<DvRow>(T.projects, '$orderby=pdplr_name asc')
+  return rows.map(toProject)
 }
 
 export async function fetchProjectById(id: string): Promise<Project | null> {
-  if (!supabase) throw new Error('Supabase not configured')
-  const { data } = await supabase.from('projects').select('*').eq('id', id).single()
-  return data ? toProject(data) : null
+  const row = await dvGet<DvRow>(T.projects, id)
+  return row ? toProject(row) : null
 }
 
 // ── Audit ─────────────────────────────────────────────────
@@ -57,18 +47,14 @@ export async function fetchAuditEvents(filters?: {
   action?: string
   limit?: number
 }): Promise<AuditEvent[]> {
-  if (!supabase) throw new Error('Supabase not configured')
+  const parts: string[] = []
+  if (filters?.targetId) parts.push(`pdplr_targetid eq '${filters.targetId}'`)
+  if (filters?.actorId)  parts.push(`pdplr_actorid eq '${filters.actorId}'`)
+  if (filters?.action)   parts.push(`pdplr_action eq '${filters.action}'`)
 
-  let q = supabase.from('audit_events').select('*')
+  const filter = parts.length ? `&$filter=${parts.join(' and ')}` : ''
+  const top    = `&$top=${filters?.limit ?? 500}`
 
-  if (filters?.targetId) q = q.eq('target_id', filters.targetId)
-  if (filters?.actorId)  q = q.eq('actor_id', filters.actorId)
-  if (filters?.action)   q = q.eq('action', filters.action)
-
-  const { data, error } = await q
-    .order('ts', { ascending: false })
-    .limit(filters?.limit ?? 500)
-
-  if (error) throw error
-  return (data ?? []).map(toAuditEvent)
+  const rows = await dvList<DvRow>(T.auditEvents, `$orderby=pdplr_ts desc${filter}${top}`)
+  return rows.map(toAuditEvent)
 }

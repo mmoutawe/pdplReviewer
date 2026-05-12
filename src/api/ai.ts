@@ -1,4 +1,5 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured } from '../lib/dataverse'
+import { getDataverseToken } from './auth'
 import { aiStreamStore } from '../store'
 import { streamTokens } from '../lib/mockAi'
 import { resetAIStream } from '../store'
@@ -56,7 +57,6 @@ async function callAzureOpenAI(message: string): Promise<string> {
         { role: 'system', content: AZURE_SYSTEM_PROMPT },
         { role: 'user',   content: message },
       ],
-
       max_completion_tokens: 1024,
       response_format: { type: 'json_object' },
     }),
@@ -73,8 +73,8 @@ async function callAzureOpenAI(message: string): Promise<string> {
 
 /**
  * Streams an AI response.
- * - request_builder with VITE_GEMINI_API_KEY: calls Gemini directly from browser
- * - When Supabase is configured: calls the ai-stream Edge Function via SSE
+ * - request_builder with VITE_AZURE_OPENAI_KEY: calls Azure OpenAI directly
+ * - When Dataverse is configured: calls the VITE_PA_AI_STREAM_URL Power Automate flow via SSE
  * - Otherwise: falls back to local mock streaming
  */
 export async function streamAI(opts: AIStreamOptions): Promise<string> {
@@ -94,7 +94,8 @@ export async function streamAI(opts: AIStreamOptions): Promise<string> {
     }
   }
 
-  if (!isSupabaseConfigured || !supabase) {
+  const paStreamUrl = viteEnv.VITE_PA_AI_STREAM_URL
+  if (!isDataverseConfigured || !paStreamUrl) {
     // Demo mode: simulate token-by-token streaming
     resetAIStream()
     aiStreamStore.setState({ streaming: true, tokens: [], done: false, error: null })
@@ -108,27 +109,22 @@ export async function streamAI(opts: AIStreamOptions): Promise<string> {
     return fullText
   }
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
-
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL
-  const url = `${supabaseUrl}/functions/v1/ai-stream`
+  const tok = await getDataverseToken()
 
   aiStreamStore.setState({ streaming: true, tokens: [], done: false, error: null })
 
-  const response = await fetch(url, {
+  const response = await fetch(paStreamUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': viteEnv.VITE_SUPABASE_ANON_KEY ?? '',
+      'Authorization': `Bearer ${tok}`,
     },
     body: JSON.stringify({
-      feature: opts.feature,
-      message: opts.message,
+      feature:  opts.feature,
+      message:  opts.message,
       ticketId: opts.ticketId,
       policyId: opts.policyId,
-      context: opts.context,
+      context:  opts.context,
     }),
   })
 
@@ -174,27 +170,23 @@ export async function streamAI(opts: AIStreamOptions): Promise<string> {
 }
 
 /**
- * Generates an external recipient link via the external-link Edge Function.
+ * Generates an external recipient link via a Power Automate HTTP-triggered flow.
+ * Set VITE_PA_EL_GENERATE_URL to the flow's HTTP trigger URL.
  */
 export async function generateExternalLink(
   ticketId: string,
   recipientEmail: string,
   expiresInHours = 72,
 ): Promise<{ token: string; link: string; expiresAt: string }> {
-  if (!supabase) throw new Error('Supabase not configured')
+  const url = viteEnv.VITE_PA_EL_GENERATE_URL
+  if (!url) throw new Error('VITE_PA_EL_GENERATE_URL is not configured')
 
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
-
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL
-  const url = `${supabaseUrl}/functions/v1/external-link/generate`
-
+  const tok = await getDataverseToken()
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': viteEnv.VITE_SUPABASE_ANON_KEY ?? '',
+      'Authorization': `Bearer ${tok}`,
     },
     body: JSON.stringify({ ticketId, recipientEmail, expiresInHours }),
   })
@@ -205,6 +197,7 @@ export async function generateExternalLink(
 
 /**
  * Redeems an external link token (no auth required).
+ * Set VITE_PA_EL_REDEEM_URL to the flow's HTTP trigger URL.
  */
 export async function redeemExternalLink(token: string): Promise<{
   ticket: Record<string, unknown>
@@ -213,15 +206,12 @@ export async function redeemExternalLink(token: string): Promise<{
   alreadyDecided: boolean
   decision: string | null
 }> {
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL
-  if (!supabaseUrl) throw new Error('Supabase not configured')
+  const url = viteEnv.VITE_PA_EL_REDEEM_URL
+  if (!url) throw new Error('VITE_PA_EL_REDEEM_URL is not configured')
 
-  const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY
-
-  const url = `${supabaseUrl}/functions/v1/external-link/redeem`
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': anonKey ?? '' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   })
 
@@ -234,21 +224,19 @@ export async function redeemExternalLink(token: string): Promise<{
 
 /**
  * Records an external recipient's decision.
+ * Set VITE_PA_EL_DECIDE_URL to the flow's HTTP trigger URL.
  */
 export async function submitExternalDecision(
   token: string,
   decision: 'approve' | 'reject',
   notes?: string,
 ): Promise<void> {
-  const supabaseUrl = viteEnv.VITE_SUPABASE_URL
-  if (!supabaseUrl) throw new Error('Supabase not configured')
+  const url = viteEnv.VITE_PA_EL_DECIDE_URL
+  if (!url) throw new Error('VITE_PA_EL_DECIDE_URL is not configured')
 
-  const anonKey = viteEnv.VITE_SUPABASE_ANON_KEY
-
-  const url = `${supabaseUrl}/functions/v1/external-link/decide`
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'apikey': anonKey ?? '' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, decision, notes }),
   })
 

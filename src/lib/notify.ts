@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabase'
+import { dvList, dvCreate, isDataverseConfigured, T } from './dataverse'
 import type { NotificationType } from '../data/types'
 
 export interface NotifyParams {
@@ -13,35 +13,30 @@ export interface NotifyParams {
 
 /**
  * Insert a notification if the user's preference for this type is enabled.
- * Falls back silently in demo mode (no Supabase).
+ * Falls back silently in demo mode (no Dataverse).
  */
 export async function notify(params: NotifyParams): Promise<void> {
-  if (!isSupabaseConfigured || !supabase) return
+  if (!isDataverseConfigured) return
 
   try {
-    // Check user preference
-    const { data: pref } = await (supabase as any)
-      .from('notification_preferences')
-      .select('in_app')
-      .eq('user_id', params.userId)
-      .eq('type', params.type)
-      .maybeSingle()
+    // Check user preference (default to enabled if no row exists)
+    const prefs = await dvList<Record<string, unknown>>(
+      T.notifPreferences,
+      `$filter=pdplr_userid eq '${params.userId}' and pdplr_type eq '${params.type}'&$top=1`,
+    )
+    if (prefs.length && prefs[0]['pdplr_inapp'] === false) return
 
-    // Default to enabled if no preference row exists
-    if (pref && pref.in_app === false) return
-
-    await (supabase as any)
-      .from('notifications')
-      .insert({
-        user_id:      params.userId,
-        type:         params.type,
-        title:        params.title,
-        body:         params.body,
-        link:         params.link ?? null,
-        action_label: params.actionLabel ?? null,
-        ticket_id:    params.ticketId ?? null,
-        read:         false,
-      })
+    await dvCreate(T.notifications, {
+      pdplr_userid:      params.userId,
+      pdplr_type:        params.type,
+      pdplr_title:       params.title,
+      pdplr_body:        params.body,
+      pdplr_link:        params.link ?? null,
+      pdplr_actionlabel: params.actionLabel ?? null,
+      pdplr_ticketid:    params.ticketId ?? null,
+      pdplr_read:        false,
+      pdplr_ts:          new Date().toISOString(),
+    })
   } catch {
     // Non-fatal — notifications must never break core flows
   }

@@ -1,7 +1,7 @@
 /* Reactive store — publish/subscribe pattern.
  *
- * When VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set, the store
- * initializes from the live database and subscribes to realtime updates.
+ * When VITE_DATAVERSE_URL + VITE_MSAL_CLIENT_ID are set, the store
+ * initializes from the live Dataverse environment and polls for updates.
  * Without those env vars it falls back to local seed data so the demo
  * works with zero backend setup.
  */
@@ -12,7 +12,7 @@ import {
   TICKETS as SEED_TICKETS,
   USERS,
 } from '../data/seed'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { isDataverseConfigured } from '../lib/dataverse'
 import { fetchTickets } from '../api/tickets'
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, subscribeToNotifications } from '../api/notifications'
 import { apiGetSession, apiSignOut, onAuthStateChange } from '../api/auth'
@@ -43,12 +43,12 @@ const defaultDemoUser = USERS.find((u) => u.id === savedUserId) ?? USERS.find((u
 export const authStore = createStore({
   user: defaultDemoUser,
   isSignedIn: !!savedUserId,
-  loading: isSupabaseConfigured,    // true while session check is in-flight
+  loading: isDataverseConfigured,    // true while session check is in-flight
 })
 
-// Demo mode (no Supabase): persona switcher
+// Demo mode (no Dataverse): persona switcher
 export function signIn(userId: string) {
-  if (isSupabaseConfigured) return  // use apiSignIn from auth.ts instead
+  if (isDataverseConfigured) return  // use apiSignIn from auth.ts instead
   const user = USERS.find((u) => u.id === userId)
   if (!user) return
   sessionStorage.setItem(ACTIVE_USER_KEY, userId)
@@ -57,7 +57,7 @@ export function signIn(userId: string) {
 }
 
 export function signOut() {
-  if (isSupabaseConfigured) {
+  if (isDataverseConfigured) {
     void apiSignOut().then(() => {
       sessionStorage.removeItem(ACTIVE_USER_KEY)
       authStore.setState({ user: USERS.find((u) => u.role === 'requester')!, isSignedIn: false })
@@ -68,8 +68,8 @@ export function signOut() {
   authStore.setState({ user: USERS.find((u) => u.role === 'requester')!, isSignedIn: false })
 }
 
-// When Supabase is configured, restore session on page load
-if (isSupabaseConfigured) {
+// When Dataverse is configured, restore session on page load
+if (isDataverseConfigured) {
   void apiGetSession().then((user) => {
     if (user) {
       authStore.setState({ user, isSignedIn: true, loading: false })
@@ -102,7 +102,7 @@ export function markNotifRead(id: string) {
       n.id === id ? { ...n, read: true } : n
     ),
   })
-  if (isSupabaseConfigured) void markNotificationRead(id)
+  if (isDataverseConfigured) void markNotificationRead(id)
 }
 
 export function markAllRead(userId: string) {
@@ -111,7 +111,7 @@ export function markAllRead(userId: string) {
       n.userId === userId ? { ...n, read: true } : n
     ),
   })
-  if (isSupabaseConfigured) void markAllNotificationsRead(userId)
+  if (isDataverseConfigured) void markAllNotificationsRead(userId)
 }
 
 export function unreadCount(userId: string): number {
@@ -121,8 +121,8 @@ export function unreadCount(userId: string): number {
 // ─── Ticket store ────────────────────────────────────────────────────────────
 
 export const ticketStore = createStore({
-  tickets: isSupabaseConfigured ? [] as Ticket[] : [...SEED_TICKETS],
-  loading: isSupabaseConfigured,
+  tickets: isDataverseConfigured ? [] as Ticket[] : [...SEED_TICKETS],
+  loading: isDataverseConfigured,
 })
 
 export function updateTicket(id: string, partial: Partial<Ticket>) {
@@ -176,7 +176,7 @@ export function demoAddReturnComment(ticketId: string, message: string, byRole: 
 }
 
 export async function refreshTickets() {
-  if (!isSupabaseConfigured) return
+  if (!isDataverseConfigured) return
   ticketStore.setState({ loading: true })
   try {
     const tickets = await fetchTickets()
@@ -191,7 +191,7 @@ export async function refreshTickets() {
 let _notifUnsubscribe: (() => void) | null = null
 
 async function loadUserData(user: User) {
-  if (!isSupabaseConfigured || !supabase) return
+  if (!isDataverseConfigured) return
 
   // Tickets
   ticketStore.setState({ loading: true })
@@ -208,7 +208,7 @@ async function loadUserData(user: User) {
     notifStore.setState({ items })
   } catch { /* noop */ }
 
-  // Realtime notification subscription
+  // Poll for new notifications
   _notifUnsubscribe?.()
   _notifUnsubscribe = subscribeToNotifications(user.id, (n) => {
     notifStore.setState({ items: [n, ...notifStore.getState().items] })

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { isSupabaseConfigured } from '../lib/supabase'
+﻿import { useEffect, useState, useCallback } from 'react'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchTemplates, uploadTemplate, toggleTemplateActive, deleteTemplate, downloadTemplate } from '../api/templatesLibrary'
 import { EmptyState } from '../components/primitives'
 import { showToast, authStore } from '../store'

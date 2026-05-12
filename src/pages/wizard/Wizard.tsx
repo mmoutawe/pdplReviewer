@@ -7,7 +7,7 @@ import { FormField } from '../../components/forms'
 import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore, demoAddVendor, demoAddProject } from '../../store'
 import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
-import { isSupabaseConfigured } from '../../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../../lib/dataverse'
 import { createTicket, submitTicket } from '../../api/tickets'
 import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, type RequestBuilderType } from '../../api/aiRequestBuilder'
 import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
@@ -518,7 +518,7 @@ export default function Wizard() {
             consentMechanism: form.consentObtained ? 'explicit' : undefined,
           },
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-        })
+        }, user.id)
         const ready = await submitTicket(ticket.id)
         updateTicket(ready.id, ready)
         clearDraft()

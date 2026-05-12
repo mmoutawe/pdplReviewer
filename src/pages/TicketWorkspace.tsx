@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment, lookupVendor, lookupProject } from '../store'
@@ -14,7 +14,7 @@ import { CitationChip } from '../components/AICoPilotPanel'
 import { AuditTimeline } from '../components/AuditTimeline'
 import { CommentThread } from '../components/CommentThread'
 import { formatDate, formatDateTime } from '../lib/utils'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { exportAssessmentPdf } from '../lib/exportAssessmentPdf'
 import { exportTicketDocx } from '../lib/exportTicketDocx'
 import { getWorkflowSettings } from '../lib/workflowSettings'
@@ -185,7 +185,7 @@ export default function TicketWorkspace() {
     try {
       if (isSupabaseConfigured) {
         const verdict = action === 'return' ? 'return' : action === 'approve' ? 'approve' : 'escalate'
-        await saveReviewDecision(ticket.id, 'data_management', verdict as 'approve' | 'return' | 'escalate', reviewComment || undefined)
+        await saveReviewDecision(ticket.id, 'data_management', verdict as 'approve' | 'return' | 'escalate', reviewComment || undefined, user.id)
         const updated = await transitionTicket(ticket.id, newState, reviewComment || undefined)
         updateTicket(ticket.id, updated)
       } else {
@@ -213,7 +213,7 @@ export default function TicketWorkspace() {
     setRequesterReplying(true)
     try {
       if (isSupabaseConfigured) {
-        if (requesterReply.trim()) await addReturnComment(ticket.id, requesterReply)
+        if (requesterReply.trim()) await addReturnComment(ticket.id, requesterReply, undefined, user.id, user.role)
         const updated = await transitionTicket(ticket.id, 'in_data_management', 'Resubmitted after addressing return comments')
         updateTicket(updated.id, updated)
         await refreshTickets()
@@ -514,7 +514,7 @@ export default function TicketWorkspace() {
                     readOnly={false}
                     onReply={async (msg) => {
                       if (isSupabaseConfigured) {
-                        try { await addReturnComment(ticket.id, msg); await refreshTickets(); showToast('Comment added.', 'success') }
+                        try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Comment added.', 'success') }
                         catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
                       } else {
                         demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
@@ -865,7 +865,7 @@ export default function TicketWorkspace() {
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg); await refreshTickets(); showToast('Reply added.', 'success') }
+                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
                       catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
                     } else {
                       demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
@@ -1045,7 +1045,7 @@ export default function TicketWorkspace() {
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg); await refreshTickets(); showToast('Reply added.', 'success') }
+                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
                       catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
                     } else {
                       demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
@@ -1122,7 +1122,7 @@ export default function TicketWorkspace() {
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg); await refreshTickets(); showToast('Reply added.', 'success') }
+                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
                       catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
                     } else {
                       demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
@@ -1481,6 +1481,7 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
 
 function ReviewActions({ ticket, role, userName }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security'; userName: string }) {
   const navigate = useNavigate()
+  const { user } = useStore(authStore)
   const [pending, setPending] = useState<'approve' | 'return' | 'reject' | null>(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -1509,7 +1510,7 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
     setSaving(true)
     try {
       if (isSupabaseConfigured) {
-        await saveReviewDecision(ticket.id, role, pending, notes || undefined)
+        await saveReviewDecision(ticket.id, role, pending, notes || undefined, user.id)
         const updated = await transitionTicket(ticket.id, nextState(pending), notes || undefined)
         updateTicket(ticket.id, updated)
       } else {

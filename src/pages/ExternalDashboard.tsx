@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+﻿import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authStore, signOut } from '../store'
 import { useStore } from '../hooks/useStore'
@@ -7,7 +7,7 @@ import Logo from '../components/Logo'
 import { StatusPill } from '../components/primitives'
 import { REQUEST_TYPE_LABELS } from '../data/seed'
 import { formatDate } from '../lib/utils'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 
 export default function ExternalDashboard() {
   useEffect(() => { document.title = 'External Portal — PDPL Reviewer' }, [])

@@ -1,48 +1,46 @@
-import { supabase, toNotification } from '../lib/supabase'
+import { dvList, dvUpdate, T, toNotification, startPolling } from '../lib/dataverse'
 import type { Notification } from '../data/types'
 
+type DvRow = Record<string, unknown>
+
 export async function fetchNotifications(userId: string): Promise<Notification[]> {
-  if (!supabase) throw new Error('Supabase not configured')
-
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('ts', { ascending: false })
-    .limit(100)
-
-  if (error) throw error
-  return (data ?? []).map(toNotification)
+  const rows = await dvList<DvRow>(
+    T.notifications,
+    `$filter=pdplr_userid eq '${userId}'&$orderby=pdplr_ts desc&$top=100`,
+  )
+  return rows.map(toNotification)
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  await supabase.from('notifications').update({ read: true }).eq('id', id)
+  await dvUpdate(T.notifications, id, { pdplr_read: true })
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  if (!supabase) throw new Error('Supabase not configured')
-  await supabase.from('notifications').update({ read: true })
-    .eq('user_id', userId).eq('read', false)
+  const rows = await dvList<DvRow>(
+    T.notifications,
+    `$filter=pdplr_userid eq '${userId}' and pdplr_read eq false&$select=pdplr_notificationid`,
+  )
+  await Promise.all(
+    rows.map((r) => dvUpdate(T.notifications, r['pdplr_notificationid'] as string, { pdplr_read: true })),
+  )
 }
 
+// Polls for new notifications every 20 seconds (replaces Supabase realtime)
 export function subscribeToNotifications(
   userId: string,
   onNew: (n: Notification) => void,
-) {
-  if (!supabase) return () => {}
+): () => void {
+  let latestTs = new Date().toISOString()
 
-  const channel = supabase
-    .channel(`notif:${userId}`)
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'notifications',
-      filter: `user_id=eq.${userId}`,
-    }, (payload) => {
-      onNew(toNotification(payload.new as Parameters<typeof toNotification>[0]))
-    })
-    .subscribe()
-
-  return () => { void supabase!.removeChannel(channel) }
+  return startPolling(async () => {
+    const rows = await dvList<DvRow>(
+      T.notifications,
+      `$filter=pdplr_userid eq '${userId}' and pdplr_ts gt '${latestTs}'&$orderby=pdplr_ts asc`,
+    )
+    for (const r of rows) {
+      const n = toNotification(r)
+      latestTs = n.ts
+      onNew(n)
+    }
+  }, 20_000)
 }

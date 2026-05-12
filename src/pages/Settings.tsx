@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { authStore, showToast } from '../store'
 import { useStore } from '../hooks/useStore'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { getWorkflowSettings, setWorkflowSetting, type WorkflowSettings } from '../lib/workflowSettings'
 import {
   fetchAppSettings, updateDocValidationSetting,

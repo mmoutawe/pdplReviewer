@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { isSupabaseConfigured } from '../lib/supabase'
+﻿import { useEffect, useState, useCallback } from 'react'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchPreferences, upsertPreference } from '../api/notificationPreferences'
 import { showToast, authStore } from '../store'
 import { useStore } from '../hooks/useStore'

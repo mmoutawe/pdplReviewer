@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
+import { apiUpdatePassword } from '../api/auth'
 import { showToast, authStore } from '../store'
 import { useStore } from '../hooks/useStore'
 import Logo from '../components/Logo'
@@ -9,7 +10,7 @@ export default function ChangePassword() {
   useEffect(() => { document.title = 'Change Password — PDPL Reviewer' }, [])
 
   const navigate   = useNavigate()
-  const { user }   = useStore(authStore)
+  useStore(authStore)
   const [pw, setPw]   = useState('')
   const [pw2, setPw2] = useState('')
   const [busy, setBusy] = useState(false)
@@ -18,14 +19,17 @@ export default function ChangePassword() {
     e.preventDefault()
     if (pw.length < 10) { showToast('Use at least 10 characters.', 'error'); return }
     if (pw !== pw2)     { showToast('Passwords do not match.', 'error'); return }
-    if (!isSupabaseConfigured || !supabase) { showToast('Password change requires Supabase.', 'error'); return }
+    if (!isSupabaseConfigured) { showToast('Password change requires a Dataverse backend.', 'error'); return }
     setBusy(true)
-    const { error } = await supabase.auth.updateUser({ password: pw })
-    if (error) { showToast(error.message, 'error'); setBusy(false); return }
-    await (supabase as any).from('profiles').update({ must_change_password: false }).eq('id', user.id)
-    showToast('Password updated successfully.', 'success')
-    setBusy(false)
-    navigate('/dashboard', { replace: true })
+    try {
+      await apiUpdatePassword(pw)
+      showToast('Password updated successfully.', 'success')
+      navigate('/dashboard', { replace: true })
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Password update failed.', 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -45,7 +49,7 @@ export default function ChangePassword() {
             <p style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.6 }}>
               {isSupabaseConfigured
                 ? "You're using a temporary password. Please choose a new one to continue."
-                : 'Password change requires a Supabase backend. This feature is not available in demo mode.'}
+                : 'Password change requires a Dataverse backend. This feature is not available in demo mode.'}
             </p>
           </div>
 

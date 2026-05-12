@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore } from '../store'
 import { useStore } from '../hooks/useStore'
@@ -7,7 +7,7 @@ import { StatusPill, SLAIndicator, Avatar, KPI, EmptyState } from '../components
 import { FilterBar } from '../components/table'
 import type { Role, Ticket, TicketState } from '../data/types'
 import { formatDate, slaStatus } from '../lib/utils'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchTickets, subscribeToTickets } from '../api/tickets'
 import { getCachedUser } from '../lib/userCache'
 
