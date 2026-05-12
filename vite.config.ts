@@ -9,7 +9,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-msal': ['@azure/msal-browser'],
           'seed-data': ['./src/data/seed', './src/data/pdpl'],
         },
       },
