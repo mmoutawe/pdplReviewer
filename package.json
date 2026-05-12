@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup:dataverse": "node scripts/setup-dataverse.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.5.0",
@@ -15,6 +16,7 @@
     "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
+    "@azure/identity": "^4.13.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
