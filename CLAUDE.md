@@ -54,7 +54,7 @@ VITE_DATAVERSE_URL=https://orgXXX.crm4.dynamics.com
 VITE_DV_TABLE_PREFIX=pdplr_
 VITE_MSAL_CLIENT_ID=<app-registration-client-id>
 VITE_MSAL_TENANT_ID=<tenant-id>
-VITE_AF_BASE_URL=https://<your-functions-app>.azurewebsites.net/api
+VITE_AF_BASE_URL=https://pdpl-reviewer-api.azurewebsites.net/api
 VITE_AZURE_OPENAI_KEY=<key>
 VITE_AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 VITE_AZURE_OPENAI_DEPLOYMENT=gpt-4o
@@ -73,7 +73,7 @@ Without `VITE_DATAVERSE_URL` the app runs in demo mode (mock data, no persistenc
 - [ ] Sign in at `http://localhost:5173`
 
 ## What's NOT done yet (as of last session)
-- Azure Functions not deployed (code in `azure-functions/` — needs `func azure functionapp publish`)
+- Azure Functions deployed at `https://pdpl-reviewer-api.azurewebsites.net/api` (Node 22, Sweden Central, rg-mmoutawe-2245)
 - Reference data (vendors, projects, policies) still loaded from `src/data/seed.ts`, not Dataverse
 - Frontend not deployed to production
 

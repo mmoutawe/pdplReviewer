@@ -62,6 +62,8 @@ async function fetchUserProfile(account: AccountInfo): Promise<User | null> {
 export async function apiSignIn(email: string, _password: string): Promise<User> {
   if (!isDataverseConfigured) throw new Error('Dataverse not configured')
 
+  await msalInstance.initialize()
+
   const result: AuthenticationResult = await msalInstance.loginPopup({
     scopes: DV_SCOPES,
     loginHint: email,

@@ -114,7 +114,7 @@ function SupabaseSignIn() {
                   Forgot password?
                 </Link>
               </div>
-              <input id="password" type="password" autoComplete="current-password" required value={password}
+              <input id="password" type="password" autoComplete="current-password" value={password}
                 onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle}
                 onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
