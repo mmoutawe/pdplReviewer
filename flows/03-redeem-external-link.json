@@ -1,0 +1,158 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "tenant_id":     { "type": "string" },
+    "client_id":     { "type": "string" },
+    "client_secret": { "type": "securestring" },
+    "dataverse_url": { "type": "string" },
+    "dv_prefix":     { "defaultValue": "pdplr_", "type": "string" }
+  },
+  "triggers": {
+    "When_HTTP_request_received": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": { "token": { "type": "string" } },
+          "required": ["token"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_AAD_Token": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "https://login.microsoftonline.com/@{parameters('tenant_id')}/oauth2/v2.0/token",
+        "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+        "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{encodeUriComponent(parameters('client_secret'))}&scope=@{parameters('dataverse_url')}/.default"
+      }
+    },
+    "List_Link_By_Token": {
+      "type": "Http",
+      "runAfter": { "Get_AAD_Token": ["Succeeded"] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}externallinks?$filter=@{parameters('dv_prefix')}token eq '@{triggerBody()?['token']}'&$top=1",
+        "headers": {
+          "Authorization": "Bearer @{body('Get_AAD_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0"
+        }
+      }
+    },
+    "Check_Token_Not_Found": {
+      "type": "If",
+      "runAfter": { "List_Link_By_Token": ["Succeeded"] },
+      "expression": {
+        "equals": ["@empty(body('List_Link_By_Token')?['value'])", "@true"]
+      },
+      "actions": {
+        "Respond_404": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 404,
+            "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            "body": { "error": "Invalid or expired link" }
+          }
+        },
+        "Terminate_404": {
+          "type": "Terminate",
+          "runAfter": { "Respond_404": ["Succeeded"] },
+          "inputs": { "runStatus": "Succeeded" }
+        }
+      },
+      "else": { "actions": {} }
+    },
+    "Check_Revoked": {
+      "type": "If",
+      "runAfter": { "Check_Token_Not_Found": ["Succeeded"] },
+      "expression": {
+        "equals": [
+          "@body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'revoked')]",
+          "@true"
+        ]
+      },
+      "actions": {
+        "Respond_403": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 403,
+            "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            "body": { "error": "This link has been revoked" }
+          }
+        },
+        "Terminate_403": {
+          "type": "Terminate",
+          "runAfter": { "Respond_403": ["Succeeded"] },
+          "inputs": { "runStatus": "Succeeded" }
+        }
+      },
+      "else": { "actions": {} }
+    },
+    "Check_Expired": {
+      "type": "If",
+      "runAfter": { "Check_Revoked": ["Succeeded"] },
+      "expression": {
+        "and": [
+          { "not": { "equals": ["@body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'expiresat')]", "@null"] } },
+          { "less": ["@body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'expiresat')]", "@utcNow()"] }
+        ]
+      },
+      "actions": {
+        "Respond_410": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 410,
+            "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            "body": { "error": "This link has expired" }
+          }
+        },
+        "Terminate_410": {
+          "type": "Terminate",
+          "runAfter": { "Respond_410": ["Succeeded"] },
+          "inputs": { "runStatus": "Succeeded" }
+        }
+      },
+      "else": { "actions": {} }
+    },
+    "Get_Ticket": {
+      "type": "Http",
+      "runAfter": { "Check_Expired": ["Succeeded"] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}tickets?$filter=@{parameters('dv_prefix')}ticketnumber eq '@{body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'ticketid')]}'&$top=1&$select=@{parameters('dv_prefix')}ticketnumber,@{parameters('dv_prefix')}type,@{parameters('dv_prefix')}state,@{parameters('dv_prefix')}title,@{parameters('dv_prefix')}description",
+        "headers": {
+          "Authorization": "Bearer @{body('Get_AAD_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0"
+        }
+      }
+    },
+    "Respond_success": {
+      "type": "Response",
+      "runAfter": { "Get_Ticket": ["Succeeded"] },
+      "inputs": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        },
+        "body": {
+          "token":          "@{triggerBody()?['token']}",
+          "expiresAt":      "@{body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'expiresat')]}",
+          "recipientEmail": "@{body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'recipientemail')]}",
+          "alreadyDecided": "@{not(equals(body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'status')], 'pending'))}",
+          "decision":       "@{if(equals(body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'status')], 'pending'), null, body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'status')])}",
+          "ticket":         "@{body('Get_Ticket')?['value']?[0]}"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

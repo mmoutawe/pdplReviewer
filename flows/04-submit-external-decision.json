@@ -1,0 +1,114 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "tenant_id":     { "type": "string" },
+    "client_id":     { "type": "string" },
+    "client_secret": { "type": "securestring" },
+    "dataverse_url": { "type": "string" },
+    "dv_prefix":     { "defaultValue": "pdplr_", "type": "string" }
+  },
+  "triggers": {
+    "When_HTTP_request_received": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "token":    { "type": "string" },
+            "decision": { "type": "string", "enum": ["approve", "reject"] },
+            "notes":    { "type": "string" }
+          },
+          "required": ["token", "decision"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_AAD_Token": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "https://login.microsoftonline.com/@{parameters('tenant_id')}/oauth2/v2.0/token",
+        "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+        "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{encodeUriComponent(parameters('client_secret'))}&scope=@{parameters('dataverse_url')}/.default"
+      }
+    },
+    "List_Link_By_Token": {
+      "type": "Http",
+      "runAfter": { "Get_AAD_Token": ["Succeeded"] },
+      "inputs": {
+        "method": "GET",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}externallinks?$filter=@{parameters('dv_prefix')}token eq '@{triggerBody()?['token']}'&$top=1",
+        "headers": {
+          "Authorization": "Bearer @{body('Get_AAD_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0"
+        }
+      }
+    },
+    "Check_Token_Valid": {
+      "type": "If",
+      "runAfter": { "List_Link_By_Token": ["Succeeded"] },
+      "expression": {
+        "equals": ["@empty(body('List_Link_By_Token')?['value'])", "@true"]
+      },
+      "actions": {
+        "Respond_404": {
+          "type": "Response",
+          "inputs": {
+            "statusCode": 404,
+            "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            "body": { "error": "Invalid token" }
+          }
+        },
+        "Terminate_404": {
+          "type": "Terminate",
+          "runAfter": { "Respond_404": ["Succeeded"] },
+          "inputs": { "runStatus": "Succeeded" }
+        }
+      },
+      "else": { "actions": {} }
+    },
+    "Update_Link_Status": {
+      "type": "Http",
+      "runAfter": { "Check_Token_Valid": ["Succeeded"] },
+      "inputs": {
+        "method": "PATCH",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}externallinks(@{body('List_Link_By_Token')?['value']?[0]?[concat(parameters('dv_prefix'), 'externallinkid')]})",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer @{body('Get_AAD_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0"
+        },
+        "body": {
+          "@{parameters('dv_prefix')}status":     "@{triggerBody()?['decision']}",
+          "@{parameters('dv_prefix')}approvedat": "@{utcNow()}"
+        }
+      }
+    },
+    "Respond_success": {
+      "type": "Response",
+      "runAfter": { "Update_Link_Status": ["Succeeded"] },
+      "inputs": {
+        "statusCode": 200,
+        "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        "body": {}
+      }
+    },
+    "Respond_error": {
+      "type": "Response",
+      "runAfter": { "Update_Link_Status": ["Failed"] },
+      "inputs": {
+        "statusCode": 500,
+        "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        "body": { "error": "@{body('Update_Link_Status')}" }
+      }
+    }
+  },
+  "outputs": {}
+}
