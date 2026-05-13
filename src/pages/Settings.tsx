@@ -185,7 +185,7 @@ export default function Settings() {
               )}
               {!isSupabaseConfigured && (
                 <div style={{ fontSize: 11.5, color: 'var(--amber-700)', marginTop: 4, fontStyle: 'italic' }}>
-                  Requires Supabase to persist — changes are local only.
+                  Requires Dataverse to persist — changes are local only.
                 </div>
               )}
             </div>
@@ -209,7 +209,7 @@ export default function Settings() {
           >
             {!isSupabaseConfigured ? (
               <div style={{ padding: '10px 14px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--amber-700)' }}>
-                External link management requires Supabase and the <code>create-external-account</code> edge function.
+                External link management requires a Dataverse connection and the Azure Function <code>generateLink</code>.
               </div>
             ) : (
               <>

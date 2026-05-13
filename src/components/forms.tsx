@@ -76,10 +76,29 @@ export function EvidenceUploader({
 
   async function handleFiles(files: FileList) {
     if (!ticketId || !isSupabaseConfigured) {
-      // Demo: show a toast-style inline message instead of uploading
-      const demos = Array.from(files).map((f) => ({ name: f.name, percent: 100 }))
-      setUploading(demos)
-      setTimeout(() => setUploading([]), 1500)
+      // Demo mode: create in-memory blob attachments so they appear in the list
+      const now = new Date().toISOString()
+      const fileArray = Array.from(files)
+      setUploading(fileArray.map((f) => ({ name: f.name, percent: 100 })))
+      for (const file of fileArray) {
+        const fakeAttachment: Attachment = {
+          id: crypto.randomUUID(),
+          ticketId: ticketId ?? '',
+          filename: file.name,
+          sizeBytes: file.size,
+          contentType: file.type || 'application/octet-stream',
+          uploadedBy: '',
+          uploadedAt: now,
+          storageBucket: 'demo',
+          storagePath: file.name,
+          signedUrl: URL.createObjectURL(file),
+          scanStatus: 'clean',
+          classification: 'internal',
+          category: 'evidence',
+        }
+        onUploaded?.(fakeAttachment)
+      }
+      setTimeout(() => setUploading([]), 800)
       return
     }
 
@@ -200,7 +219,7 @@ export function EvidenceUploader({
           </button>
           <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>
             PDF, Word, Excel, Images up to 25 MB
-            {!isSupabaseConfigured && <span style={{ color: 'var(--amber-600)', marginLeft: 6 }}>(demo — uploads not persisted)</span>}
+            {!isSupabaseConfigured && <span style={{ color: 'var(--amber-600)', marginLeft: 6 }}>(demo — not persisted across sessions)</span>}
           </span>
         </div>
       )}

@@ -168,7 +168,7 @@ export default function DocumentLibrary() {
 
       {!isSupabaseConfigured && (
         <div style={{ margin: '0 24px 16px', padding: '12px 16px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--amber-700)' }}>
-          ⚠ Document Library requires Supabase. Configure <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to upload and manage documents.
+          ⚠ Document Library requires a Dataverse connection. Configure <code>VITE_DATAVERSE_URL</code> and MSAL credentials in <code>.env.local</code> to upload and manage documents.
         </div>
       )}
 
@@ -188,7 +188,7 @@ export default function DocumentLibrary() {
       ) : visible.length === 0 ? (
         <EmptyState
           title={isSupabaseConfigured ? 'No documents found' : 'No documents yet'}
-          body={isSupabaseConfigured ? 'Adjust filters or upload your first document.' : 'Connect Supabase to manage project documents.'}
+          body={isSupabaseConfigured ? 'Adjust filters or upload your first document.' : 'Connect Dataverse to upload and manage project documents.'}
           icon="📄"
         />
       ) : (

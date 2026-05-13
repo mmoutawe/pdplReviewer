@@ -482,7 +482,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                   </div>
                   {!isSupabaseConfigured && (
                     <div style={{ fontSize: 11.5, color: 'var(--amber-700)', marginTop: 4, fontStyle: 'italic' }}>
-                      Requires Supabase to persist — changes are local only.
+                      Requires Dataverse to persist — changes are local only.
                     </div>
                   )}
                 </div>
@@ -563,7 +563,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
 
               {!isSupabaseConfigured && (
                 <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--amber-700)' }}>
-                  External link management requires Supabase and the <code>create-external-account</code> edge function.
+                  External link management requires a Dataverse connection and the Azure Function <code>generateLink</code>.
                 </div>
               )}
 
@@ -862,7 +862,7 @@ function InviteUserDialog({ onClose, onInvited }: {
           </div>
           {!isSupabaseConfigured && (
             <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
-              Demo mode — user will be added to the local list this session only. In production, an invitation email would be sent via Supabase.
+              Demo mode — user will be added to the local list this session only. In production, the user is created in Dataverse via <code>npm run create:user</code>.
             </p>
           )}
           {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}

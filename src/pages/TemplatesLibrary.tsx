@@ -119,7 +119,7 @@ export default function TemplatesLibrary() {
 
       {!isSupabaseConfigured && (
         <div style={{ margin: '0 24px 16px', padding: '12px 16px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--amber-700)' }}>
-          ⚠ Templates Library requires Supabase. Configure <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to upload and manage templates.
+          ⚠ Templates Library requires a Dataverse connection. Configure <code>VITE_DATAVERSE_URL</code> and MSAL credentials in <code>.env.local</code> to upload and manage templates.
         </div>
       )}
 
@@ -127,7 +127,7 @@ export default function TemplatesLibrary() {
         {loading ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading templates…</div>
         ) : templates.length === 0 ? (
-          <EmptyState title="No templates yet" body={isSupabaseConfigured ? 'Upload your first template using the button above.' : 'Connect Supabase to manage reviewer templates.'} icon="📋" />
+          <EmptyState title="No templates yet" body={isSupabaseConfigured ? 'Upload your first template using the button above.' : 'Connect Dataverse to upload and manage reviewer templates.'} icon="📋" />
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
