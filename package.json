@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "setup:dataverse": "node scripts/setup-dataverse.mjs"
+    "setup:dataverse": "node scripts/setup-dataverse.mjs",
+    "create:user": "node scripts/create-user.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.5.0",

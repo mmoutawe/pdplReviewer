@@ -116,13 +116,12 @@ function boolAttr(name, display, defaultVal = false) {
 }
 
 /** Whole Number attribute */
-function intAttr(name, display, defaultVal = 0) {
+function intAttr(name, display) {
   return {
     '@odata.type': 'Microsoft.Dynamics.CRM.IntegerAttributeMetadata',
     SchemaName: name, DisplayName: label(display),
     RequiredLevel: reqLevel(), Format: 'None',
     MinValue: 0, MaxValue: 2147483647,
-    DefaultValue: defaultVal,
   }
 }
 
@@ -153,6 +152,8 @@ function fileAttr(name, display, maxMB = 128) {
     RequiredLevel: reqLevel(), MaxSizeInKB: maxMB * 1024,
   }
 }
+
+const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 // ── Dataverse API calls ───────────────────────────────────────────────────────
 
@@ -221,23 +222,34 @@ async function createTable(logicalName, displayName, pluralName, entitySetName, 
   return true
 }
 
-/** Adds a column to an existing table, skipping if it already exists. */
+/** Adds a column to an existing table, skipping if it already exists.
+ *  Retries up to 3 times on transient 0x80040216 errors (schema throttle). */
 async function addCol(entityLogical, attr) {
   const attrLogical = attr.SchemaName.toLowerCase()
   if (await columnExists(entityLogical, attrLogical)) return
-  try {
-    await metaPost(`/EntityDefinitions(LogicalName='${entityLogical}')/Attributes`, attr)
-  } catch (err) {
-    // 409 = already exists — safe to ignore
-    if (!String(err).includes('409') && !String(err).includes('already exists')) throw err
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await metaPost(`/EntityDefinitions(LogicalName='${entityLogical}')/Attributes`, attr)
+      return
+    } catch (err) {
+      const msg = String(err)
+      if (msg.includes('409') || msg.includes('already exists')) return
+      if (attempt < 3 && (msg.includes('0x80040216') || msg.includes('0x80048d19'))) {
+        await sleep(attempt * 2000)
+        continue
+      }
+      throw err
+    }
   }
 }
 
-/** Adds a batch of columns, logging each failure non-fatally. */
+/** Adds a batch of columns with a short pause between each to avoid schema throttling. */
 async function addCols(entityLogical, attrs) {
   for (const attr of attrs) {
     try {
       await addCol(entityLogical, attr)
+      await sleep(800)
     } catch (err) {
       console.warn(`    ⚠  ${entityLogical}.${attr.SchemaName}: ${err.message}`)
     }
@@ -299,8 +311,8 @@ async function buildTables() {
     memoAttr(n('tags'),                   'Tags',                   500),
     memoAttr(n('payload'),                'Payload',             1048576),
     memoAttr(n('datadeclaration'),        'Data Declaration',    1048576),
-    intAttr(n('slaackhours'),             'SLA Ack Hours',             24),
-    intAttr(n('sladecisionhours'),        'SLA Decision Hours',        72),
+    intAttr(n('slaackhours'),             'SLA Ack Hours'),
+    intAttr(n('sladecisionhours'),        'SLA Decision Hours'),
     dtAttr(n('slastartedat'),             'SLA Started At'),
     strAttr(n('slaackby'),                'SLA Ack By',               50),
     dtAttr(n('slaackedat'),               'SLA Acked At'),
@@ -441,7 +453,7 @@ async function buildTables() {
     strAttr(n('vendorid'),       'Vendor ID',        50),
     strAttr(n('parentdocumentid'),'Parent Doc ID',   50),
     strAttr(n('documenttype'),   'Document Type',    30),
-    intAttr(n('version'),        'Version',           1),
+    intAttr(n('version'),        'Version'),
     strAttr(n('status'),         'Status',           20),
     strAttr(n('filepath'),       'File Path',       500),
     strAttr(n('filetype'),       'File Type',       100),
