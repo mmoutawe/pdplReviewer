@@ -1,0 +1,22 @@
+{
+  "name": "pdpl-reviewer-functions",
+  "version": "1.0.0",
+  "description": "Azure Functions backend for PDPL Reviewer",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "npm run build && func start",
+    "dev": "concurrently \"tsc -w\" \"func start\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/identity": "^4.5.0",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "typescript": "~5.7.0"
+  }
+}

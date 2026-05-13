@@ -94,7 +94,8 @@ export async function streamAI(opts: AIStreamOptions): Promise<string> {
     }
   }
 
-  const paStreamUrl = viteEnv.VITE_PA_AI_STREAM_URL
+  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const paStreamUrl = afBase ? `${afBase}/aiStream` : viteEnv.VITE_PA_AI_STREAM_URL
   if (!isDataverseConfigured || !paStreamUrl) {
     // Demo mode: simulate token-by-token streaming
     resetAIStream()
@@ -178,8 +179,9 @@ export async function generateExternalLink(
   recipientEmail: string,
   expiresInHours = 72,
 ): Promise<{ token: string; link: string; expiresAt: string }> {
-  const url = viteEnv.VITE_PA_EL_GENERATE_URL
-  if (!url) throw new Error('VITE_PA_EL_GENERATE_URL is not configured')
+  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/generateLink` : viteEnv.VITE_PA_EL_GENERATE_URL
+  if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const tok = await getDataverseToken()
   const res = await fetch(url, {
@@ -206,8 +208,9 @@ export async function redeemExternalLink(token: string): Promise<{
   alreadyDecided: boolean
   decision: string | null
 }> {
-  const url = viteEnv.VITE_PA_EL_REDEEM_URL
-  if (!url) throw new Error('VITE_PA_EL_REDEEM_URL is not configured')
+  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/redeemLink` : viteEnv.VITE_PA_EL_REDEEM_URL
+  if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const res = await fetch(url, {
     method: 'POST',
@@ -231,8 +234,9 @@ export async function submitExternalDecision(
   decision: 'approve' | 'reject',
   notes?: string,
 ): Promise<void> {
-  const url = viteEnv.VITE_PA_EL_DECIDE_URL
-  if (!url) throw new Error('VITE_PA_EL_DECIDE_URL is not configured')
+  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/submitDecision` : viteEnv.VITE_PA_EL_DECIDE_URL
+  if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const res = await fetch(url, {
     method: 'POST',

@@ -7,8 +7,8 @@ A PDPL (Saudi Personal Data Protection Law) compliance intake and review platfor
 - **Frontend:** React 19, Vite, TypeScript, React Router v7
 - **Backend:** Microsoft Dataverse (OData v4 Web API) — sole data store
 - **Auth:** MSAL (`@azure/msal-browser`) + Entra ID — no username/password auth, all via `loginPopup`
-- **AI:** Azure OpenAI (direct from frontend for `request_builder`; Power Automate flow for other features)
-- **Server-side logic:** 5 Azure Logic Apps / Power Automate HTTP-triggered flows (see `flows/`)
+- **AI:** Azure OpenAI (direct from frontend for `request_builder`; Azure Functions for other features)
+- **Server-side logic:** 5 Azure Functions (TypeScript, Node.js v4 model) — see `azure-functions/`; Logic Apps fallback definitions in `flows/`
 - **No Supabase** — fully migrated away; `src/lib/supabase.ts` deleted
 
 ## Key files
@@ -18,7 +18,8 @@ A PDPL (Saudi Personal Data Protection Law) compliance intake and review platfor
 | `src/api/auth.ts` | MSAL sign-in/out, Entra ID token acquisition, user profile lookup |
 | `src/api/tickets.ts` | Ticket CRUD, review decisions, return thread, subscriptions (polling) |
 | `src/api/ai.ts` | Azure OpenAI (direct) + PA flow calls; external link functions |
-| `flows/` | Logic Apps JSON definitions for all 5 server-side flows |
+| `azure-functions/` | Azure Functions TypeScript project — 5 HTTP functions (aiStream, generateLink, redeemLink, submitDecision, createAccount) |
+| `flows/` | Logic Apps JSON fallback definitions (kept for reference / PA deployment) |
 | `scripts/setup-dataverse.mjs` | Creates all 15 Dataverse tables — run once: `npm run setup:dataverse` |
 | `scripts/create-user.mjs` | Creates a user record — run before first sign-in: `npm run create:user` |
 | `DATAVERSE_SETUP.md` | Full table schemas, column names, alternate keys, Azure App Registration steps |
@@ -53,11 +54,7 @@ VITE_DATAVERSE_URL=https://orgXXX.crm4.dynamics.com
 VITE_DV_TABLE_PREFIX=pdplr_
 VITE_MSAL_CLIENT_ID=<app-registration-client-id>
 VITE_MSAL_TENANT_ID=<tenant-id>
-VITE_PA_AI_STREAM_URL=<logic-app-trigger-url>
-VITE_PA_EL_GENERATE_URL=<logic-app-trigger-url>
-VITE_PA_EL_REDEEM_URL=<logic-app-trigger-url>
-VITE_PA_EL_DECIDE_URL=<logic-app-trigger-url>
-VITE_PA_CREATE_ACCOUNT_URL=<logic-app-trigger-url>
+VITE_AF_BASE_URL=https://<your-functions-app>.azurewebsites.net/api
 VITE_AZURE_OPENAI_KEY=<key>
 VITE_AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 VITE_AZURE_OPENAI_DEPLOYMENT=gpt-4o
@@ -70,22 +67,28 @@ Without `VITE_DATAVERSE_URL` the app runs in demo mode (mock data, no persistenc
 - [ ] Enable "Allow public client flows" on the App Registration
 - [ ] `npm run setup:dataverse` — creates all 15 tables (idempotent, safe to re-run)
 - [ ] Register App Registration as Application User in Power Platform Admin Center (System Administrator role)
-- [ ] Deploy 5 flows from `flows/` (Azure Logic Apps or PA code view)
-- [ ] Add flow URLs to `.env.local`
+- [ ] Deploy Azure Functions (`cd azure-functions && npm install && npm run build && func azure functionapp publish <app-name>`)
+- [ ] Add `VITE_AF_BASE_URL` to `.env.local`
 - [ ] `npm run create:user` — creates first admin user record
 - [ ] Sign in at `http://localhost:5173`
 
 ## What's NOT done yet (as of last session)
-- Flows not deployed (definitions written, not deployed — see `flows/`)
+- Azure Functions not deployed (code in `azure-functions/` — needs `func azure functionapp publish`)
 - Reference data (vendors, projects, policies) still loaded from `src/data/seed.ts`, not Dataverse
 - Frontend not deployed to production
 
 ## Commands
 ```bash
-npm run dev               # start dev server
+npm run dev               # start frontend dev server
 npm run build             # production build
 npm run setup:dataverse   # create Dataverse tables (run once)
 npm run create:user       # create/update a user record [role]
+
+# Azure Functions (from azure-functions/ directory)
+npm install               # install function dependencies
+npm run dev               # build + start func host locally (port 7071)
+npm run build             # compile TypeScript
+func azure functionapp publish <app-name>   # deploy to Azure
 ```
 
 ## Coding conventions
