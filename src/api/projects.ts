@@ -30,12 +30,13 @@ export async function createProject(p: Omit<Project, 'id' | 'ticketIds'>): Promi
     pdplr_name:               p.name,
     pdplr_businessunit:       p.businessUnit,
     pdplr_ownerid:            p.ownerId,
-    pdplr_vendorid:           p.vendorId ?? null,
     pdplr_status:             p.status,
     pdplr_datainventorycount: p.dataInventoryCount,
     pdplr_description:        p.description,
     pdplr_startedat:          p.startedAt,
   }
   const row = await dvCreate<DvRow>(T.projects, body)
-  return rowToProject(row)
+  // Preserve vendorId from input — pdplr_vendorid column added in setup-dataverse.mjs;
+  // once setup is re-run the column will be stored, but the link is kept in-memory either way.
+  return { ...rowToProject(row), vendorId: p.vendorId }
 }

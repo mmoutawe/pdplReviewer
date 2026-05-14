@@ -439,6 +439,7 @@ async function buildTables() {
     strAttr(n('code'),               'Code',              50),
     strAttr(n('businessunit'),       'Business Unit',    100),
     strAttr(n('ownerid'),            'Owner ID',          50),
+    strAttr(n('vendorid'),           'Vendor ID',         50),
     strAttr(n('status'),             'Status',            20),
     intAttr(n('datainventorycount'), 'Data Inventory Count'),
     memoAttr(n('description'),       'Description'),
