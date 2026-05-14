@@ -511,6 +511,7 @@ export default function TicketWorkspace() {
                   </div>
                   <CommentThread
                     entries={ticket.returnThread}
+                    attachments={ticket.attachments}
                     readOnly={false}
                     onReply={async (msg) => {
                       if (isSupabaseConfigured) {
@@ -862,6 +863,7 @@ export default function TicketWorkspace() {
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Return Thread</h3>
                 <CommentThread
                   entries={ticket.returnThread}
+                  attachments={ticket.attachments}
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {
@@ -1042,6 +1044,7 @@ export default function TicketWorkspace() {
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Return Thread</h3>
                 <CommentThread
                   entries={ticket.returnThread}
+                  attachments={ticket.attachments}
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {
@@ -1119,6 +1122,7 @@ export default function TicketWorkspace() {
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Return Thread</h3>
                 <CommentThread
                   entries={ticket.returnThread}
+                  attachments={ticket.attachments}
                   readOnly={!canReview}
                   onReply={async (msg) => {
                     if (isSupabaseConfigured) {

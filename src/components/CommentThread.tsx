@@ -1,16 +1,31 @@
 import { useState } from 'react'
-import type { ReturnThreadEntry } from '../data/types'
+import type { ReturnThreadEntry, Attachment } from '../data/types'
 import { getCachedUser } from '../lib/userCache'
 import { Avatar, RoleBadge } from './primitives'
 import { timeAgo } from '../lib/utils'
+import { dvDownloadFile, isDataverseConfigured, T } from '../lib/dataverse'
 
 interface ThreadProps {
   entries: ReturnThreadEntry[]
+  attachments?: Attachment[]
   onReply?: (msg: string) => void
   readOnly?: boolean
 }
 
-export function CommentThread({ entries, onReply, readOnly = false }: ThreadProps) {
+function handleDownload(att: Attachment) {
+  if (att.signedUrl) {
+    const a = document.createElement('a')
+    a.href = att.signedUrl
+    a.download = att.filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } else if (isDataverseConfigured) {
+    void dvDownloadFile(T.attachments, att.id, 'pdplr_filecontent', att.filename)
+  }
+}
+
+export function CommentThread({ entries, attachments = [], onReply, readOnly = false }: ThreadProps) {
   const [draft, setDraft] = useState('')
 
   return (
@@ -21,6 +36,7 @@ export function CommentThread({ entries, onReply, readOnly = false }: ThreadProp
       <ul style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {entries.map((e) => {
           const user = getCachedUser(e.by)
+          const entryAtts = attachments.filter((a) => e.attachmentIds?.includes(a.id))
           return (
             <li key={e.id} style={{
               background: 'var(--surface-0)', border: '1px solid var(--line)',
@@ -37,6 +53,26 @@ export function CommentThread({ entries, onReply, readOnly = false }: ThreadProp
                 </span>
               </div>
               <p style={{ fontSize: 13.5, color: 'var(--ink-700)', lineHeight: 1.65, margin: 0 }}>{e.message}</p>
+              {entryAtts.length > 0 && (
+                <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {entryAtts.map((att) => (
+                    <button
+                      key={att.id}
+                      type="button"
+                      onClick={() => handleDownload(att)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        padding: '4px 8px', border: '1px solid var(--line)',
+                        borderRadius: 'var(--r-sm)', background: 'var(--surface-1)',
+                        fontSize: 12, color: 'var(--ink-700)', cursor: 'pointer',
+                      }}
+                    >
+                      📎 {att.filename}
+                      <span style={{ color: 'var(--ink-400)' }}>({Math.round(att.sizeBytes / 1024)} KB)</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {e.resolvedAt && (
                 <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--emerald-700)', fontWeight: 500 }}>
                   ✓ Resolved {timeAgo(e.resolvedAt)}

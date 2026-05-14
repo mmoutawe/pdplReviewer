@@ -46,10 +46,12 @@ export default function ReturnedResponse() {
   }
 
   async function handleReply(msg: string) {
+    const attachmentIds = newAttachments.map((a) => a.id)
     if (isSupabaseConfigured) {
       try {
-        await addReturnComment(ticket!.id, msg, undefined, user.id, user.role)
+        await addReturnComment(ticket!.id, msg, attachmentIds, user.id, user.role)
         await refreshTickets()
+        setNewAttachments([])
         showToast('Comment added.', 'success')
       } catch (err) {
         showToast(err instanceof Error ? err.message : 'Failed to add comment.', 'error')
@@ -58,6 +60,7 @@ export default function ReturnedResponse() {
     } else {
       const { user } = authStore.getState()
       demoAddReturnComment(ticket!.id, msg, 'requester', user.fullName)
+      setNewAttachments([])
       showToast('Reply added.', 'success')
     }
 
@@ -137,7 +140,11 @@ export default function ReturnedResponse() {
 
         <section aria-labelledby="thread-heading" style={{ marginBottom: 28 }}>
           <h2 id="thread-heading" style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Reviewer comments</h2>
-          <CommentThread entries={ticket.returnThread} onReply={(msg) => void handleReply(msg)} />
+          <CommentThread
+            entries={ticket.returnThread}
+            attachments={[...ticket.attachments, ...newAttachments]}
+            onReply={(msg) => void handleReply(msg)}
+          />
         </section>
 
         <section aria-labelledby="evidence-heading" style={{ marginBottom: 28 }}>
