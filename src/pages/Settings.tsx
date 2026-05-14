@@ -1,8 +1,8 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { authStore, showToast } from '../store'
 import { useStore } from '../hooks/useStore'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
-import { getWorkflowSettings, setWorkflowSetting, type WorkflowSettings } from '../lib/workflowSettings'
+import { getWorkflowSettings, setWorkflowSetting, syncWorkflowSettings, saveWorkflowSettings, type WorkflowSettings } from '../lib/workflowSettings'
 import {
   fetchAppSettings, updateDocValidationSetting,
   fetchExternalLinks, createExternalAccount,
@@ -70,6 +70,7 @@ export default function Settings() {
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [workflowConfig, setWorkflowConfig] = useState<WorkflowSettings>(() => getWorkflowSettings())
+  const settingsIdRef = useRef<string | null>(null)
 
   const [links, setLinks]       = useState<AdminExternalLink[]>([])
   const [linksLoading, setLinksLoading] = useState(false)
@@ -95,9 +96,20 @@ export default function Settings() {
     if (!isSupabaseConfigured) return
     setSettingsLoading(true)
     void fetchAppSettings()
-      .then((s) => setAppSettings(s))
+      .then((s) => {
+        setAppSettings(s)
+        if (s?.workflowConfig) {
+          settingsIdRef.current = s.id
+          setWorkflowConfig(s.workflowConfig)
+        }
+      })
       .catch(() => {})
       .finally(() => setSettingsLoading(false))
+
+    void syncWorkflowSettings().then(({ settingsId, settings }) => {
+      if (settingsId) settingsIdRef.current = settingsId
+      setWorkflowConfig(settings)
+    })
 
     if (canManageLinks) {
       setLinksLoading(true)
@@ -118,6 +130,20 @@ export default function Settings() {
         showToast(value ? 'Document validation required.' : 'Document validation optional.', 'success')
       } catch {
         showToast('Failed to save setting.', 'error')
+      }
+    }
+  }
+
+  async function handleWorkflowToggle(key: keyof WorkflowSettings, value: boolean) {
+    if (!isAdmin) return
+    const updated = { ...workflowConfig, [key]: value }
+    setWorkflowConfig(updated)
+    setWorkflowSetting(key, value)
+    if (isSupabaseConfigured && settingsIdRef.current) {
+      try {
+        await saveWorkflowSettings(settingsIdRef.current, updated)
+      } catch {
+        showToast('Failed to save workflow setting.', 'error')
       }
     }
   }
@@ -370,11 +396,7 @@ export default function Settings() {
                   <Toggle
                     checked={on}
                     disabled={!isAdmin}
-                    onChange={(v) => {
-                      if (!isAdmin) return
-                      setWorkflowSetting(key as keyof WorkflowSettings, v)
-                      setWorkflowConfig((prev) => ({ ...prev, [key]: v }))
-                    }}
+                    onChange={(v) => void handleWorkflowToggle(key as keyof WorkflowSettings, v)}
                   />
                 </div>
               )

@@ -1,18 +1,36 @@
 import { dvList, dvUpdate, dvDelete, T } from '../lib/dataverse'
 import { getDataverseToken } from './auth'
 import type { AdminExternalLink } from '../data/types'
+import type { WorkflowSettings } from '../lib/workflowSettings'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const env = (import.meta as any).env as Record<string, string | undefined>
 
 type DvRow = Record<string, unknown>
 
-export interface AppSettings { id: string; requireDocumentValidation: boolean }
+export interface AppSettings {
+  id: string
+  requireDocumentValidation: boolean
+  workflowConfig: WorkflowSettings | null
+}
+
+const WORKFLOW_DEFAULTS: WorkflowSettings = {
+  requireDocumentValidation: true,
+  legalForCrossBorder: true,
+  securityForSensitive: true,
+  autoRouteLowRisk: false,
+}
 
 function toAppSettings(r: DvRow): AppSettings {
+  let workflowConfig: WorkflowSettings | null = null
+  try {
+    const raw = r['pdplr_workflowconfig'] as string | null
+    if (raw) workflowConfig = { ...WORKFLOW_DEFAULTS, ...JSON.parse(raw) }
+  } catch { /* use null */ }
   return {
     id: r['pdplr_appsettingsid'] as string,
     requireDocumentValidation: !!(r['pdplr_requiredocumentvalidation']),
+    workflowConfig,
   }
 }
 
@@ -38,6 +56,10 @@ export async function fetchAppSettings(): Promise<AppSettings | null> {
 
 export async function updateDocValidationSetting(settingsId: string, value: boolean): Promise<void> {
   await dvUpdate(T.appSettings, settingsId, { pdplr_requiredocumentvalidation: value })
+}
+
+export async function updateWorkflowConfig(settingsId: string, config: WorkflowSettings): Promise<void> {
+  await dvUpdate(T.appSettings, settingsId, { pdplr_workflowconfig: JSON.stringify(config) })
 }
 
 export async function fetchExternalLinks(): Promise<AdminExternalLink[]> {

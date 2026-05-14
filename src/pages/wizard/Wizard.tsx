@@ -333,6 +333,20 @@ export default function Wizard() {
     setForm((f) => ({ ...f, ...partial }))
   }
 
+  function buildQuestionnaire(f: WizardState) {
+    return {
+      dataUsage: { personalDataShared: f.qPersonalDataShared, dataTypes: f.qDataTypes, dataElements: f.qDataElements, dataElementsOther: f.qDataElementsOther, sensitiveDataInvolved: f.qSensitiveDataInvolved },
+      purposeNecessity: { purpose: f.qPurpose, whyRequired: f.qWhyRequired, canDeliverWithout: f.qCanDeliverWithout, canAnonymize: f.qCanAnonymize, canAnonymizeDetails: f.qCanAnonymizeDetails },
+      processingRoles: { determinesPurpose: f.qDeterminesPurpose, determinesHow: f.qDeterminesHow, usesSubProcessors: f.qUsesSubProcessors },
+      storageHosting: { storageLocation: f.qStorageLocation, country: f.qStorageCountry, cloudUsed: f.qCloudUsed, cloudProvider: f.qCloudProvider },
+      dataAccess: { whoCanAccess: f.qWhoCanAccess, rbacEnabled: f.qRbacEnabled, accessLogging: f.qAccessLogging },
+      securityControls: { encryptionAtRest: f.qEncryptionAtRest, encryptionAtRestDetails: f.qEncryptionAtRestDetails, encryptionInTransit: f.qEncryptionInTransit, encryptionInTransitDetails: f.qEncryptionInTransitDetails, accessControls: f.qAccessControls, accessControlsDetails: f.qAccessControlsDetails, dataMasking: f.qDataMasking, dataMaskingDetails: f.qDataMaskingDetails },
+      complianceGovernance: { pdplCompliant: f.qPdplCompliant, dataProtectionPolicies: f.qDataProtectionPolicies, iso27001: f.qIso27001, breachResponseProcess: f.qBreachResponseProcess },
+      contractualSafeguards: { ndaSigned: f.qNdaSigned, dpaExists: f.qDpaExists, dataProtectionClauses: f.qDataProtectionClauses },
+      dataLifecycle: { retentionPeriod: f.qRetentionPeriod, deletedAfterEngagement: f.qDeletedAfterEngagement, deletionMethod: f.qDeletionMethod },
+    }
+  }
+
   function handleCreateProject() {
     if (!newProjectForm.name.trim()) return
     const code = `PRJ-${new Date().getFullYear()}-${String(extraProjects.length + 100).padStart(4, '0')}`
@@ -518,6 +532,7 @@ export default function Wizard() {
             vendorName: form.vendorName || undefined,
             vendorJurisdiction: form.vendorJurisdiction || undefined,
             hasDPA: form.hasDPA,
+            ...(requestType === 'vendor_onboarding' ? { questionnaire: buildQuestionnaire(form) } : {}),
           },
           dataDeclaration: {
             containsPII: form.dataCategories.length > 0,
@@ -556,6 +571,7 @@ export default function Wizard() {
             vendorWebsite: '', servicesProvided: '', dataProcessingPurpose: form.description,
             contractRef: '', hasDPA: form.hasDPA, vendorJurisdiction: form.vendorJurisdiction,
             subprocessors: [], certifications: [],
+            questionnaire: buildQuestionnaire(form),
           },
           external_document_sharing: {
             kind: 'external_document_sharing', documentTitle: form.title,

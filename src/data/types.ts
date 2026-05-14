@@ -186,6 +186,67 @@ export type TicketPayload =
   | InternalDataAccessPayload
   | CrossBorderTransferPayload
 
+export type YesNoPartially = 'yes' | 'no' | 'partially'
+
+export interface VendorQuestionnaire {
+  dataUsage: {
+    personalDataShared: boolean
+    dataTypes: string[]
+    dataElements: string[]
+    dataElementsOther: string
+    sensitiveDataInvolved: boolean
+  }
+  purposeNecessity: {
+    purpose: string
+    whyRequired: string
+    canDeliverWithout: boolean
+    canAnonymize: YesNoPartially
+    canAnonymizeDetails: string
+  }
+  processingRoles: {
+    determinesPurpose: 'company' | 'vendor' | 'both'
+    determinesHow: 'company' | 'vendor' | 'both'
+    usesSubProcessors: boolean
+  }
+  storageHosting: {
+    storageLocation: 'inside_ksa' | 'outside_ksa'
+    country: string
+    cloudUsed: boolean
+    cloudProvider: string
+  }
+  dataAccess: {
+    whoCanAccess: string
+    rbacEnabled: boolean
+    accessLogging: boolean
+  }
+  securityControls: {
+    encryptionAtRest: YesNoPartially
+    encryptionAtRestDetails: string
+    encryptionInTransit: YesNoPartially
+    encryptionInTransitDetails: string
+    accessControls: YesNoPartially
+    accessControlsDetails: string
+    dataMasking: YesNoPartially
+    dataMaskingDetails: string
+  }
+  complianceGovernance: {
+    pdplCompliant: boolean
+    dataProtectionPolicies: boolean
+    iso27001: boolean
+    breachResponseProcess: boolean
+  }
+  contractualSafeguards: {
+    ndaSigned: boolean
+    dpaExists: boolean
+    dataProtectionClauses: boolean
+  }
+  dataLifecycle: {
+    retentionPeriod: string
+    deletedAfterEngagement: boolean
+    deletionMethod: string
+  }
+}
+
 export interface VendorOnboardingPayload {
   kind: 'vendor_onboarding'
   vendorName: string
@@ -197,6 +258,7 @@ export interface VendorOnboardingPayload {
   vendorJurisdiction: string
   subprocessors: string[]
   certifications: string[]
+  questionnaire?: VendorQuestionnaire
 }
 
 export interface ExternalDocumentSharingPayload {

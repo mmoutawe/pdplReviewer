@@ -484,6 +484,7 @@ async function buildTables() {
     strAttr(n('name'), 'Name', 100, true))
   await addCols(n('appsettings'), [
     boolAttr(n('requiredocumentvalidation'), 'Require Document Validation', false),
+    memoAttr(n('workflowconfig'), 'Workflow Config', 4000),
   ])
 
   // 14. pdplr_externallink
