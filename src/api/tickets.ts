@@ -34,18 +34,21 @@ async function hydrateAttachments(attRows: DvRow[]): Promise<import('../data/typ
   )
 }
 
-async function loadRelated(ticketIds: string[]): Promise<{
+async function loadRelated(ticketDbIds: string[], ticketNumbers: string[]): Promise<{
   slots: DvRow[]
   thread: DvRow[]
   attRows: DvRow[]
 }> {
-  if (!ticketIds.length) return { slots: [], thread: [], attRows: [] }
+  if (!ticketDbIds.length) return { slots: [], thread: [], attRows: [] }
 
-  const idList = ticketIds.map((id) => `pdplr_ticketid eq '${id}'`).join(' or ')
+  // reviewSlots and threadEntries store the Dataverse UUID in pdplr_ticketid
+  const idList  = ticketDbIds.map((id) => `pdplr_ticketid eq '${id}'`).join(' or ')
+  // attachments store the human-readable ticket number (ticket.id) in pdplr_ticketid
+  const numList = ticketNumbers.map((n)  => `pdplr_ticketid eq '${n}'`).join(' or ')
   const [slots, thread, attRows] = await Promise.all([
-    dvList<DvRow>(T.reviewSlots,    `$filter=${idList}`),
-    dvList<DvRow>(T.threadEntries,  `$filter=${idList}&$orderby=createdon asc`),
-    dvList<DvRow>(T.attachments,    `$filter=${idList}&$orderby=pdplr_uploadedat asc`),
+    dvList<DvRow>(T.reviewSlots,   `$filter=${idList}`),
+    dvList<DvRow>(T.threadEntries, `$filter=${idList}&$orderby=createdon asc`),
+    dvList<DvRow>(T.attachments,   `$filter=${numList}&$orderby=pdplr_uploadedat asc`),
   ])
   return { slots, thread, attRows }
 }
@@ -86,18 +89,20 @@ export async function fetchTickets(filters?: {
   const query = `$orderby=createdon desc${parts.length ? `&$filter=${parts.join(' and ')}` : ''}`
   const tickets = await dvList<DvRow>(T.tickets, query)
 
-  const ticketDbIds = tickets.map((t) => t['pdplr_ticketid'] as string).filter(Boolean)
-  const { slots, thread, attRows } = await loadRelated(ticketDbIds)
+  const ticketDbIds   = tickets.map((t) => t['pdplr_ticketid']    as string).filter(Boolean)
+  const ticketNumbers = tickets.map((t) => t['pdplr_ticketnumber'] as string).filter(Boolean)
+  const { slots, thread, attRows } = await loadRelated(ticketDbIds, ticketNumbers)
   await populateUserCache(tickets, thread)
   const attachments = await hydrateAttachments(attRows)
 
   return tickets.map((t) => {
-    const tId = t['pdplr_ticketid'] as string
+    const tId  = t['pdplr_ticketid']    as string
+    const tNum = t['pdplr_ticketnumber'] as string
     return toTicket(
       t,
       slots.filter((s) => s['pdplr_ticketid'] === tId),
       thread.filter((e) => e['pdplr_ticketid'] === tId),
-      attachments.filter((a) => a.ticketId === tId),
+      attachments.filter((a) => a.ticketId === tNum),
     )
   })
 }
@@ -112,7 +117,8 @@ export async function fetchTicketById(id: string): Promise<Ticket | null> {
   const [slots, thread, attRows] = await Promise.all([
     dvList<DvRow>(T.reviewSlots,   `$filter=pdplr_ticketid eq '${tId}'`),
     dvList<DvRow>(T.threadEntries, `$filter=pdplr_ticketid eq '${tId}'&$orderby=createdon asc`),
-    dvList<DvRow>(T.attachments,   `$filter=pdplr_ticketid eq '${tId}'&$orderby=pdplr_uploadedat asc`),
+    // attachments store the readable ticket number in pdplr_ticketid (set by EvidenceUploader)
+    dvList<DvRow>(T.attachments,   `$filter=pdplr_ticketid eq '${id}'&$orderby=pdplr_uploadedat asc`),
   ])
 
   await populateUserCache([ticket], thread)
