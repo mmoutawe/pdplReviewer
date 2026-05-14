@@ -9,6 +9,8 @@ import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
 import { isDataverseConfigured as isSupabaseConfigured } from '../../lib/dataverse'
 import { createTicket, submitTicket } from '../../api/tickets'
+import { createVendor } from '../../api/vendors'
+import { createProject } from '../../api/projects'
 import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, type RequestBuilderType } from '../../api/aiRequestBuilder'
 import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
 import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentView'
@@ -333,22 +335,29 @@ export default function Wizard() {
 
   function handleCreateProject() {
     if (!newProjectForm.name.trim()) return
-    const id = `p-new-${Date.now()}`
     const code = `PRJ-${new Date().getFullYear()}-${String(extraProjects.length + 100).padStart(4, '0')}`
-    const project: typeof PROJECTS[number] = {
-      id, code, name: newProjectForm.name.trim(),
+    const projectData = {
+      code, name: newProjectForm.name.trim(),
       businessUnit: newProjectForm.businessUnit.trim() || newProjectForm.serviceType.trim() || '—',
       ownerId: user.id,
       vendorId: form.linkedVendorId || undefined,
-      status: 'active',
+      status: 'active' as const,
       dataInventoryCount: 0,
-      ticketIds: [],
       description: newProjectForm.description.trim(),
       startedAt: new Date().toISOString().slice(0, 10),
     }
-    setExtraProjects((prev) => [...prev, project])
-    demoAddProject(project)
-    update({ linkedProjectId: id })
+    if (isSupabaseConfigured) {
+      createProject(projectData).then((saved) => {
+        setExtraProjects((prev) => [...prev, saved])
+        demoAddProject(saved)
+        update({ linkedProjectId: saved.id })
+      }).catch(() => showToast('Failed to save project', 'error'))
+    } else {
+      const project = { ...projectData, id: `p-new-${Date.now()}`, ticketIds: [] }
+      setExtraProjects((prev) => [...prev, project])
+      demoAddProject(project)
+      update({ linkedProjectId: project.id })
+    }
     setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
     setShowNewProjectModal(false)
   }
@@ -359,21 +368,29 @@ export default function Wizard() {
 
   function handleCreateVendor() {
     if (!newVendorForm.name.trim()) return
-    const id = `v-new-${Date.now()}`
-    const vendor: typeof VENDORS[number] = {
-      id, tradeName: newVendorForm.name.trim(),
-      legalName: newVendorForm.legalName.trim() || newVendorForm.name.trim(),
-      jurisdiction: newVendorForm.jurisdiction.trim() || 'KSA',
-      category: newVendorForm.category,
-      primaryContact: newVendorForm.contactEmail.trim(),
-      riskScore: 50, riskTier: 'medium', status: 'pending',
+    const vendorData = {
+      tradeName:     newVendorForm.name.trim(),
+      legalName:     newVendorForm.legalName.trim() || newVendorForm.name.trim(),
+      jurisdiction:  newVendorForm.jurisdiction.trim() || 'KSA',
+      category:      newVendorForm.category,
+      primaryContact:newVendorForm.contactEmail.trim(),
+      riskScore: 50, riskTier: 'medium' as const, status: 'pending' as const,
       certifications: [], hasDPA: false,
       lastReviewedAt: new Date().toISOString().slice(0, 10),
-      ticketIds: [], notes: '',
+      notes: '',
     }
-    setExtraVendors((prev) => [...prev, vendor])
-    demoAddVendor(vendor)
-    update({ linkedVendorId: id, linkedProjectId: '' })
+    if (isSupabaseConfigured) {
+      createVendor(vendorData).then((saved) => {
+        setExtraVendors((prev) => [...prev, saved])
+        demoAddVendor(saved)
+        update({ linkedVendorId: saved.id, linkedProjectId: '' })
+      }).catch(() => showToast('Failed to save vendor', 'error'))
+    } else {
+      const vendor = { ...vendorData, id: `v-new-${Date.now()}`, ticketIds: [] }
+      setExtraVendors((prev) => [...prev, vendor])
+      demoAddVendor(vendor)
+      update({ linkedVendorId: vendor.id, linkedProjectId: '' })
+    }
     setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
     setShowNewVendorModal(false)
   }
