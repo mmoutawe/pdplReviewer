@@ -136,7 +136,7 @@ export interface CreateTicketInput {
 /** Generates a ticket number in the format PDPL-YYYY-NNNN */
 async function nextTicketNumber(): Promise<string> {
   const year = new Date().getFullYear()
-  const count = await dvList<DvRow>(T.tickets, `$filter=pdplr_ticketnumber eq 'PDPL-${year}' and pdplr_ticketnumber ne null&$select=pdplr_ticketnumber&$top=1000`)
+  const count = await dvList<DvRow>(T.tickets, `$filter=startswith(pdplr_ticketnumber,'PDPL-${year}-')&$select=pdplr_ticketnumber&$top=1000`)
   const next = String(count.length + 1).padStart(4, '0')
   return `PDPL-${year}-${next}`
 }
@@ -164,7 +164,8 @@ export async function createTicket(input: CreateTicketInput, requesterId: string
     pdplr_slabreached:        false,
   })
 
-  return toTicket(row, [], [])
+  const ticket = toTicket(row, [], [])
+  return { ...ticket, id: ticketNumber }
 }
 
 export async function submitTicket(id: string): Promise<Ticket> {
