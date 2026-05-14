@@ -56,6 +56,24 @@ export function signIn(userId: string) {
   void loadUserData(user)
 }
 
+// Dataverse mode: admin-only role impersonation for testing
+const IMPERSONATE_KEY = 'pdpl_impersonate_role'
+export function impersonateRole(role: Role | null) {
+  const { user } = authStore.getState()
+  if (!user) return
+  if (role) {
+    sessionStorage.setItem(IMPERSONATE_KEY, role)
+    authStore.setState({ user: { ...user, role } })
+  } else {
+    sessionStorage.removeItem(IMPERSONATE_KEY)
+    // role will be restored on next session load — for now reflect real role from stored user
+    authStore.setState({ user: { ...user, role: (sessionStorage.getItem('pdpl_real_role') as Role) ?? user.role } })
+  }
+}
+export function getImpersonatedRole(): Role | null {
+  return sessionStorage.getItem(IMPERSONATE_KEY) as Role | null
+}
+
 export function signOut() {
   if (isDataverseConfigured) {
     void apiSignOut().then(() => {
@@ -72,7 +90,9 @@ export function signOut() {
 if (isDataverseConfigured) {
   void apiGetSession().then((user) => {
     if (user) {
-      authStore.setState({ user, isSignedIn: true, loading: false })
+      sessionStorage.setItem('pdpl_real_role', user.role)
+      const impersonated = sessionStorage.getItem(IMPERSONATE_KEY) as Role | null
+      authStore.setState({ user: impersonated ? { ...user, role: impersonated } : user, isSignedIn: true, loading: false })
       void loadUserData(user)
     } else {
       authStore.setState({ loading: false })

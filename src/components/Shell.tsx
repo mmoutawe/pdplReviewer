@@ -1,6 +1,7 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { authStore, signIn, signOut } from '../store'
+import { authStore, signIn, signOut, impersonateRole, getImpersonatedRole } from '../store'
+import { isDataverseConfigured } from '../lib/dataverse'
 import { useStore } from '../hooks/useStore'
 import { USERS, ROLE_LABELS } from '../data/seed'
 import type { Role } from '../data/types'
@@ -100,6 +101,18 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
   const [roleSwitchOpen, setRoleSwitchOpen] = useState(false)
 
   const demoUsers = USERS.filter((u) => u.role !== 'external_recipient')
+  const isImpersonating = isDataverseConfigured && !!getImpersonatedRole()
+  // In Dataverse mode only show switcher to admin (real or impersonated-as-admin is not shown — base role check)
+  const realRole = sessionStorage.getItem('pdpl_real_role') as Role | null
+  const showRoleSwitcher = !isDataverseConfigured || realRole === 'admin'
+
+  const dvRoles: { role: Role; label: string }[] = [
+    { role: 'admin',           label: 'Admin' },
+    { role: 'data_management', label: 'Data Management' },
+    { role: 'legal',           label: 'Legal Reviewer' },
+    { role: 'security',        label: 'Security Reviewer' },
+    { role: 'requester',       label: 'Requester' },
+  ]
 
   return (
     <header style={{
@@ -124,14 +137,16 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Role switcher — demo only */}
+      {/* Role switcher */}
+      {showRoleSwitcher && (
       <div style={{ position: 'relative' }}>
         <button className="btn btn-sm focus-ring" onClick={() => setRoleSwitchOpen((o) => !o)}
-          style={{ gap: 6 }} aria-label="Switch demo role" aria-haspopup="true" aria-expanded={roleSwitchOpen}>
+          style={{ gap: 6, outline: isImpersonating ? '2px solid var(--amber-400)' : undefined }}
+          aria-label="Switch role" aria-haspopup="true" aria-expanded={roleSwitchOpen}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M1 6h10M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {!isMobile && 'Demo role'}
+          {!isMobile && (isImpersonating ? 'Testing as' : 'Demo role')}
           <RoleBadge role={user.role} size="sm" />
         </button>
         {roleSwitchOpen && (
@@ -144,32 +159,64 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
               zIndex: 50, width: 280, overflow: 'hidden',
             }}>
               <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--line)', fontSize: 11, color: 'var(--ink-400)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Switch demo persona
+                {isDataverseConfigured ? 'Test as role (admin only)' : 'Switch demo persona'}
               </div>
-              {demoUsers.map((u) => (
-                <button key={u.id} onClick={() => { signIn(u.id); setRoleSwitchOpen(false); navigate('/dashboard') }}
-                  style={{
-                    width: '100%', padding: '10px 14px', textAlign: 'left',
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: u.id === user.id ? 'var(--brand-50)' : 'transparent',
-                    border: 'none', cursor: 'pointer',
-                    borderBottom: '1px solid var(--line-soft)',
-                    transition: 'background var(--t-fast)',
-                  }}
-                  onMouseEnter={(e) => { if (u.id !== user.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
-                  onMouseLeave={(e) => { if (u.id !== user.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
-                  <Avatar initials={u.initials} color={u.avatarColor} size={28} />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{u.fullName}</div>
-                    <div style={{ fontSize: 11, color: 'var(--ink-500)' }}>{ROLE_LABELS[u.role]}</div>
-                  </div>
-                  {u.id === user.id && <span style={{ marginLeft: 'auto', color: 'var(--brand-700)', fontSize: 12 }}>✓</span>}
-                </button>
-              ))}
+
+              {/* Dataverse mode: role-only switcher */}
+              {isDataverseConfigured ? (
+                <>
+                  {dvRoles.map(({ role, label }) => (
+                    <button key={role} onClick={() => { impersonateRole(role); setRoleSwitchOpen(false); navigate('/dashboard') }}
+                      style={{
+                        width: '100%', padding: '10px 14px', textAlign: 'left',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: user.role === role ? 'var(--brand-50)' : 'transparent',
+                        border: 'none', cursor: 'pointer',
+                        borderBottom: '1px solid var(--line-soft)',
+                        transition: 'background var(--t-fast)',
+                      }}
+                      onMouseEnter={(e) => { if (user.role !== role) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
+                      onMouseLeave={(e) => { if (user.role !== role) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                      <RoleBadge role={role as Role} />
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{label}</span>
+                      {user.role === role && <span style={{ marginLeft: 'auto', color: 'var(--brand-700)', fontSize: 12 }}>✓</span>}
+                    </button>
+                  ))}
+                  {isImpersonating && (
+                    <button onClick={() => { impersonateRole(null); setRoleSwitchOpen(false); navigate('/dashboard') }}
+                      style={{ width: '100%', padding: '10px 14px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--amber-50)', border: 'none', cursor: 'pointer', fontSize: 12.5, color: 'var(--amber-700)' }}>
+                      ↩ Revert to my real role ({realRole})
+                    </button>
+                  )}
+                </>
+              ) : (
+                /* Demo mode: full persona switcher */
+                demoUsers.map((u) => (
+                  <button key={u.id} onClick={() => { signIn(u.id); setRoleSwitchOpen(false); navigate('/dashboard') }}
+                    style={{
+                      width: '100%', padding: '10px 14px', textAlign: 'left',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      background: u.id === user.id ? 'var(--brand-50)' : 'transparent',
+                      border: 'none', cursor: 'pointer',
+                      borderBottom: '1px solid var(--line-soft)',
+                      transition: 'background var(--t-fast)',
+                    }}
+                    onMouseEnter={(e) => { if (u.id !== user.id) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
+                    onMouseLeave={(e) => { if (u.id !== user.id) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                    <Avatar initials={u.initials} color={u.avatarColor} size={28} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-900)' }}>{u.fullName}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-500)' }}>{ROLE_LABELS[u.role]}</div>
+                    </div>
+                    {u.id === user.id && <span style={{ marginLeft: 'auto', color: 'var(--brand-700)', fontSize: 12 }}>✓</span>}
+                  </button>
+                ))
+              )}
             </div>
           </>
         )}
       </div>
+      )}
 
       {/* Notifications */}
       <NotificationBell userId={user.id} role={user.role} />
