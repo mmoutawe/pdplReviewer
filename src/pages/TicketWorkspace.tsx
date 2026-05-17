@@ -216,8 +216,9 @@ export default function TicketWorkspace() {
     if (!ticket) return
     setRequesterReplying(true)
     try {
+      const attIds = requesterAttachments.map((a) => a.id)
       if (isSupabaseConfigured) {
-        if (requesterReply.trim()) await addReturnComment(ticket.id, requesterReply, undefined, user.id, user.role)
+        if (requesterReply.trim() || attIds.length) await addReturnComment(ticket.id, requesterReply, attIds, user.id, user.role)
         const updated = await transitionTicket(ticket.id, 'in_data_management', 'Resubmitted after addressing return comments')
         updateTicket(updated.id, updated)
         await refreshTickets()
@@ -226,6 +227,7 @@ export default function TicketWorkspace() {
         updateTicket(ticket.id, { state: 'in_data_management' })
       }
       setRequesterReply('')
+      setRequesterAttachments([])
       showToast('Response submitted. Ticket sent back to reviewer.', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Submission failed.', 'error')
@@ -314,18 +316,11 @@ export default function TicketWorkspace() {
                     <span style={{ fontSize: 16 }}>⚠</span>
                     <h3 style={{ fontSize: 14, fontWeight: 600 }}>Reviewer Feedback</h3>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {ticket.returnThread.map((entry, i) => (
-                      <div key={i} style={{ background: entry.byRole === 'requester' ? 'var(--brand-50)' : 'var(--amber-50)', border: `1px solid ${entry.byRole === 'requester' ? '#C7D7FD' : '#FDE68A'}`, borderRadius: 'var(--r-md)', padding: '12px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>{entry.by}</span>
-                          <RoleBadge role={entry.byRole as Role} />
-                          <span style={{ fontSize: 11, color: 'var(--ink-400)', marginLeft: 'auto' }}>{formatDateTime(entry.createdAt)}</span>
-                        </div>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink-700)' }}>{entry.message}</p>
-                      </div>
-                    ))}
-                  </div>
+                  <CommentThread
+                    entries={ticket.returnThread}
+                    attachments={[...ticket.attachments, ...requesterAttachments]}
+                    readOnly
+                  />
                 </div>
               )}
 
