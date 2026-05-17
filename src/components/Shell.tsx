@@ -102,8 +102,8 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
 
   const demoUsers = USERS.filter((u) => u.role !== 'external_recipient')
   const isImpersonating = isDataverseConfigured && !!getImpersonatedRole()
-  // In Dataverse mode only show switcher to admin (real or impersonated-as-admin is not shown — base role check)
-  const realRole = sessionStorage.getItem('pdpl_real_role') as Role | null
+  // Fall back to user.role when pdpl_real_role hasn't been written yet (e.g. first render after popup sign-in)
+  const realRole = (sessionStorage.getItem('pdpl_real_role') as Role | null) ?? user?.role ?? null
   const showRoleSwitcher = !isDataverseConfigured || realRole === 'admin'
 
   const dvRoles: { role: Role; label: string }[] = [

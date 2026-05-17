@@ -102,9 +102,13 @@ if (isDataverseConfigured) {
   // Subscribe to auth state changes (sign in / sign out from another tab)
   onAuthStateChange((user) => {
     if (user) {
-      authStore.setState({ user, isSignedIn: true })
+      sessionStorage.setItem('pdpl_real_role', user.role)
+      const impersonated = sessionStorage.getItem(IMPERSONATE_KEY) as Role | null
+      authStore.setState({ user: impersonated ? { ...user, role: impersonated } : user, isSignedIn: true })
       void loadUserData(user)
     } else {
+      sessionStorage.removeItem('pdpl_real_role')
+      sessionStorage.removeItem(IMPERSONATE_KEY)
       authStore.setState({ user: defaultDemoUser, isSignedIn: false })
     }
   })
