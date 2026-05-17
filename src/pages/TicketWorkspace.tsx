@@ -186,6 +186,10 @@ export default function TicketWorkspace() {
       if (isSupabaseConfigured) {
         const verdict = action === 'return' ? 'return' : action === 'approve' ? 'approve' : 'escalate'
         await saveReviewDecision(ticket.id, 'data_management', verdict as 'approve' | 'return' | 'escalate', reviewComment || undefined, user.id)
+        if (action === 'return' && (reviewComment.trim() || reviewerAttachments.length > 0)) {
+          await addReturnComment(ticket.id, reviewComment, reviewerAttachments.map((a) => a.id), user.id, user.role)
+          setReviewerAttachments([])
+        }
         const updated = await transitionTicket(ticket.id, newState, reviewComment || undefined)
         updateTicket(ticket.id, updated)
       } else {
@@ -863,11 +867,17 @@ export default function TicketWorkspace() {
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Return Thread</h3>
                 <CommentThread
                   entries={ticket.returnThread}
-                  attachments={ticket.attachments}
+                  attachments={[...ticket.attachments, ...reviewerAttachments]}
                   readOnly={!canReview}
                   onReply={async (msg) => {
+                    const attIds = reviewerAttachments.map((a) => a.id)
                     if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
+                      try {
+                        await addReturnComment(ticket.id, msg, attIds, user.id, user.role)
+                        setReviewerAttachments([])
+                        await refreshTickets()
+                        showToast('Reply added.', 'success')
+                      }
                       catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
                     } else {
                       demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
@@ -1515,6 +1525,9 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
     try {
       if (isSupabaseConfigured) {
         await saveReviewDecision(ticket.id, role, pending, notes || undefined, user.id)
+        if (pending === 'return' && notes.trim()) {
+          await addReturnComment(ticket.id, notes, [], user.id, user.role)
+        }
         const updated = await transitionTicket(ticket.id, nextState(pending), notes || undefined)
         updateTicket(ticket.id, updated)
       } else {
