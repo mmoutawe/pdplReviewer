@@ -758,7 +758,7 @@ export const REQUEST_TYPE_LABELS: Record<import('./types').RequestType, string> 
 
 export const STATE_LABELS: Record<import('./types').TicketState, string> = {
   draft: 'Draft',
-  submitted: 'Submitted',
+  submitted: 'Under Data Review',
   in_data_management: 'Data Mgmt review',
   returned_to_requester: 'Returned to requester',
   in_legal_review: 'Legal review',
