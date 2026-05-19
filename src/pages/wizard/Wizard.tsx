@@ -389,15 +389,20 @@ export default function Wizard() {
         setExtraProjects((prev) => [...prev, saved])
         demoAddProject(saved)
         update({ linkedProjectId: saved.id })
-      }).catch(() => showToast('Failed to save project', 'error'))
+        setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
+        setShowNewProjectModal(false)
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to save project'
+        showToast(msg, 'error')
+      })
     } else {
       const project = { ...projectData, id: `p-new-${Date.now()}`, ticketIds: [] }
       setExtraProjects((prev) => [...prev, project])
       demoAddProject(project)
       update({ linkedProjectId: project.id })
+      setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
+      setShowNewProjectModal(false)
     }
-    setNewProjectForm({ name: '', businessUnit: '', serviceType: '', description: '' })
-    setShowNewProjectModal(false)
   }
 
   function toggleQSection(key: string) {
@@ -422,15 +427,20 @@ export default function Wizard() {
         setExtraVendors((prev) => [...prev, saved])
         demoAddVendor(saved)
         update({ linkedVendorId: saved.id, linkedProjectId: '' })
-      }).catch(() => showToast('Failed to save vendor', 'error'))
+        setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
+        setShowNewVendorModal(false)
+      }).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Failed to save vendor'
+        showToast(msg, 'error')
+      })
     } else {
       const vendor = { ...vendorData, id: `v-new-${Date.now()}`, ticketIds: [] }
       setExtraVendors((prev) => [...prev, vendor])
       demoAddVendor(vendor)
       update({ linkedVendorId: vendor.id, linkedProjectId: '' })
+      setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
+      setShowNewVendorModal(false)
     }
-    setNewVendorForm({ name: '', legalName: '', category: 'Technology', jurisdiction: '', contactName: '', contactEmail: '' })
-    setShowNewVendorModal(false)
   }
 
   function downloadTemplate() {

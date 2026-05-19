@@ -97,6 +97,16 @@ export async function dvCreate<T>(entitySet: string, body: Record<string, unknow
     headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify(body),
   })
+  // Dataverse sometimes returns 204 No Content even with Prefer: return=representation.
+  // In that case extract the GUID from OData-EntityId and do a follow-up GET.
+  if (res.status === 204) {
+    const entityIdHeader = res.headers.get('OData-EntityId') ?? res.headers.get('odata-entityid')
+    if (!entityIdHeader) throw new Error('Dataverse returned 204 with no OData-EntityId header')
+    const match = entityIdHeader.match(/\(([^)]+)\)$/)
+    if (!match) throw new Error(`Cannot parse entity ID from: ${entityIdHeader}`)
+    const getRes = await apiFetch(`/${entitySet}(${match[1]})`)
+    return await getRes.json() as T
+  }
   return await res.json() as T
 }
 
