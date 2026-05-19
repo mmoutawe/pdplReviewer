@@ -1,4 +1,5 @@
 ﻿import { type ReactNode, Fragment, useRef, useState } from 'react'
+import { FileText, Award, File, Paperclip, Image } from 'lucide-react'
 import { fileSize } from '../lib/utils'
 import type { Attachment } from '../data/types'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
@@ -74,8 +75,14 @@ interface UploaderProps {
   readOnly?: boolean
 }
 
-const CAT_ICON: Record<string, string> = {
-  dpa: '📝', soc2: '🏅', iso27001: '🏅', contract: '📄', evidence: '📎', screenshot: '🖼️', other: '📎',
+const CAT_ICON: Record<string, ReactNode> = {
+  dpa:       <FileText size={15} />,
+  soc2:      <Award size={15} />,
+  iso27001:  <Award size={15} />,
+  contract:  <File size={15} />,
+  evidence:  <Paperclip size={15} />,
+  screenshot:<Image size={15} />,
+  other:     <Paperclip size={15} />,
 }
 
 export function EvidenceUploader({
@@ -159,7 +166,7 @@ export function EvidenceUploader({
               background: 'var(--surface-1)', border: '1px solid var(--line)',
               borderRadius: 'var(--r-md)', fontSize: 13,
             }}>
-              <span aria-hidden="true">{CAT_ICON[att.category] ?? '📎'}</span>
+              <span aria-hidden="true" style={{ display: 'inline-flex', color: 'var(--ink-400)' }}>{CAT_ICON[att.category] ?? <Paperclip size={15} />}</span>
               <span style={{ flex: 1, fontWeight: 500, color: 'var(--ink-800)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {att.signedUrl ? (
                   <a href={att.signedUrl} target="_blank" rel="noopener noreferrer"
@@ -201,7 +208,7 @@ export function EvidenceUploader({
               borderRadius: 'var(--r-md)', fontSize: 13,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: u.error ? 0 : 4 }}>
-                <span aria-hidden="true">📎</span>
+                <Paperclip size={13} aria-hidden="true" style={{ color: 'var(--ink-400)', flexShrink: 0 }} />
                 <span style={{ flex: 1, color: 'var(--ink-700)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</span>
                 <span style={{ fontSize: 11.5, color: u.error ? 'var(--red-700)' : 'var(--ink-400)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
                   {u.error ? u.error : `${u.percent}%`}

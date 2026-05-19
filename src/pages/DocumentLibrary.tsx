@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { FileText } from 'lucide-react'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchDocuments, uploadDocument, downloadDocument, deleteDocument } from '../api/documentLibrary'
 import { FilterBar } from '../components/table'
@@ -189,7 +190,7 @@ export default function DocumentLibrary() {
         <EmptyState
           title={isSupabaseConfigured ? 'No documents found' : 'No documents yet'}
           body={isSupabaseConfigured ? 'Adjust filters or upload your first document.' : 'Connect Dataverse to upload and manage project documents.'}
-          icon="📄"
+          icon={<FileText size={26} color="var(--teal-600)" />}
         />
       ) : (
         <div style={{ padding: '0 24px 24px' }}>

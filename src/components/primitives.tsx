@@ -1,4 +1,5 @@
 import { type ReactNode, type CSSProperties, useState } from 'react'
+import { ClipboardList, Scale } from 'lucide-react'
 import { cn, stateColor } from '../lib/utils'
 import type { Role, TicketState, RiskLevel } from '../data/types'
 import { STATE_LABELS, ROLE_LABELS } from '../data/seed'
@@ -133,15 +134,14 @@ export function SkeletonRows({ rows = 5, cols = 4 }: { rows?: number; cols?: num
 }
 
 // ─── EmptyState ──────────────────────────────────────────────────────────────
-interface EmptyProps { title: string; body?: string; action?: ReactNode; icon?: string }
-export function EmptyState({ title, body, action, icon = '📋' }: EmptyProps) {
+interface EmptyProps { title: string; body?: string; action?: ReactNode; icon?: ReactNode }
+export function EmptyState({ title, body, action, icon = <ClipboardList size={26} color="var(--teal-600)" /> }: EmptyProps) {
   return (
     <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--ink-400)' }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 56, height: 56, borderRadius: 'var(--r-xl)',
         background: 'var(--teal-50)', marginBottom: 16,
-        fontSize: 24,
       }} aria-hidden="true">{icon}</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 8 }}>{title}</div>
       {body && <div style={{ fontSize: 13, maxWidth: 360, margin: '0 auto 24px' }}>{body}</div>}
@@ -209,7 +209,7 @@ export function ArticleRefBadge({ article, title }: ArticleRefBadgeProps) {
         cursor: title ? 'help' : 'default', whiteSpace: 'nowrap',
         fontFamily: 'var(--font-mono)',
       }}>
-        ⚖ {article}
+        <Scale size={11} />{article}
       </span>
       {title && hover && (
         <span style={{

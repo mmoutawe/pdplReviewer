@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Paperclip, CheckCircle } from 'lucide-react'
 import type { ReturnThreadEntry, Attachment } from '../data/types'
 import { getCachedUser } from '../lib/userCache'
 import { Avatar, RoleBadge } from './primitives'
@@ -67,15 +68,15 @@ export function CommentThread({ entries, attachments = [], onReply, readOnly = f
                         fontSize: 12, color: 'var(--ink-700)', cursor: 'pointer',
                       }}
                     >
-                      📎 {att.filename}
+                      <Paperclip size={12} style={{ flexShrink: 0 }} /> {att.filename}
                       <span style={{ color: 'var(--ink-400)' }}>({Math.round(att.sizeBytes / 1024)} KB)</span>
                     </button>
                   ))}
                 </div>
               )}
               {e.resolvedAt && (
-                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--emerald-700)', fontWeight: 500 }}>
-                  ✓ Resolved {timeAgo(e.resolvedAt)}
+                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--emerald-700)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle size={12} /> Resolved {timeAgo(e.resolvedAt)}
                 </div>
               )}
               {e.aiScore && (

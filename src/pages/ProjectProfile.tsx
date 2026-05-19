@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Folder } from 'lucide-react'
 import { projectById, TICKETS, userById } from '../data/seed'
 import { EmptyState, StatusPill, SLAIndicator, Avatar } from '../components/primitives'
 import { formatDate } from '../lib/utils'
@@ -135,7 +136,7 @@ export default function ProjectProfile() {
     })
   }
 
-  if (!proj) return <EmptyState title="Project not found" icon="📁"
+  if (!proj) return <EmptyState title="Project not found" icon={<Folder size={26} color="var(--teal-600)" />}
     action={<button className="btn btn-primary" onClick={() => navigate('/projects')}>Back to projects</button>} />
 
   const relatedTickets = TICKETS.filter((t) => t.projectId === proj.id)

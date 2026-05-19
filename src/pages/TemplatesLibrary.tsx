@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState, useCallback } from 'react'
+import { ClipboardList } from 'lucide-react'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { fetchTemplates, uploadTemplate, toggleTemplateActive, deleteTemplate, downloadTemplate } from '../api/templatesLibrary'
 import { EmptyState } from '../components/primitives'
@@ -127,7 +128,7 @@ export default function TemplatesLibrary() {
         {loading ? (
           <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading templates…</div>
         ) : templates.length === 0 ? (
-          <EmptyState title="No templates yet" body={isSupabaseConfigured ? 'Upload your first template using the button above.' : 'Connect Dataverse to upload and manage reviewer templates.'} icon="📋" />
+          <EmptyState title="No templates yet" body={isSupabaseConfigured ? 'Upload your first template using the button above.' : 'Connect Dataverse to upload and manage reviewer templates.'} icon={<ClipboardList size={26} color="var(--teal-600)" />} />
         ) : (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

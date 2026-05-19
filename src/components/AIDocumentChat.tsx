@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Sparkles, ArrowRight, CheckCircle, Check, Loader2 } from 'lucide-react'
 import type { Ticket } from '../data/types'
 import { streamDocument } from '../api/aiDocumentGenerator'
 
@@ -82,7 +83,7 @@ export function AIDocumentChat({ ticket }: Props) {
             fontSize: 13.5, color: 'var(--ink-800)', lineHeight: 1.65,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <span aria-hidden="true">✨</span>
+              <Sparkles size={14} color="var(--violet-700)" aria-hidden="true" />
               <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--violet-700)' }}>AI Document Generator</span>
             </div>
             I have the full context of this vendor engagement. What document would you like me to generate?
@@ -98,7 +99,7 @@ export function AIDocumentChat({ ticket }: Props) {
                 style={{ textAlign: 'left', fontSize: 13, padding: '10px 14px', height: 'auto', lineHeight: 1.4 }}
                 onClick={() => void generate(prompt)}
               >
-                <span style={{ color: 'var(--brand-700)', marginRight: 6 }}>→</span>{prompt}
+                <ArrowRight size={13} color="var(--brand-700)" style={{ marginRight: 6, flexShrink: 0 }} />{prompt}
               </button>
             ))}
           </div>
@@ -138,7 +139,7 @@ export function AIDocumentChat({ ticket }: Props) {
       {phase === 'generating' && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block', fontSize: 15 }} aria-hidden="true">⏳</span>
+            <Loader2 size={16} color="var(--violet-700)" style={{ animation: 'spin 1.2s linear infinite', flexShrink: 0 }} aria-hidden="true" />
             <span style={{ fontSize: 13.5, color: 'var(--ink-600)' }}>
               Generating: <em style={{ color: 'var(--ink-400)', fontWeight: 400 }}>
                 {userRequest.length > 80 ? userRequest.slice(0, 80) + '…' : userRequest}
@@ -168,12 +169,12 @@ export function AIDocumentChat({ ticket }: Props) {
       {phase === 'done' && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#166534', flex: 1, minWidth: 0 }}>
-              ✓ {userRequest.length > 90 ? userRequest.slice(0, 90) + '…' : userRequest}
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#166534', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle size={15} style={{ flexShrink: 0 }} />{userRequest.length > 90 ? userRequest.slice(0, 90) + '…' : userRequest}
             </span>
             <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button className="btn btn-sm" onClick={handleCopy}>
-                {copied ? '✓ Copied' : 'Copy'}
+              <button className="btn btn-sm" onClick={handleCopy} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                {copied ? <><Check size={12} /> Copied</> : 'Copy'}
               </button>
               <button className="btn btn-sm" onClick={reset}>
                 Generate another

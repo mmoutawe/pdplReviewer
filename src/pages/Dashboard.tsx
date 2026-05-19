@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ClipboardList, CheckCircle } from 'lucide-react'
 import { authStore, ticketStore } from '../store'
 import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, PRE_ASSESSMENTS } from '../data/seed'
@@ -99,7 +100,7 @@ export default function Dashboard() {
               <button className="btn btn-ghost btn-sm" onClick={() => navigate('/requests')}>View all</button>
             </div>
             {myTickets.length === 0 ? (
-              <EmptyState title="No tickets found" body="Submit a new request to get started." icon="📋" />
+              <EmptyState title="No tickets found" body="Submit a new request to get started." icon={<ClipboardList size={26} color="var(--teal-600)" />} />
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
@@ -206,7 +207,7 @@ export default function Dashboard() {
             <button className="btn btn-ghost btn-sm" onClick={() => navigate(queuePath())}>View all</button>
           </div>
           {myTickets.length === 0 ? (
-            <EmptyState title="Queue is clear" body="No tickets pending your review." icon="✓" />
+            <EmptyState title="Queue is clear" body="No tickets pending your review." icon={<CheckCircle size={26} color="var(--teal-600)" />} />
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>

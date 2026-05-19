@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Sparkles, ArrowUp, Check } from 'lucide-react'
 import type { Ticket } from '../data/types'
 import { streamReviewerAssist, type AssistMessage, ROLE_INITIAL_MESSAGES } from '../api/aiReviewerAssist'
 
@@ -75,7 +76,7 @@ function MessageBubble({ msg, onCopy }: MessageBubbleProps) {
           color: copied ? '#166534' : 'var(--ink-400)',
         }}
       >
-        {copied ? '✓ Copied' : 'Copy'}
+        {copied ? <><Check size={11} /> Copied</> : 'Copy'}
       </button>
     </div>
   )
@@ -139,9 +140,7 @@ export function ReviewerAssistPanel({ ticket, userRole }: Props) {
         borderBottom: '1px solid #DDD6FE', background: 'var(--violet-50)',
         borderRadius: 'var(--r-lg) var(--r-lg) 0 0', flexShrink: 0,
       }}>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M8 1l1.5 3 3.5.5-2.5 2.5.5 3.5L8 9l-3 1.5.5-3.5L3 4.5 6.5 4 8 1z" fill="var(--violet-700)" opacity=".8" />
-        </svg>
+        <Sparkles size={14} color="var(--violet-700)" aria-hidden="true" />
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--violet-700)' }}>
           {PANEL_TITLES[userRole] ?? 'Reviewer Assist'}
         </span>
@@ -211,7 +210,7 @@ export function ReviewerAssistPanel({ ticket, userRole }: Props) {
           disabled={!input.trim() || streaming}
           aria-label="Send"
         >
-          ↑
+          <ArrowUp size={14} />
         </button>
       </div>
     </div>

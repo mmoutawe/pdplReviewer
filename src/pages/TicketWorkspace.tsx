@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
-import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, Shield, Lightbulb, CheckCircle, XCircle } from 'lucide-react'
+import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, Shield, Lightbulb, CheckCircle, XCircle, GitBranch, CornerUpLeft } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment, lookupVendor, lookupProject } from '../store'
@@ -124,7 +124,7 @@ export default function TicketWorkspace() {
 
   if (!ticket) {
     return (
-      <EmptyState title="Ticket not found" body={`No ticket with ID "${id}" exists.`} icon="🔍"
+      <EmptyState title="Ticket not found" body={`No ticket with ID "${id}" exists.`} icon={<Search size={26} color="var(--teal-600)" />}
         action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back to requests</button>} />
     )
   }
@@ -274,7 +274,7 @@ export default function TicketWorkspace() {
             )}
             <button className="btn btn-ghost btn-sm" onClick={() => exportTicketDocx(ticket)} title="Download as Word document">↓ DOCX</button>
             {(user.role === 'admin' || user.role === 'data_management') && ticket.state === 'in_data_management' && (
-              <button className="btn" onClick={() => setShowSplitDialog(true)}>⎇ Split to parallel review</button>
+              <button className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setShowSplitDialog(true)}><GitBranch size={13} /> Split to parallel review</button>
             )}
             {canReview && (
               <ReviewActions ticket={ticket} role={user.role as 'data_management' | 'legal' | 'security'} userName={user.fullName} />
@@ -508,7 +508,7 @@ export default function TicketWorkspace() {
               {ticket.state === 'returned_to_requester' && (
                 <section className="card" style={{ padding: '18px 20px', borderColor: '#FDE68A', background: 'var(--amber-50)' }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                    <span style={{ fontSize: 18 }} aria-hidden>↩</span>
+                    <CornerUpLeft size={18} color="var(--amber-700)" aria-hidden="true" />
                     <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--amber-700)' }}>Ticket returned for clarification</h2>
                   </div>
                   <CommentThread
@@ -1045,7 +1045,7 @@ export default function TicketWorkspace() {
                     Escalate to Security
                   </button>
                   <button className="btn" style={{ color: 'var(--brand-700)', borderColor: 'rgba(99,102,241,0.4)' }} onClick={() => setShowSplitDialog(true)} disabled={dmSaving}>
-                    ⎇ Split &amp; Route in Parallel
+                    <GitBranch size={13} style={{ marginRight: 4 }} /> Split &amp; Route in Parallel
                   </button>
                 </div>
               </div>

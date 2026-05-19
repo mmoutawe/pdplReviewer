@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { CheckCircle } from 'lucide-react'
 import { ticketStore } from '../store'
 import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, ROLE_LABELS } from '../data/seed'
@@ -127,7 +128,7 @@ export default function ReviewerQueue() {
       ) : loading ? (
         <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading queue…</div>
       ) : visible.length === 0 ? (
-        <EmptyState title="Queue is empty" body="No tickets are currently assigned to this queue." icon="✓" />
+        <EmptyState title="Queue is empty" body="No tickets are currently assigned to this queue." icon={<CheckCircle size={26} color="var(--teal-600)" />} />
       ) : (
         <ul>
           {visible.map((t) => (

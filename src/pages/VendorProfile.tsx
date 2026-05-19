@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Building2 } from 'lucide-react'
 import { vendorById, TICKETS } from '../data/seed'
 import { EmptyState } from '../components/primitives'
 import { RiskMeter } from '../components/forms'
@@ -140,7 +141,7 @@ export default function VendorProfile() {
     })
   }
 
-  if (!v) return <EmptyState title="Vendor not found" icon="🏢"
+  if (!v) return <EmptyState title="Vendor not found" icon={<Building2 size={26} color="var(--teal-600)" />}
     action={<button className="btn btn-primary" onClick={() => navigate('/vendors')}>Back to vendors</button>} />
 
   const relatedTickets = TICKETS.filter((t) => t.vendorId === v.id)

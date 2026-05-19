@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Search, Info } from 'lucide-react'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment } from '../store'
 import { useStore } from '../hooks/useStore'
 import { CommentThread } from '../components/CommentThread'
@@ -35,12 +36,12 @@ export default function ReturnedResponse() {
   useEffect(() => { document.title = `Respond — ${id} — PDPL Reviewer` }, [id])
 
   if (!ticket) return (
-    <EmptyState title="Ticket not found" icon="🔍"
+    <EmptyState title="Ticket not found" icon={<Search size={26} color="var(--teal-600)" />}
       action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back</button>} />
   )
   if (ticket.state !== 'returned_to_requester') {
     return (
-      <EmptyState title="Ticket is not returned" body="This ticket is not currently awaiting your response." icon="ℹ️"
+      <EmptyState title="Ticket is not returned" body="This ticket is not currently awaiting your response." icon={<Info size={26} color="var(--teal-600)" />}
         action={<button className="btn btn-primary" onClick={() => navigate(`/requests/${id}`)}>Open ticket</button>} />
     )
   }

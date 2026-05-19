@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { ClipboardList } from 'lucide-react'
 import { policyById } from '../data/seed'
 import { EmptyState } from '../components/primitives'
 import { AICoPilotPanel } from '../components/AICoPilotPanel'
@@ -12,7 +13,7 @@ export default function PolicyViewer() {
 
   useEffect(() => { document.title = pol ? `${pol.code} — PDPL Reviewer` : 'Policy — PDPL Reviewer' }, [pol])
 
-  if (!pol) return <EmptyState title="Policy not found" icon="📋"
+  if (!pol) return <EmptyState title="Policy not found" icon={<ClipboardList size={26} color="var(--teal-600)" />}
     action={<button className="btn btn-primary" onClick={() => navigate('/policies')}>Back to library</button>} />
 
   return (
