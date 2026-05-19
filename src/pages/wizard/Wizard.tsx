@@ -9,8 +9,9 @@ import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
 import { isDataverseConfigured as isSupabaseConfigured } from '../../lib/dataverse'
 import { createTicket, submitTicket } from '../../api/tickets'
-import { createVendor } from '../../api/vendors'
-import { createProject } from '../../api/projects'
+import { uploadAttachment } from '../../api/attachments'
+import { fetchVendors, createVendor } from '../../api/vendors'
+import { fetchProjects, createProject } from '../../api/projects'
 import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, type RequestBuilderType } from '../../api/aiRequestBuilder'
 import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
 import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentView'
@@ -217,6 +218,18 @@ export default function Wizard() {
   useEffect(() => {
     document.title = `New ${REQUEST_TYPE_LABELS[requestType] ?? 'Request'} — PDPL Reviewer`
   }, [requestType])
+
+  // Load vendors and projects from Dataverse so newly created ones appear
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    fetchVendors().then((v) => setExtraVendors(v)).catch(() => undefined)
+    fetchProjects().then((p) => setExtraProjects(p)).catch(() => undefined)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // In Dataverse mode use only the fetched list; in demo mode use seed data
+  const allVendors = isSupabaseConfigured ? extraVendors : VENDORS
+  const allProjects = isSupabaseConfigured ? extraProjects : PROJECTS
 
   // Autosave
   useEffect(() => { saveDraft(form) }, [form])
@@ -537,8 +550,8 @@ export default function Wizard() {
     if (!validate(currentStep)) return
     const idx = StepIndex(currentStep)
     if (currentStep === 'vendor_project') {
-      const v = VENDORS.find((x) => x.id === form.linkedVendorId) ?? extraVendors.find((x) => x.id === form.linkedVendorId)
-      const p = [...PROJECTS, ...extraProjects].find((x) => x.id === form.linkedProjectId)
+      const v = allVendors.find((x) => x.id === form.linkedVendorId)
+      const p = allProjects.find((x) => x.id === form.linkedProjectId)
       if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction, businessUnit: p?.businessUnit ?? form.businessUnit })
     }
     if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key)
@@ -562,6 +575,8 @@ export default function Wizard() {
           type: requestType,
           title: form.title,
           description: form.description,
+          vendorId: form.linkedVendorId || undefined,
+          projectId: form.linkedProjectId || undefined,
           payload: {
             vendorName: form.vendorName || undefined,
             vendorJurisdiction: form.vendorJurisdiction || undefined,
@@ -586,6 +601,14 @@ export default function Wizard() {
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }, user.id)
         const ready = await submitTicket(ticket.id)
+
+        // Upload any files the requester attached during the wizard
+        if (uploadedFiles.length > 0) {
+          await Promise.allSettled(
+            uploadedFiles.map((file) => uploadAttachment(ready.id, file, 'evidence', undefined, user.id))
+          )
+        }
+
         demoAddTicket(ready)
         clearDraft()
         showToast('Request submitted successfully.', 'success')
@@ -662,7 +685,14 @@ export default function Wizard() {
             ackHours: 24, decisionHours: 72, startedAt: now, breached: false,
             decisionDueAt: new Date(Date.now() + 72 * 3600000).toISOString(),
           },
-          attachments: [], returnThread: [],
+          attachments: uploadedFiles.map((f) => ({
+            id: crypto.randomUUID(), ticketId: newId, filename: f.name,
+            sizeBytes: f.size, contentType: f.type || 'application/octet-stream',
+            uploadedBy: user.id, uploadedAt: now, storageBucket: 'demo',
+            storagePath: f.name, signedUrl: URL.createObjectURL(f),
+            scanStatus: 'clean' as const, classification: 'internal' as const, category: 'evidence' as const,
+          })),
+          returnThread: [],
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }
 
@@ -784,7 +814,7 @@ export default function Wizard() {
 
                 {/* Vendor list */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {[...VENDORS, ...extraVendors].filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
+                  {allVendors.filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
                     const selected = form.linkedVendorId === v.id
                     return (
                       <button key={v.id}
@@ -860,7 +890,7 @@ export default function Wizard() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>Project</div>
                     <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>
                       {form.linkedVendorId
-                        ? <>Select a project under <strong>{[...VENDORS, ...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}</strong></>
+                        ? <>Select a project under <strong>{allVendors.find((v) => v.id === form.linkedVendorId)?.tradeName}</strong></>
                         : 'Select a vendor first to see its projects'}
                     </div>
                   </div>
@@ -874,7 +904,7 @@ export default function Wizard() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {(() => {
-                      const vendorProjects = [...PROJECTS, ...extraProjects].filter((p) => p.vendorId === form.linkedVendorId)
+                      const vendorProjects = allProjects.filter((p) => p.vendorId === form.linkedVendorId)
                       return (
                         <>
                           {vendorProjects.length === 0 && (
@@ -962,7 +992,7 @@ export default function Wizard() {
                       <div style={{ flex: 1 }}>
                         <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>New Project</h3>
                         <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0, marginTop: 1 }}>
-                          Under {[...VENDORS, ...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}
+                          Under {allVendors.find((v) => v.id === form.linkedVendorId)?.tradeName}
                         </p>
                       </div>
                       <button onClick={() => setShowNewProjectModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1305,8 +1335,8 @@ export default function Wizard() {
 
                   {/* Vendor & Project Summary */}
                   {form.linkedVendorId && (() => {
-                    const v = [...VENDORS, ...extraVendors].find((x) => x.id === form.linkedVendorId)
-                    const p = [...PROJECTS, ...extraProjects].find((x) => x.id === form.linkedProjectId)
+                    const v = allVendors.find((x) => x.id === form.linkedVendorId)
+                    const p = allProjects.find((x) => x.id === form.linkedProjectId)
                     if (!v) return null
                     return (
                       <div className="card" style={{ padding: '16px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)' }}>

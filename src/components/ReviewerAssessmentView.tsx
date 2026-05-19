@@ -10,6 +10,13 @@ import React from 'react'
 interface ComplianceCheck  { area: string; status: string; detail: string }
 interface ApprovalDecision { recommendation: string; rationale: string }
 interface Recommendation   { action: string; priority: string; owner?: string }
+interface RiskItem         { risk: string; detail: string; priority: string }
+interface CPRoles {
+  questionnaire: { vendor_role: string; our_org_role: string; joint_controllers: boolean }
+  document:      { vendor_role: string; our_org_role: string; status: string; detail: string }
+  match:         boolean
+  mismatch_note: string
+}
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const CHECK_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -223,11 +230,97 @@ function RenderBulletList({ value }: { value: string[] }) {
   )
 }
 
+function RenderRiskAssessment({ value }: { value: RiskItem[] }) {
+  const PRIORITY_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+    high:   { bg: '#FEF2F2', color: '#B91C1C', border: '#FECACA' },
+    medium: { bg: '#FFFBEB', color: '#92400E', border: '#FDE68A' },
+    low:    { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {value.map((item, i) => {
+        const pc = PRIORITY_COLORS[item.priority?.toLowerCase()] ?? PRIORITY_COLORS.medium
+        return (
+          <div key={i} style={{ padding: '12px 14px', borderRadius: 'var(--r-md)', border: `1px solid ${pc.border}`, background: 'var(--surface-0)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{item.risk}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: pc.bg, color: pc.color, border: `1px solid ${pc.border}`, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>
+                {item.priority}
+              </span>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--ink-700)', margin: 0, lineHeight: 1.55 }}>{item.detail}</p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function RenderControllerProcessorRoles({ value }: { value: CPRoles }) {
+  const docStatusToCheck = (s: string) => s === 'confirmed' ? 'pass' : s === 'contradicts' ? 'fail' : 'concern'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {!value.match && value.mismatch_note && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', borderRadius: 'var(--r-md)', background: '#FEF2F2', border: '1px solid #FECACA' }}>
+          <AlertTriangle size={14} style={{ color: '#B91C1C', flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: 13, color: '#991B1B', lineHeight: 1.5 }}>{value.mismatch_note}</span>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-1)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', marginBottom: 10, textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Per Questionnaire</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: 2 }}>Vendor Role</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{value.questionnaire.vendor_role}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: 2 }}>Our Org Role</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{value.questionnaire.our_org_role}</div>
+            </div>
+            {value.questionnaire.joint_controllers && (
+              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#FFFBEB', color: '#92400E', border: '1px solid #FDE68A', display: 'inline-block', width: 'fit-content' }}>Joint Controllers</span>
+            )}
+          </div>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface-1)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>Per Document</div>
+            {value.document.status && <CheckBadge status={docStatusToCheck(value.document.status)} />}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: 2 }}>Vendor Role</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{value.document.vendor_role}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)', marginBottom: 2 }}>Our Org Role</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>{value.document.our_org_role}</div>
+            </div>
+            {value.document.detail && (
+              <p style={{ fontSize: 12, color: 'var(--ink-500)', margin: 0, lineHeight: 1.5 }}>{value.document.detail}</p>
+            )}
+          </div>
+        </div>
+      </div>
+      {value.match && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#166534', padding: '6px 12px', background: '#F0FDF4', borderRadius: 'var(--r-sm)', border: '1px solid #BBF7D0' }}>
+          <CircleCheck size={13} strokeWidth={2} /> Questionnaire and document are consistent.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function sectionContent(key: string, value: unknown): ReactNode {
   if ((key === 'approval_guidance' || key === 'approval_decision') && typeof value === 'object' && value !== null)
     return <RenderApproval value={value as ApprovalDecision} />
   if (key === 'compliance_checks' && Array.isArray(value))
     return <RenderComplianceChecks value={value as ComplianceCheck[]} />
+  if (key === 'risk_assessment' && Array.isArray(value) && value.length > 0 && typeof (value as unknown[])[0] === 'object')
+    return <RenderRiskAssessment value={value as RiskItem[]} />
+  if (key === 'controller_processor_roles' && typeof value === 'object' && value !== null && !Array.isArray(value))
+    return <RenderControllerProcessorRoles value={value as CPRoles} />
   if (key === 'recommendations')
     return <RenderRecommendations value={value} />
   if (Array.isArray(value))
@@ -237,13 +330,24 @@ function sectionContent(key: string, value: unknown): ReactNode {
   return null
 }
 
+// ─── Standalone Controller/Processor Roles card ──────────────────────────────
+export function ControllerProcessorRolesCard({ data }: { data: unknown }) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  const cfg = getIconCfg('controller_processor_roles')
+  return (
+    <SectionCard icon={cfg.icon} iconBg={cfg.iconBg} iconColor={cfg.iconColor} title="Controller / Processor Roles">
+      <RenderControllerProcessorRoles value={data as CPRoles} />
+    </SectionCard>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 interface Props { data: Record<string, unknown>; requestType: string }
 
 export function ReviewerAssessmentView({ data, requestType }: Props) {
   const order = REVIEWER_SECTION_ORDER[requestType as ReviewerRequestType] ?? Object.keys(data)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {order.map((key) => {
         const value = data[key]
         if (value === undefined || value === null) return null

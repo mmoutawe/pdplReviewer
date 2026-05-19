@@ -10,14 +10,24 @@ export type ReviewerRequestType =
 
 const SYSTEM_PROMPTS: Record<ReviewerRequestType, string> = {
   vendor_onboarding: `You are the Data Management deep reviewer for a VENDOR ONBOARDING ticket under Saudi PDPL.
-Be strict but fair. Use the requester answers, the pre-submission AI output, and any document evidence.
-For compliance_checks, evaluate purpose limitation, data minimization, cross-border, security, contractual safeguards.
-For approval_guidance, recommend approve / return / escalate-legal / escalate-security and explain why.
-Respond with a JSON object only using these exact top-level keys: executive_summary, data_classification, controller_processor_roles, risk_assessment, compliance_checks, issues, recommendations, approval_guidance.
+Be strict but fair. Use the requester answers and any attached document evidence provided in the ticket.
+If attachments are present, cross-reference each document (DPA, SOC2, contracts, etc.) against the questionnaire answers and highlight discrepancies.
+For controller_processor_roles, compare what the questionnaire states versus what the documents say — flag mismatches.
+For compliance_checks, evaluate purpose limitation, data minimization, cross-border transfer, security controls, and contractual safeguards.
+For approval_guidance, recommend approve / return / escalate-legal / escalate-security and explain why, referencing specific document findings where relevant.
+For document_findings, extract 3–6 specific, concrete compliance findings directly from the attached documents. Each finding must reference specific document content. If no documents are provided, return an empty array.
+Respond with a JSON object only using these exact top-level keys: executive_summary, data_classification, controller_processor_roles, risk_assessment, compliance_checks, issues, recommendations, approval_guidance, document_findings.
+- document_findings: array of objects, each with: title (short finding label, e.g. "Cross-border Data Transfer"), detail (1–2 sentence explanation referencing document evidence), severity ("fail"|"warning"|"pass")
 - compliance_checks: array of objects, each with: area (string), status ("pass"|"concern"|"fail"), detail (string)
+- risk_assessment: array of objects, each with: risk (string title), detail (string explanation), priority ("high"|"medium"|"low")
 - approval_guidance: object with: recommendation ("approve"|"return"|"escalate-legal"|"escalate-security"), rationale (string)
+- controller_processor_roles: object with:
+    questionnaire: { vendor_role: string, our_org_role: string, joint_controllers: boolean }
+    document: { vendor_role: string, our_org_role: string, status: "confirmed"|"not_mentioned"|"contradicts", detail: string }
+    match: boolean
+    mismatch_note: string (empty string if match is true)
 - issues, recommendations: arrays of strings
-- all other values: strings`,
+- executive_summary, data_classification: strings`,
 
   external_document_sharing: `You are the Data Management deep reviewer for an EXTERNAL DOCUMENT SHARING ticket under Saudi PDPL.
 Be specific and actionable. Reference the document content where possible.
@@ -46,7 +56,7 @@ Respond with a JSON object only using these exact top-level keys: transfer_risk_
 }
 
 export const REVIEWER_SECTION_ORDER: Record<ReviewerRequestType, string[]> = {
-  vendor_onboarding:        ['executive_summary', 'data_classification', 'controller_processor_roles', 'risk_assessment', 'compliance_checks', 'issues', 'recommendations', 'approval_guidance'],
+  vendor_onboarding:        ['executive_summary', 'risk_assessment', 'compliance_checks', 'issues', 'recommendations', 'data_classification', 'approval_guidance'],
   external_document_sharing:['document_classification', 'personal_data_analysis', 'sensitive_data_exposure', 'data_minimization_assessment', 'sharing_risk_analysis', 'compliance_issues', 'recommendations', 'approval_decision'],
   data_sharing_external:    ['data_classification', 'purpose_legitimacy', 'data_minimization_evaluation', 'transfer_risk', 'security_control_assessment', 'compliance_gaps', 'recommendations', 'approval_guidance'],
   internal_data_access:     ['access_justification_review', 'data_sensitivity', 'least_privilege_assessment', 'duration_scope_risk', 'policy_compliance', 'recommendations', 'approval_decision'],
@@ -54,12 +64,12 @@ export const REVIEWER_SECTION_ORDER: Record<ReviewerRequestType, string[]> = {
 }
 
 export const REVIEWER_SECTION_LABELS: Record<string, string> = {
-  executive_summary:           'Executive Summary',
+  executive_summary:           'Reviewer Copilot',
   data_classification:         'Data Classification',
   controller_processor_roles:  'Controller / Processor Roles',
-  risk_assessment:             'Risk Assessment',
+  risk_assessment:             'Identified Risks',
   compliance_checks:           'Compliance Checks',
-  issues:                      'Issues',
+  issues:                      'Gaps Identified',
   recommendations:             'Recommendations',
   approval_guidance:           'Approval Guidance',
   document_classification:     'Document Classification',
@@ -97,9 +107,14 @@ export async function runReviewerAssessment(
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
+  const attachments = (ticket.attachments as Array<{ filename: string; category: string; classification: string; summary?: string }> | undefined) ?? []
+  const attachmentBlock = attachments.length > 0
+    ? `\n\n=== ATTACHED DOCUMENTS (${attachments.length}) ===\nYou MUST reference these documents in your analysis. Cross-reference each document summary against the questionnaire answers.\n${attachments.map((a, i) => `\nDocument ${i + 1}: ${a.filename}\nCategory: ${a.category ?? 'unknown'} | Classification: ${a.classification ?? 'unknown'}\nExtracted Summary:\n${a.summary ?? '(no extracted text — base analysis on filename and category only)'}`).join('\n---')}\n=== END DOCUMENTS ===`
+    : '\n\nAttached Documents: none provided'
+
   const userMessage = `Reviewer deep-assessment.
 Ticket:
-${JSON.stringify(ticket, null, 2)}`
+${JSON.stringify({ ...ticket, attachments: undefined }, null, 2)}${attachmentBlock}`
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
@@ -112,7 +127,7 @@ ${JSON.stringify(ticket, null, 2)}`
         { role: 'user',   content: userMessage },
       ],
 
-      max_completion_tokens: 2048,
+      max_completion_tokens: 4096,
       response_format: { type: 'json_object' },
     }),
   })

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
-import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, Shield, Lightbulb, CheckCircle, XCircle, GitBranch, CornerUpLeft } from 'lucide-react'
+import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, CheckCircle, XCircle, GitBranch, CornerUpLeft } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment, lookupVendor, lookupProject } from '../store'
@@ -22,7 +22,7 @@ import { getWorkflowSettings } from '../lib/workflowSettings'
 import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket } from '../api/tickets'
 import { getCachedUser } from '../lib/userCache'
 import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReviewer'
-import { ReviewerAssessmentView } from '../components/ReviewerAssessmentView'
+import { ReviewerAssessmentView, ControllerProcessorRolesCard } from '../components/ReviewerAssessmentView'
 import { AIDocumentChat } from '../components/AIDocumentChat'
 import { ReviewerAssistPanel } from '../components/ReviewerAssistPanel'
 import { runChecklistReview, type ChecklistResult } from '../api/aiChecklist'
@@ -122,6 +122,26 @@ export default function TicketWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.state])
 
+  // Auto-trigger AI assessment when DM tab opens
+  useEffect(() => {
+    if (wizardStep !== 4 || reviewerData || reviewerLoading || !ticket) return
+    const attachmentContext = ticket.attachments
+      .filter((a) => a.extractedSummary)
+      .map((a) => ({ filename: a.filename, category: a.category, classification: a.classification, summary: a.extractedSummary }))
+    setReviewerLoading(true)
+    setReviewerError(null)
+    runReviewerAssessment(ticket.type as ReviewerRequestType, {
+      type: ticket.type, title: ticket.title, description: ticket.description,
+      payload: ticket.payload, dataDeclaration: ticket.dataDeclaration,
+      returnThread: ticket.returnThread, tags: ticket.tags,
+      attachments: attachmentContext.length > 0 ? attachmentContext : undefined,
+    })
+      .then((data) => { setReviewerData(data) })
+      .catch((err) => { setReviewerError(err instanceof Error ? err.message : 'Failed to generate reviewer assessment.') })
+      .finally(() => { setReviewerLoading(false) })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wizardStep, ticket?.id])
+
   if (!ticket) {
     return (
       <EmptyState title="Ticket not found" body={`No ticket with ID "${id}" exists.`} icon={<Search size={26} color="var(--teal-600)" />}
@@ -147,10 +167,14 @@ export default function TicketWorkspace() {
     if (!ticket) return
     setReviewerLoading(true); setReviewerError(null)
     try {
+      const attachmentContext = ticket.attachments
+        .filter((a) => a.extractedSummary)
+        .map((a) => ({ filename: a.filename, category: a.category, classification: a.classification, summary: a.extractedSummary }))
       const data = await runReviewerAssessment(ticket.type as ReviewerRequestType, {
         type: ticket.type, title: ticket.title, description: ticket.description,
         payload: ticket.payload, dataDeclaration: ticket.dataDeclaration,
         returnThread: ticket.returnThread, tags: ticket.tags,
+        attachments: attachmentContext.length > 0 ? attachmentContext : undefined,
       })
       setReviewerData(data)
     } catch (err) {
@@ -692,172 +716,109 @@ export default function TicketWorkspace() {
               </div>
             )}
 
-            {/* ── Attached Documents ── */}
-            {ticket.attachments.length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  📎 Attached Documents ({ticket.attachments.length})
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {ticket.attachments.map((att) => (
-                    <div key={att.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 20 }}>📄</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{att.filename}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>Requester{att.sizeBytes ? ` · ${Math.round(att.sizeBytes / 1024)} KB` : ''}</div>
-                        </div>
-                      </div>
-                      <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }}>↓ Download</button>
-                    </div>
-                  ))}
+            {/* ── AI Deep Assessment (auto-triggered) ── */}
+            <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Sparkles size={16} />
                 </div>
-              </div>
-            )}
-
-            {/* ── Document Analysis — Findings ── */}
-            {assessment && assessment.findings.length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Search size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
-                  Document Analysis — Findings
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {assessment.findings.map((f) => (
-                    <div key={f.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)', fontSize: 13 }}>
-                      <p style={{ flex: 1, marginRight: 12, color: 'var(--ink-700)', lineHeight: 1.5 }}>{f.title}: {f.detail}</p>
-                      <span className={`pill pill-no-dot ${f.severity === 'critical' || f.severity === 'high' ? 'pill-red' : f.severity === 'medium' ? 'pill-amber' : 'pill-emerald'}`} style={{ fontSize: 10.5, flexShrink: 0 }}>
-                        {f.severity === 'critical' || f.severity === 'high' ? 'Fail' : f.severity === 'medium' ? 'Warning' : 'Pass'}
-                      </span>
-                    </div>
-                  ))}
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Reviewer AI Deep Assessment</h3>
+                  <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: 0 }}>AI-generated compliance analysis for this ticket</p>
                 </div>
+                {reviewerData && !reviewerLoading && (
+                  <button className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { setReviewerData(null); void generateReviewerAI() }}><RefreshCw size={12} /> Regenerate</button>
+                )}
               </div>
-            )}
-
-            {/* ── Reviewer Copilot ── */}
-            {assessment && (
-              <div className="card" style={{ padding: '16px 18px', borderColor: 'var(--brand-200)', background: 'rgba(99,102,241,0.03)' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
-                  Reviewer Copilot
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+              {reviewerLoading && (
+                <div style={{ padding: '20px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--teal-100)', borderTop: '2.5px solid var(--teal-600)', animation: 'spin 0.9s linear infinite', flexShrink: 0 }} aria-hidden="true" />
                   <div>
-                    <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 3 }}>Executive Summary:</div>
-                    <p style={{ color: 'var(--ink-800)', lineHeight: 1.6 }}>{assessment.summary}</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', margin: '0 0 2px' }}>Analyzing ticket…</p>
+                    <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0 }}>Running deep PDPL compliance review</p>
                   </div>
-                  {(() => { const r = assessment.findings.find((f) => f.severity === 'critical' || f.severity === 'high'); return r ? (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 3 }}>Top Risk:</div>
-                      <p style={{ color: 'var(--red-700)', lineHeight: 1.6 }}>{r.title}: {r.detail}</p>
-                    </div>
-                  ) : null })()}
-                  {(() => { const r = assessment.findings.find((f) => f.remediation); return r ? (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 3 }}>Recommendation:</div>
-                      <p style={{ color: 'var(--amber-700)', lineHeight: 1.6 }}>{r.remediation}</p>
-                    </div>
-                  ) : null })()}
                 </div>
-              </div>
-            )}
-
-            {/* ── Identified Risks ── */}
-            {assessment && assessment.findings.filter((f) => f.severity === 'high' || f.severity === 'critical').length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: 'var(--amber-600)' }}>⚠</span> Identified Risks
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {assessment.findings.filter((f) => f.severity === 'high' || f.severity === 'critical').map((f) => (
-                    <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
-                        <span style={{ color: 'var(--amber-500)', marginTop: 1 }}>⚠</span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{f.title}</div>
-                          <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{f.detail}</div>
+              )}
+              {reviewerError && (
+                <div style={{ padding: '14px 16px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-lg)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 'var(--r-md)', background: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <AlertTriangle size={12} />
+                  </div>
+                  <span style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{reviewerError}</span>
+                  <button className="btn btn-sm" onClick={() => void generateReviewerAI()}>Retry</button>
+                </div>
+              )}
+              {/* ── Attached Documents ── */}
+              {ticket.attachments.length > 0 && (
+                <div className="card" style={{ padding: '16px 18px' }}>
+                  <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    📎 Attached Documents ({ticket.attachments.length})
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {ticket.attachments.map((att) => (
+                      <div key={att.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 20 }}>📄</span>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{att.filename}</div>
+                            <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>Requester{att.sizeBytes ? ` · ${Math.round(att.sizeBytes / 1024)} KB` : ''}</div>
+                          </div>
                         </div>
+                        <button className="btn btn-sm btn-ghost" style={{ fontSize: 12 }}>↓ Download</button>
                       </div>
-                      <RiskBadge level="high" compact />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* ── Compliance Checks ── */}
-            {assessment && assessment.findings.length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Shield size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
-                  Compliance Checks
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {assessment.findings.map((f) => (
-                    <div key={`cc-${f.id}`} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, flexShrink: 0, marginTop: 1, color: f.severity === 'critical' || f.severity === 'high' ? 'var(--red-600)' : f.severity === 'medium' ? 'var(--amber-600)' : 'var(--emerald-600)' }}>
-                          {f.severity === 'critical' || f.severity === 'high' ? '✕' : f.severity === 'medium' ? '⚠' : '✓'}
-                        </span>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{f.title}</div>
-                          <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{f.detail}</div>
+              {/* ── Document Analysis — Findings ── */}
+              {(() => {
+                const aiFindings = (reviewerData?.document_findings as Array<{ title: string; detail: string; severity: string }> | undefined) ?? []
+                const seedFindings = assessment?.findings ?? []
+                const hasFindings = aiFindings.length > 0 || seedFindings.length > 0
+                if (!hasFindings) return null
+                const allFindings: Array<{ key: string; title: string; detail: string; severity: string }> = [
+                  ...aiFindings.map((f, i) => ({ key: `ai-${i}`, ...f })),
+                  ...seedFindings.map((f) => ({
+                    key: f.id,
+                    title: f.title,
+                    detail: f.detail,
+                    severity: f.severity === 'critical' || f.severity === 'high' ? 'fail' : f.severity === 'medium' ? 'warning' : 'pass',
+                  })),
+                ]
+                return (
+                  <div className="card" style={{ padding: '16px 18px' }}>
+                    <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FileText size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
+                      Document Analysis — Findings
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {allFindings.map((f, i) => (
+                        <div key={f.key} style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                          padding: '10px 0',
+                          borderBottom: i < allFindings.length - 1 ? '1px solid var(--line)' : 'none',
+                        }}>
+                          <p style={{ flex: 1, fontSize: 13, color: 'var(--ink-700)', lineHeight: 1.55, margin: 0 }}>
+                            <span style={{ fontWeight: 600 }}>{f.title}:</span>{' '}{f.detail}
+                          </p>
+                          <span className={`pill pill-no-dot ${f.severity === 'fail' ? 'pill-red' : f.severity === 'warning' ? 'pill-amber' : 'pill-emerald'}`} style={{ fontSize: 10.5, flexShrink: 0 }}>
+                            {f.severity === 'fail' ? 'Fail' : f.severity === 'warning' ? 'Warning' : 'Pass'}
+                          </span>
                         </div>
-                      </div>
-                      <RiskBadge level={f.severity === 'info' || f.severity === 'low' ? 'low' : f.severity === 'medium' ? 'medium' : 'high'} compact />
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )
+              })()}
 
-            {/* ── Gaps Identified ── */}
-            {assessment && assessment.findings.filter((f) => f.severity === 'critical' || f.severity === 'high').length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: 'var(--red-600)', fontWeight: 700 }}>✕</span> Gaps Identified
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {assessment.findings.filter((f) => f.severity === 'critical' || f.severity === 'high').map((f) => (
-                    <div key={`cg-${f.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.04)', borderRadius: 'var(--r-md)' }}>
-                      <span className="pill pill-no-dot pill-red" style={{ fontSize: 10.5, flexShrink: 0 }}>Compliance</span>
-                      <span style={{ fontSize: 13 }}>{f.detail}</span>
-                    </div>
-                  ))}
-                  {assessment.findings.filter((f) => (f.category.toLowerCase().includes('securit') || f.category.toLowerCase().includes('encrypt') || f.category.toLowerCase().includes('access')) && (f.severity === 'critical' || f.severity === 'high' || f.severity === 'medium')).map((f) => (
-                    <div key={`sg-${f.id}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(245,158,11,0.04)', borderRadius: 'var(--r-md)' }}>
-                      <span className="pill pill-no-dot pill-amber" style={{ fontSize: 10.5, flexShrink: 0 }}>Security</span>
-                      <span style={{ fontSize: 13 }}>{f.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              {/* ── Controller / Processor Roles ── */}
+              {reviewerData?.controller_processor_roles && !reviewerLoading && (
+                <ControllerProcessorRolesCard data={reviewerData.controller_processor_roles} />
+              )}
 
-            {/* ── Recommendations ── */}
-            {assessment && assessment.findings.filter((f) => f.remediation).length > 0 && (
-              <div className="card" style={{ padding: '16px 18px' }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Lightbulb size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
-                  Recommendations
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {assessment.findings.filter((f) => f.remediation).map((f) => (
-                    <div key={`rec-${f.id}`} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
-                        <Lightbulb size={13} color="var(--brand-600)" strokeWidth={2} style={{ marginTop: 2, flexShrink: 0 }} aria-hidden />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500 }}>{f.remediation}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>Category: {f.category}</div>
-                        </div>
-                      </div>
-                      <RiskBadge level={f.severity === 'critical' || f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'medium' : 'low'} compact />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              {reviewerData && !reviewerLoading && <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />}
+            </section>
 
             {/* ── Return Thread ── */}
             {ticket.returnThread.length > 0 && (
@@ -885,56 +846,6 @@ export default function TicketWorkspace() {
                 />
               </div>
             )}
-
-            {/* ── Reviewer AI Deep Assessment ── */}
-            <section>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Sparkles size={16} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Reviewer AI Deep Assessment</h3>
-                  <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: 0 }}>AI-generated compliance analysis for this ticket</p>
-                </div>
-                {!reviewerData && !reviewerLoading && (
-                  <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => void generateReviewerAI()}>
-                    <Sparkles size={12} />
-                    Generate
-                  </button>
-                )}
-                {reviewerData && !reviewerLoading && (
-                  <button className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { setReviewerData(null); void generateReviewerAI() }}><RefreshCw size={12} /> Regenerate</button>
-                )}
-              </div>
-              {reviewerLoading && (
-                <div style={{ padding: '20px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--teal-100)', borderTop: '2.5px solid var(--teal-600)', animation: 'spin 0.9s linear infinite', flexShrink: 0 }} aria-hidden="true" />
-                  <div>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', margin: '0 0 2px' }}>Analyzing ticket…</p>
-                    <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0 }}>Running deep PDPL compliance review</p>
-                  </div>
-                </div>
-              )}
-              {reviewerError && (
-                <div style={{ padding: '14px 16px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-lg)', display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 'var(--r-md)', background: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <AlertTriangle size={12} />
-                  </div>
-                  <span style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{reviewerError}</span>
-                  <button className="btn btn-sm" onClick={() => void generateReviewerAI()}>Retry</button>
-                </div>
-              )}
-              {reviewerData && !reviewerLoading && <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />}
-              {!reviewerData && !reviewerLoading && !reviewerError && (
-                <div style={{ padding: '24px 16px', background: 'var(--surface-1)', border: '1.5px dashed var(--line)', borderRadius: 'var(--r-lg)', textAlign: 'center' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 'var(--r-lg)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                    <Sparkles size={18} />
-                  </div>
-                  <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-700)', margin: '0 0 4px' }}>No assessment yet</p>
-                  <p style={{ fontSize: 13, color: 'var(--ink-400)', margin: 0 }}>Click <strong>Generate</strong> to run a deep PDPL review for this ticket.</p>
-                </div>
-              )}
-            </section>
 
             {/* ── Review Checklist with Mode Toggle ── */}
             <div className="card" style={{ padding: '16px 18px' }}>
