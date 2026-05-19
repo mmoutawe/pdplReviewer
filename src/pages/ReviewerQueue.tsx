@@ -126,7 +126,7 @@ export default function ReviewerQueue() {
           <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setFetchError(null); setLoading(true); fetchTickets({ state: states }).then(setLiveTickets).catch((err) => setFetchError(err instanceof Error ? err.message : 'Failed to load queue')).finally(() => setLoading(false)) }}>Retry</button>
         </div>
       ) : loading ? (
-        <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading queue…</div>
+        <ul>{Array.from({ length: 5 }).map((_, i) => <QueueRowSkeleton key={i} />)}</ul>
       ) : visible.length === 0 ? (
         <EmptyState title="Queue is empty" body="No tickets are currently assigned to this queue." icon={<CheckCircle size={26} color="var(--teal-600)" />} />
       ) : (
@@ -137,6 +137,29 @@ export default function ReviewerQueue() {
         </ul>
       )}
     </div>
+  )
+}
+
+function QueueRowSkeleton() {
+  const s = (w: number | string, h = 12, mb = 0): React.CSSProperties => ({
+    width: w, height: h, borderRadius: 4, display: 'inline-block', marginBottom: mb,
+  })
+  return (
+    <li style={{ borderBottom: '1px solid var(--line)', padding: '16px 24px', display: 'flex', gap: 16, alignItems: 'flex-start' }} aria-hidden="true">
+      <div className="skel" style={{ width: 4, height: 56, borderRadius: 2 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <span className="skel" style={s(80)} />
+          <span className="skel" style={s(64)} />
+          <span className="skel" style={s(72)} />
+        </div>
+        <span className="skel" style={{ ...s('55%', 14, 8), display: 'block' }} />
+        <div style={{ display: 'flex', gap: 12 }}>
+          <span className="skel" style={s(90)} />
+          <span className="skel" style={s(110)} />
+        </div>
+      </div>
+    </li>
   )
 }
 

@@ -527,7 +527,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                         <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>{desc}</div>
                       </div>
                       <button
-                        role="switch" aria-checked={on}
+                        role="switch" aria-checked={!!on}
                         onClick={() => {
                           const next = !on
                           setWorkflowSetting(key as keyof WorkflowSettings, next)

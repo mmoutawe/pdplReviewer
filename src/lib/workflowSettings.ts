@@ -8,6 +8,9 @@ export interface WorkflowSettings {
   legalForCrossBorder: boolean
   securityForSensitive: boolean
   autoRouteLowRisk: boolean
+  checklistItems: string[]
+  riskThreshold: number
+  confidenceThreshold: number
 }
 
 const DEFAULTS: WorkflowSettings = {
@@ -15,6 +18,15 @@ const DEFAULTS: WorkflowSettings = {
   legalForCrossBorder: true,
   securityForSensitive: true,
   autoRouteLowRisk: false,
+  checklistItems: [
+    'Purpose is clearly stated',
+    'Data is necessary for purpose',
+    'No excessive personal data',
+    'Recipient is appropriate',
+    'Attachments reviewed',
+  ],
+  riskThreshold: 3,
+  confidenceThreshold: 95,
 }
 
 /** Synchronous read — always returns quickly from localStorage cache. */

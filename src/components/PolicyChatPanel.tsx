@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { Check } from 'lucide-react'
 import type { Policy } from '../data/types'
 import {
   streamPolicyChat,
@@ -6,6 +7,7 @@ import {
   POLICY_CHAT_INITIAL_MESSAGES,
   type PolicyChatMessage,
 } from '../api/aiPolicyChat'
+import { showToast } from '../store'
 
 const ROLE_TITLES: Record<string, string> = {
   requester:       'PDPL Advisor',
@@ -27,6 +29,7 @@ function MessageBubble({ msg }: MessageBubbleProps) {
     void navigator.clipboard.writeText(msg.content).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1800)
+      showToast('Copied to clipboard.', 'success')
     })
   }
 
@@ -59,9 +62,10 @@ function MessageBubble({ msg }: MessageBubbleProps) {
           marginTop: 4, padding: '2px 8px', fontSize: 11.5,
           background: 'none', border: 'none', cursor: 'pointer',
           color: copied ? '#166534' : 'var(--ink-400)',
+        display: 'flex', alignItems: 'center', gap: 4,
         }}
       >
-        {copied ? '✓ Copied' : 'Copy'}
+        {copied ? <><Check size={11} /> Copied</> : 'Copy'}
       </button>
     </div>
   )

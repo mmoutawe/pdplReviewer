@@ -1,10 +1,11 @@
 import {
   FileText, ShieldCheck, Users, AlertTriangle, CircleCheck,
   CircleX, Lightbulb, Globe, Lock, Scale, BarChart2,
-  ClipboardCheck, ListChecks, ShieldAlert,
+  ClipboardCheck, ListChecks, ShieldAlert, CornerUpLeft,
 } from 'lucide-react'
 import { REVIEWER_SECTION_ORDER, REVIEWER_SECTION_LABELS, type ReviewerRequestType } from '../api/aiReviewer'
 import type { ReactNode } from 'react'
+import React from 'react'
 
 interface ComplianceCheck  { area: string; status: string; detail: string }
 interface ApprovalDecision { recommendation: string; rationale: string }
@@ -42,8 +43,18 @@ const APPROVAL_COLORS: Record<string, { bg: string; color: string; border: strin
   reject:              { bg: '#FEF2F2', color: '#991B1B', border: '#FECACA' },
 }
 
+const APPROVAL_ICON: Record<string, React.ReactNode> = {
+  approve:             <CircleCheck size={13} strokeWidth={2} />,
+  return:              <CornerUpLeft size={13} strokeWidth={2} />,
+  'escalate-legal':    <Scale size={13} strokeWidth={2} />,
+  'escalate-security': <ShieldAlert size={13} strokeWidth={2} />,
+  reject:              <CircleX size={13} strokeWidth={2} />,
+}
+
 function ApprovalPill({ recommendation }: { recommendation: string }) {
-  const s = APPROVAL_COLORS[recommendation?.toLowerCase()] ?? APPROVAL_COLORS.return
+  const key = recommendation?.toLowerCase()
+  const s   = APPROVAL_COLORS[key] ?? APPROVAL_COLORS.return
+  const icon = APPROVAL_ICON[key] ?? <AlertTriangle size={13} strokeWidth={2} />
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -51,6 +62,7 @@ function ApprovalPill({ recommendation }: { recommendation: string }) {
       background: s.bg, color: s.color, border: `1px solid ${s.border}`,
       fontSize: 12.5, fontWeight: 700,
     }}>
+      {icon}
       {recommendation?.charAt(0).toUpperCase()}{recommendation?.slice(1)}
     </span>
   )

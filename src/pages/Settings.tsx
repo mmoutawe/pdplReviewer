@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
+import { Trash2, Plus } from 'lucide-react'
 import { authStore, showToast } from '../store'
 import { useStore } from '../hooks/useStore'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
@@ -81,16 +82,8 @@ export default function Settings() {
   const [newExpiry, setNewExpiry] = useState('')
   const [creating, setCreating]   = useState(false)
 
-  const [riskThreshold, setRiskThreshold] = useState(3)
-  const [confidenceThreshold, setConfidenceThreshold] = useState(95)
-
-  const CHECKLIST_ITEMS = [
-    'Purpose is clearly stated',
-    'Data is necessary for purpose',
-    'No excessive personal data',
-    'Recipient is appropriate',
-    'Attachments reviewed',
-  ]
+  const [saving, setSaving] = useState(false)
+  const [newChecklistItem, setNewChecklistItem] = useState('')
 
   useEffect(() => {
     if (!isSupabaseConfigured) return
@@ -110,6 +103,7 @@ export default function Settings() {
       if (settingsId) settingsIdRef.current = settingsId
       setWorkflowConfig(settings)
     })
+
 
     if (canManageLinks) {
       setLinksLoading(true)
@@ -134,7 +128,9 @@ export default function Settings() {
     }
   }
 
-  async function handleWorkflowToggle(key: keyof WorkflowSettings, value: boolean) {
+  type BoolWorkflowKey = 'requireDocumentValidation' | 'legalForCrossBorder' | 'securityForSensitive' | 'autoRouteLowRisk'
+
+  async function handleWorkflowToggle(key: BoolWorkflowKey, value: boolean) {
     if (!isAdmin) return
     const updated = { ...workflowConfig, [key]: value }
     setWorkflowConfig(updated)
@@ -169,6 +165,37 @@ export default function Settings() {
       setLinks((prev) => prev.map((l) => l.id === link.id ? { ...l, revoked: !l.revoked } : l))
       showToast(link.revoked ? 'Link reactivated.' : 'Link revoked.', 'success')
     } catch (err) { showToast(err instanceof Error ? err.message : 'Update failed.', 'error') }
+  }
+
+  function updateChecklist(index: number, value: string) {
+    const items = [...workflowConfig.checklistItems]
+    items[index] = value
+    setWorkflowConfig((prev) => ({ ...prev, checklistItems: items }))
+  }
+
+  function removeChecklistItem(index: number) {
+    const items = workflowConfig.checklistItems.filter((_, i) => i !== index)
+    setWorkflowConfig((prev) => ({ ...prev, checklistItems: items }))
+  }
+
+  function addChecklistItem() {
+    const trimmed = newChecklistItem.trim()
+    if (!trimmed) return
+    setWorkflowConfig((prev) => ({ ...prev, checklistItems: [...prev.checklistItems, trimmed] }))
+    setNewChecklistItem('')
+  }
+
+  async function handleSaveAll() {
+    if (!settingsIdRef.current) { showToast('Settings not loaded yet — try again.', 'error'); return }
+    setSaving(true)
+    try {
+      await saveWorkflowSettings(settingsIdRef.current, workflowConfig)
+      showToast('Settings saved.', 'success')
+    } catch {
+      showToast('Failed to save settings.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDeleteLink(link: AdminExternalLink) {
@@ -345,26 +372,32 @@ export default function Settings() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 4 }}>High Risk Threshold (personal data items)</div>
-              <input
-                type="range" min={1} max={10} value={riskThreshold}
-                onChange={(e) => isAdmin && setRiskThreshold(Number(e.target.value))}
-                disabled={!isAdmin}
-                style={{ width: '100%', maxWidth: 300, accentColor: 'var(--brand-700)', cursor: isAdmin ? 'pointer' : 'default' }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  type="range" min={1} max={10} value={workflowConfig.riskThreshold}
+                  onChange={(e) => isAdmin && setWorkflowConfig((prev) => ({ ...prev, riskThreshold: Number(e.target.value) }))}
+                  disabled={!isAdmin}
+                  style={{ flex: 1, maxWidth: 300, accentColor: 'var(--brand-700)', cursor: isAdmin ? 'pointer' : 'default' }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-700)', minWidth: 24, textAlign: 'right' }}>{workflowConfig.riskThreshold}</span>
+              </div>
               <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4 }}>
-                Tickets with {riskThreshold}+ high-sensitivity items auto-escalate to Legal
+                Tickets with {workflowConfig.riskThreshold}+ high-sensitivity items auto-escalate to Legal
               </div>
             </div>
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 4 }}>Auto-Approval Confidence Threshold</div>
-              <input
-                type="range" min={50} max={100} value={confidenceThreshold}
-                onChange={(e) => isAdmin && setConfidenceThreshold(Number(e.target.value))}
-                disabled={!isAdmin}
-                style={{ width: '100%', maxWidth: 300, accentColor: 'var(--brand-700)', cursor: isAdmin ? 'pointer' : 'default' }}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <input
+                  type="range" min={50} max={100} value={workflowConfig.confidenceThreshold}
+                  onChange={(e) => isAdmin && setWorkflowConfig((prev) => ({ ...prev, confidenceThreshold: Number(e.target.value) }))}
+                  disabled={!isAdmin}
+                  style={{ flex: 1, maxWidth: 300, accentColor: 'var(--brand-700)', cursor: isAdmin ? 'pointer' : 'default' }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-700)', minWidth: 36, textAlign: 'right' }}>{workflowConfig.confidenceThreshold}%</span>
+              </div>
               <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 4 }}>
-                AI reviews above {confidenceThreshold}% confidence with low risk can be auto-approved
+                AI reviews above {workflowConfig.confidenceThreshold}% confidence with low risk can be auto-approved
               </div>
             </div>
           </div>
@@ -396,7 +429,7 @@ export default function Settings() {
                   <Toggle
                     checked={on}
                     disabled={!isAdmin}
-                    onChange={(v) => void handleWorkflowToggle(key as keyof WorkflowSettings, v)}
+                    onChange={(v) => void handleWorkflowToggle(key, v)}
                   />
                 </div>
               )
@@ -415,19 +448,48 @@ export default function Settings() {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {CHECKLIST_ITEMS.map((item) => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)' }}>
-                <input
-                  defaultValue={item}
-                  disabled={!isAdmin}
-                  style={{ ...inputSt, border: 'none', padding: 0, background: 'transparent', fontSize: 13.5, color: 'var(--ink-800)' }}
-                />
+            {workflowConfig.checklistItems.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)' }}>
+                <span style={{ fontSize: 12, color: 'var(--ink-400)', fontWeight: 600, minWidth: 18, textAlign: 'right' }}>{idx + 1}.</span>
+                {isAdmin ? (
+                  <input
+                    value={item}
+                    onChange={(e) => updateChecklist(idx, e.target.value)}
+                    style={{ ...inputSt, border: 'none', padding: 0, background: 'transparent', fontSize: 13.5, color: 'var(--ink-800)', flex: 1 }}
+                  />
+                ) : (
+                  <span style={{ flex: 1, fontSize: 13.5, color: 'var(--ink-800)' }}>{item}</span>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => removeChecklistItem(idx)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', padding: '2px 4px', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                    title="Remove item"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             ))}
             {isAdmin && (
-              <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginTop: 4 }}>
-                + Add Checklist Item
-              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <input
+                  value={newChecklistItem}
+                  onChange={(e) => setNewChecklistItem(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addChecklistItem()}
+                  placeholder="New checklist item…"
+                  style={{ ...inputSt, flex: 1 }}
+                />
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={addChecklistItem}
+                  disabled={!newChecklistItem.trim()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+                >
+                  <Plus size={14} />
+                  Add
+                </button>
+              </div>
             )}
           </div>
         </SettingsCard>
@@ -435,8 +497,8 @@ export default function Settings() {
         {/* ── Save button (admin only) ── */}
         {isAdmin && (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button className="btn btn-primary" onClick={() => showToast('Settings saved.', 'success')}>
-              Save Settings
+            <button className="btn btn-primary" onClick={() => void handleSaveAll()} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Settings'}
             </button>
           </div>
         )}

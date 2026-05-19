@@ -19,6 +19,15 @@ const WORKFLOW_DEFAULTS: WorkflowSettings = {
   legalForCrossBorder: true,
   securityForSensitive: true,
   autoRouteLowRisk: false,
+  checklistItems: [
+    'Purpose is clearly stated',
+    'Data is necessary for purpose',
+    'No excessive personal data',
+    'Recipient is appropriate',
+    'Attachments reviewed',
+  ],
+  riskThreshold: 3,
+  confidenceThreshold: 95,
 }
 
 function toAppSettings(r: DvRow): AppSettings {
