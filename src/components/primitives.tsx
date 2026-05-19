@@ -137,7 +137,12 @@ interface EmptyProps { title: string; body?: string; action?: ReactNode; icon?: 
 export function EmptyState({ title, body, action, icon = '📋' }: EmptyProps) {
   return (
     <div style={{ textAlign: 'center', padding: '64px 24px', color: 'var(--ink-400)' }}>
-      <div style={{ fontSize: 36, marginBottom: 16 }} aria-hidden="true">{icon}</div>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 56, height: 56, borderRadius: 'var(--r-xl)',
+        background: 'var(--teal-50)', marginBottom: 16,
+        fontSize: 24,
+      }} aria-hidden="true">{icon}</div>
       <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 8 }}>{title}</div>
       {body && <div style={{ fontSize: 13, maxWidth: 360, margin: '0 auto 24px' }}>{body}</div>}
       {action}

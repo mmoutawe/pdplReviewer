@@ -1,9 +1,9 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore } from '../store'
 import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, ROLE_LABELS } from '../data/seed'
-import { StatusPill, SLAIndicator, Avatar, KPI, EmptyState } from '../components/primitives'
+import { StatusPill, SLAIndicator, Avatar, EmptyState } from '../components/primitives'
 import { FilterBar } from '../components/table'
 import type { Role, Ticket, TicketState } from '../data/types'
 import { formatDate, slaStatus } from '../lib/utils'
@@ -86,10 +86,27 @@ export default function ReviewerQueue() {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'flex', gap: 12, padding: '16px 24px 0', flexWrap: 'wrap' }}>
-        <KPI label="In queue" value={visible.length} style={{ flex: '1 1 140px' }} />
-        <KPI label="SLA breached" value={breached} color={breached > 0 ? 'var(--red-700)' : undefined} style={{ flex: '1 1 140px' }} />
-        <KPI label="At risk (< 24h)" value={atRisk} color={atRisk > 0 ? 'var(--amber-700)' : undefined} style={{ flex: '1 1 140px' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, padding: '16px 24px 0' }}>
+        <QueueKPI
+          label="In Queue"
+          value={visible.length}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>}
+          iconBg="var(--teal-50)" iconColor="var(--teal-600)"
+        />
+        <QueueKPI
+          label="SLA Breached"
+          value={breached}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6"/><path d="M10 6v5M10 13.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          iconBg="var(--red-50)" iconColor="var(--red-700)"
+          valueColor={breached > 0 ? 'var(--red-700)' : undefined}
+        />
+        <QueueKPI
+          label="At Risk (< 24h)"
+          value={atRisk}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6"/><path d="M10 6.5V10.5l2.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          iconBg="var(--amber-50)" iconColor="var(--amber-700)"
+          valueColor={atRisk > 0 ? 'var(--amber-700)' : undefined}
+        />
       </div>
 
       <FilterBar
@@ -169,5 +186,26 @@ function QueueRow({ ticket, onClick }: { ticket: Ticket; onClick: () => void }) 
         </svg>
       </button>
     </li>
+  )
+}
+
+function QueueKPI({ label, value, icon, iconBg, iconColor, valueColor }: {
+  label: string; value: number; icon: ReactNode
+  iconBg: string; iconColor: string; valueColor?: string
+}) {
+  return (
+    <div className="card" style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{
+        width: 44, height: 44, borderRadius: 'var(--r-lg)', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: iconBg, color: iconColor,
+      }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: valueColor ?? 'var(--ink-900)', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        <div style={{ fontSize: 13, color: 'var(--ink-500)', marginTop: 2 }}>{label}</div>
+      </div>
+    </div>
   )
 }

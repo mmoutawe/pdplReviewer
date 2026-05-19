@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
+import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, Shield, Lightbulb, CheckCircle, XCircle } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAddReturnComment, lookupVendor, lookupProject } from '../store'
@@ -294,15 +295,17 @@ export default function TicketWorkspace() {
       </div>
 
       {/* ── Step content ── */}
-      <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 16 : 24, minHeight: 0 }}>
+      <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 16 : '24px 32px', minHeight: 0 }}>
 
         {!canViewCurrentStep ? (
           // Requester on step 4 when ticket is returned for clarification
           ticket.state === 'returned_to_requester' && user.role === 'requester' ? (
-            <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px', background: 'var(--amber-50)', border: '1px solid #FDE68A', borderRadius: 'var(--r-lg)' }}>
-                <span style={{ fontSize: 24, flexShrink: 0 }}>🔁</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-lg)' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 'var(--r-lg)', background: '#FDE68A', color: 'var(--amber-800)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <RotateCcw size={18} />
+                </div>
                 <div>
                   <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--amber-800)', marginBottom: 4 }}>Request Returned for Clarification</h2>
                   <p style={{ fontSize: 13, color: 'var(--amber-700)', lineHeight: 1.6 }}>The reviewer has returned your request with comments. Please review and respond.</p>
@@ -313,7 +316,7 @@ export default function TicketWorkspace() {
               {ticket.returnThread.length > 0 && (
                 <div className="card" style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-                    <span style={{ fontSize: 16 }}>⚠</span>
+                    <AlertTriangle size={16} style={{ color: 'var(--amber-700)', flexShrink: 0 }} />
                     <h3 style={{ fontSize: 14, fontWeight: 600 }}>Reviewer Feedback</h3>
                   </div>
                   <CommentThread
@@ -327,11 +330,11 @@ export default function TicketWorkspace() {
               {/* Edit shortcut buttons */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={() => setWizardStep(1)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3l9-9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  <Pencil size={13} />
                   Edit Initiation Details
                 </button>
                 <button className="btn btn-sm" onClick={() => setWizardStep(2)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3l9-9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  <Pencil size={13} />
                   Edit Questionnaire
                 </button>
               </div>
@@ -339,7 +342,7 @@ export default function TicketWorkspace() {
               {/* Your response */}
               <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 2L2 7l5 2 2 5 5-12z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  <Send size={14} aria-hidden="true" />
                   <h3 style={{ fontSize: 14, fontWeight: 600 }}>Your Response</h3>
                 </div>
                 <div>
@@ -369,7 +372,7 @@ export default function TicketWorkspace() {
                     onClick={() => void handleRequesterSubmit()}
                     disabled={requesterReplying}
                   >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M14 2L2 7l5 2 2 5 5-12z" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                    <Send size={14} aria-hidden="true" />
                     {requesterReplying ? 'Submitting…' : 'Submit Response'}
                   </button>
                 </div>
@@ -384,7 +387,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 0: Vendor & Project ── */}
         {wizardStep === 0 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700 }}>Vendor &amp; Project</h2>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
               <div className="card" style={{ padding: '18px 20px' }}>
@@ -431,7 +434,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 1: Initiation ── */}
         {wizardStep === 1 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700 }}>Initiation Details</h2>
             <div className="card" style={{ padding: '18px 20px' }}>
               <h3 style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)', marginBottom: 12 }}>Request</h3>
@@ -457,7 +460,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 2: Questionnaire ── */}
         {wizardStep === 2 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700 }}>Data Declaration &amp; Questionnaire</h2>
             <div className="card" style={{ padding: '18px 20px' }}>
               <h3 style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)', marginBottom: 12 }}>Data Declaration</h3>
@@ -609,7 +612,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 4: Data Management Review ── */}
         {wizardStep === 4 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
@@ -716,7 +719,7 @@ export default function TicketWorkspace() {
             {assessment && assessment.findings.length > 0 && (
               <div className="card" style={{ padding: '16px 18px' }}>
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" aria-hidden><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                  <Search size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
                   Document Analysis — Findings
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -736,7 +739,7 @@ export default function TicketWorkspace() {
             {assessment && (
               <div className="card" style={{ padding: '16px 18px', borderColor: 'var(--brand-200)', background: 'rgba(99,102,241,0.03)' }}>
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" aria-hidden><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M8 8h8M8 16h4"/></svg>
+                  <FileText size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
                   Reviewer Copilot
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
@@ -787,7 +790,7 @@ export default function TicketWorkspace() {
             {assessment && assessment.findings.length > 0 && (
               <div className="card" style={{ padding: '16px 18px' }}>
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" aria-hidden><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <Shield size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
                   Compliance Checks
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -836,14 +839,14 @@ export default function TicketWorkspace() {
             {assessment && assessment.findings.filter((f) => f.remediation).length > 0 && (
               <div className="card" style={{ padding: '16px 18px' }}>
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" aria-hidden><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                  <Lightbulb size={14} color="var(--brand-600)" strokeWidth={2} aria-hidden />
                   Recommendations
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {assessment.findings.filter((f) => f.remediation).map((f) => (
                     <div key={`rec-${f.id}`} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface-1)', borderRadius: 'var(--r-md)' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--brand-600)" strokeWidth="2" style={{ marginTop: 2, flexShrink: 0 }} aria-hidden><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>
+                        <Lightbulb size={13} color="var(--brand-600)" strokeWidth={2} style={{ marginTop: 2, flexShrink: 0 }} aria-hidden />
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 500 }}>{f.remediation}</div>
                           <div style={{ fontSize: 11, color: 'var(--ink-400)', marginTop: 2 }}>Category: {f.category}</div>
@@ -885,31 +888,50 @@ export default function TicketWorkspace() {
 
             {/* ── Reviewer AI Deep Assessment ── */}
             <section>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Reviewer AI Deep Assessment</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Sparkles size={16} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>Reviewer AI Deep Assessment</h3>
+                  <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: 0 }}>AI-generated compliance analysis for this ticket</p>
+                </div>
                 {!reviewerData && !reviewerLoading && (
-                  <button className="btn btn-primary btn-sm" onClick={() => void generateReviewerAI()}>✨ Generate</button>
+                  <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => void generateReviewerAI()}>
+                    <Sparkles size={12} />
+                    Generate
+                  </button>
                 )}
                 {reviewerData && !reviewerLoading && (
-                  <button className="btn btn-sm" onClick={() => { setReviewerData(null); void generateReviewerAI() }}>Regenerate</button>
+                  <button className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { setReviewerData(null); void generateReviewerAI() }}><RefreshCw size={12} /> Regenerate</button>
                 )}
               </div>
               {reviewerLoading && (
-                <div style={{ padding: '14px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden>⏳</span>
-                  <span style={{ fontSize: 13.5, color: 'var(--ink-600)' }}>Running deep reviewer assessment…</span>
+                <div style={{ padding: '20px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--teal-100)', borderTop: '2.5px solid var(--teal-600)', animation: 'spin 0.9s linear infinite', flexShrink: 0 }} aria-hidden="true" />
+                  <div>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)', margin: '0 0 2px' }}>Analyzing ticket…</p>
+                    <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0 }}>Running deep PDPL compliance review</p>
+                  </div>
                 </div>
               )}
               {reviewerError && (
-                <div style={{ padding: '12px 16px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <span aria-hidden>⚠️</span><span style={{ flex: 1 }}>{reviewerError}</span>
+                <div style={{ padding: '14px 16px', background: 'var(--red-50)', border: '1px solid #FECACA', borderRadius: 'var(--r-lg)', display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 'var(--r-md)', background: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <AlertTriangle size={12} />
+                  </div>
+                  <span style={{ flex: 1, fontSize: 13, color: '#991B1B' }}>{reviewerError}</span>
                   <button className="btn btn-sm" onClick={() => void generateReviewerAI()}>Retry</button>
                 </div>
               )}
               {reviewerData && !reviewerLoading && <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />}
               {!reviewerData && !reviewerLoading && !reviewerError && (
-                <div style={{ padding: '16px', background: 'var(--surface-1)', border: '1px dashed var(--line)', borderRadius: 'var(--r-lg)', textAlign: 'center', fontSize: 13, color: 'var(--ink-400)' }}>
-                  Click <strong>Generate</strong> to run a deep PDPL review for this ticket.
+                <div style={{ padding: '24px 16px', background: 'var(--surface-1)', border: '1.5px dashed var(--line)', borderRadius: 'var(--r-lg)', textAlign: 'center' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 'var(--r-lg)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+                    <Sparkles size={18} />
+                  </div>
+                  <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-700)', margin: '0 0 4px' }}>No assessment yet</p>
+                  <p style={{ fontSize: 13, color: 'var(--ink-400)', margin: 0 }}>Click <strong>Generate</strong> to run a deep PDPL review for this ticket.</p>
                 </div>
               )}
             </section>
@@ -1034,7 +1056,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 5: Legal Review ── */}
         {wizardStep === 5 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>⚖️ Legal Review</h2>
@@ -1112,7 +1134,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 6: Security Review ── */}
         {wizardStep === 6 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>🔒 Security Review</h2>
@@ -1182,7 +1204,7 @@ export default function TicketWorkspace() {
 
         {/* ── Step 7: Final Decision ── */}
         {wizardStep === 7 && (
-          <div style={{ maxWidth: 760, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>Final Decision &amp; Closure</h2>
@@ -1198,7 +1220,17 @@ export default function TicketWorkspace() {
                 borderColor: ticket.state === 'approved' ? '#BBF7D0' : '#FECACA',
                 background: ticket.state === 'approved' ? 'var(--emerald-50)' : 'var(--red-50)',
               }}>
-                <span style={{ fontSize: 32 }} aria-hidden>{ticket.state === 'approved' ? '✅' : '❌'}</span>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 'var(--r-lg)', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: ticket.state === 'approved' ? '#BBF7D0' : '#FECACA',
+                  color: ticket.state === 'approved' ? 'var(--emerald-700)' : 'var(--red-700)',
+                }} aria-hidden>
+                  {ticket.state === 'approved'
+                    ? <CheckCircle size={20} />
+                    : <XCircle size={20} />
+                  }
+                </div>
                 <div>
                   <p style={{ fontWeight: 700, fontSize: 14, color: ticket.state === 'approved' ? 'var(--emerald-700)' : 'var(--red-700)' }}>
                     {ticket.state === 'approved' ? 'Request Approved' : 'Request Rejected'}
@@ -1330,15 +1362,15 @@ function TicketStepper({
 
         // Color logic: state-current step always shows brand color regardless of access
         const circleColor = isDone && accessible
-          ? 'var(--emerald-600)'
+          ? 'var(--teal-600)'
           : isTicketCurrent || isActive
-          ? 'var(--brand-700)'
+          ? 'var(--teal-600)'
           : 'var(--surface-1)'
 
         const circleBorder = isDone && accessible
-          ? 'var(--emerald-600)'
+          ? 'var(--teal-600)'
           : isTicketCurrent || isActive
-          ? 'var(--brand-700)'
+          ? 'var(--teal-600)'
           : 'var(--line)'
 
         const circleTextColor = (isDone && accessible) || isTicketCurrent || isActive
@@ -1346,9 +1378,9 @@ function TicketStepper({
           : 'var(--ink-300)'
 
         const labelColor = isActive || isTicketCurrent
-          ? 'var(--brand-700)'
+          ? 'var(--teal-600)'
           : isDone && accessible
-          ? 'var(--emerald-700)'
+          ? 'var(--teal-600)'
           : accessible
           ? 'var(--ink-500)'
           : 'var(--ink-300)'
@@ -1362,8 +1394,8 @@ function TicketStepper({
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 8px', borderRadius: 'var(--r-full)',
-                border: (isActive || isTicketCurrent) ? '2px solid var(--brand-600)' : '2px solid transparent',
-                background: (isActive || isTicketCurrent) ? 'var(--brand-50)' : 'none',
+                border: (isActive || isTicketCurrent) ? '2px solid var(--teal-600)' : '2px solid transparent',
+                background: (isActive || isTicketCurrent) ? 'var(--teal-50)' : 'none',
                 cursor: (accessible || isTicketCurrent) ? 'pointer' : 'default',
                 whiteSpace: 'nowrap',
                 color: labelColor,
@@ -1388,7 +1420,7 @@ function TicketStepper({
             {!isLast && (
               <span aria-hidden style={{
                 display: 'inline-block', width: 16, height: 1, flexShrink: 0,
-                background: isDone && canAccess(step.key + 1) ? 'var(--emerald-400)' : 'var(--line)',
+                background: isDone && canAccess(step.key + 1) ? 'var(--teal-500)' : 'var(--line)',
               }} />
             )}
           </span>

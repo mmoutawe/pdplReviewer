@@ -1,4 +1,4 @@
-﻿import { type ReactNode, useRef, useState } from 'react'
+﻿import { type ReactNode, Fragment, useRef, useState } from 'react'
 import { fileSize } from '../lib/utils'
 import type { Attachment } from '../data/types'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
@@ -28,17 +28,31 @@ interface Step { label: string; done: boolean; active: boolean; index: number }
 interface StepperProps { steps: Step[] }
 export function Stepper({ steps }: StepperProps) {
   return (
-    <nav aria-label="Progress" className="stepper">
+    <nav aria-label="Progress" style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', paddingBottom: 4 }}>
       {steps.map((s, i) => (
-        <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span className={`step-pill${s.active ? ' active' : s.done ? ' done' : ''}`}>
-            <span className="step-num">{s.done ? '✓' : s.index + 1}</span>
-            {s.label}
-          </span>
+        <Fragment key={s.label}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, gap: 4 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 700,
+              border: `2px solid ${s.done ? 'var(--teal-600)' : s.active ? 'var(--teal-600)' : 'var(--line-strong)'}`,
+              background: s.done ? 'var(--teal-600)' : s.active ? 'var(--teal-50)' : 'var(--surface-0)',
+              color: s.done ? 'white' : s.active ? 'var(--teal-600)' : 'var(--ink-400)',
+              transition: 'all var(--t-fast)',
+            }}>
+              {s.done
+                ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : s.index + 1}
+            </div>
+            <span style={{ fontSize: 10, textAlign: 'center', maxWidth: 72, lineHeight: 1.3, color: s.active ? 'var(--teal-600)' : 'var(--ink-400)', fontWeight: s.active ? 600 : 400 }}>
+              {s.label}
+            </span>
+          </div>
           {i < steps.length - 1 && (
-            <span aria-hidden="true" style={{ color: 'var(--ink-300)', fontSize: 12 }}>›</span>
+            <div aria-hidden="true" style={{ flex: 1, height: 2, minWidth: 16, background: s.done ? 'var(--teal-600)' : 'var(--line-strong)', marginBottom: 20, transition: 'background var(--t-fast)' }} />
           )}
-        </span>
+        </Fragment>
       ))}
     </nav>
   )

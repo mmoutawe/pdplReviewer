@@ -302,7 +302,11 @@ function DemoSignIn() {
           </form>
         ) : (
           <div style={{ padding: '24px 0', textAlign: 'center' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 'var(--r-lg)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="5" y="10" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 10V7a3 3 0 016 0v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              </div>
+            </div>
             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-800)', marginBottom: 8 }}>Sign-up requires Supabase</p>
             <p style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.6 }}>
               Self-registration is not available in demo mode. Use one of the demo accounts below to sign in.

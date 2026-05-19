@@ -17,10 +17,11 @@ Each finding must include: short title, concrete detail (1-2 sentences), severit
 Section values must be plain text, never nested code blocks. Findings should reference the requester's own answers.
 Respond with a JSON object only. The JSON must have exactly these top-level keys: executive_summary, risk_level, inferred_roles, key_risks, missing_inputs, suggested_fixes.
 - risk_level: one of "low", "medium", "high", "critical"
-- key_risks: array of objects, each with: title (string), detail (string), severity ("low"|"medium"|"high"|"critical"), article_ref (optional string)
+- inferred_roles: object with keys data_controller (string), data_processor (string), sub_processor (string) — infer each from the request context
+- key_risks: array of objects, each with: title (string), detail (string), severity ("low"|"medium"|"high"|"critical"), article_ref (optional string like "PDPL Art. 28")
 - suggested_fixes: array of objects, each with: title (string), detail (string)
 - missing_inputs: array of strings
-- executive_summary, inferred_roles: strings`,
+- executive_summary: string`,
 
   external_document_sharing: `You are a Saudi PDPL pre-submission AI reviewer for an EXTERNAL DOCUMENT SHARING REQUEST.
 Tailor the analysis to documents being shared externally: classify document, detect personal/sensitive data,

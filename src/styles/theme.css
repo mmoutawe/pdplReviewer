@@ -26,21 +26,44 @@
   --line-strong: #D1D5DB;
   --line-soft:   #EEF2F6;
 
-  /* Brand — regulator blue */
-  --brand-900: #0A3FB0;
-  --brand-800: #0950D6;
-  --brand-700: #0B5FFF;
-  --brand-600: #1E6BFF;
-  --brand-500: #3B82F6;
-  --brand-100: #DBEAFE;
-  --brand-50:  #EFF4FF;
+  /* Brand — teal (Lovable primary) */
+  --brand-900: #0D5444;
+  --brand-800: #0E7A62;
+  --brand-700: #19A07A;
+  --brand-600: #1AB88E;
+  --brand-500: #20C997;
+  --brand-300: #6FE4BF;
+  --brand-100: #C3FAE8;
+  --brand-50:  #E8FAF5;
+
+  /* Teal accent (Lovable primary) */
+  --teal-600:  #19A07A;
+  --teal-500:  #20C997;
+  --teal-100:  #C3FAE8;
+  --teal-50:   #E8FAF5;
+  --emerald-600: #059669;
+
+  /* Sidebar — dark navy (matches Lovable design) */
+  --sidebar-bg:        hsl(232, 45%, 16%);
+  --sidebar-fg:        hsl(232, 10%, 88%);
+  --sidebar-fg-muted:  hsl(232, 10%, 55%);
+  --sidebar-teal:      hsl(168, 72%, 50%);
+  --sidebar-accent-bg: hsl(232, 40%, 22%);
+  --sidebar-accent-fg: hsl(232, 10%, 92%);
+  --sidebar-border:    hsl(232, 35%, 24%);
 
   /* Status colours */
   --emerald-700: #047857;
+  --emerald-600: #059669;
+  --emerald-200: #A7F3D0;
   --emerald-50:  #ECFDF5;
+  --amber-800:   #92400E;
   --amber-700:   #B45309;
+  --amber-200:   #FDE68A;
   --amber-50:    #FFFBEB;
   --red-700:     #B91C1C;
+  --red-500:     #EF4444;
+  --red-200:     #FECACA;
   --red-50:      #FEF2F2;
   --slate-700:   #334155;
   --slate-50:    #F1F5F9;
@@ -64,6 +87,11 @@
   --r-lg: 8px;
   --r-xl: 12px;
   --r-2xl: 16px;
+  --r-full: 999px;
+
+  /* Aliases for legacy usage */
+  --radius:    6px;
+  --radius-sm: 4px;
 
   /* Typography */
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
@@ -209,7 +237,7 @@ code, pre, kbd, samp {
 }
 .pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
 .pill-slate    { background: var(--slate-50); color: var(--slate-700); border-color: #CBD5E1; }
-.pill-blue     { background: var(--brand-50); color: var(--brand-800); border-color: #BFDBFE; }
+.pill-blue     { background: var(--brand-50); color: var(--brand-800); border-color: var(--brand-100); }
 .pill-amber    { background: var(--amber-50); color: var(--amber-700); border-color: #FDE68A; }
 .pill-red      { background: var(--red-50); color: var(--red-700); border-color: #FECACA; }
 .pill-emerald  { background: var(--emerald-50); color: var(--emerald-700); border-color: #BBF7D0; }
@@ -329,7 +357,7 @@ code, pre, kbd, samp {
 /* Stepper */
 .stepper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .step-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-0); font-size: 12px; color: var(--ink-500); }
-.step-pill.active { color: var(--brand-800); background: var(--brand-50); border-color: #BFDBFE; font-weight: 500; }
+.step-pill.active { color: var(--brand-800); background: var(--brand-50); border-color: var(--brand-100); font-weight: 500; }
 .step-pill.done { color: var(--emerald-700); background: var(--emerald-50); border-color: #BBF7D0; }
 .step-pill .step-num { font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
 
@@ -346,7 +374,7 @@ code, pre, kbd, samp {
   vertical-align: baseline;
   cursor: help;
 }
-.cite-pdpl { background: var(--brand-50); color: var(--brand-800); border-color: #BFDBFE; }
+.cite-pdpl { background: var(--brand-50); color: var(--brand-800); border-color: var(--brand-100); }
 .cite-policy { background: var(--violet-50); color: var(--violet-700); border-color: #DDD6FE; }
 
 /* Page chrome */

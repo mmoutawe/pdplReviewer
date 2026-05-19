@@ -122,7 +122,7 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
       background: 'var(--surface-0)',
       position: 'sticky', top: 0, zIndex: 40, flexShrink: 0,
     }}>
-      {/* Hamburger + Logo */}
+      {/* Hamburger */}
       <button className="btn btn-ghost btn-sm focus-ring" onClick={onToggle}
         aria-label={isMobile ? (collapsed ? 'Open navigation' : 'Close navigation') : (collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
         style={{ padding: '0 6px', minWidth: 28 }}>
@@ -130,9 +130,12 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
           <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
-      <Link to="/dashboard" style={{ textDecoration: 'none' }} aria-label="PDPL Reviewer home">
-        <Logo size="md" collapsed={!isMobile && collapsed} />
-      </Link>
+      {/* Logo only visible on mobile (sidebar is hidden) or when sidebar is collapsed (icon-only mode) */}
+      {(isMobile || collapsed) && (
+        <Link to="/dashboard" style={{ textDecoration: 'none' }} aria-label="PDPL Reviewer home">
+          <Logo size="md" collapsed={!isMobile && collapsed} />
+        </Link>
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
@@ -310,20 +313,44 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
       height: 'calc(100vh - var(--topbar-h))',
       width: 'var(--leftrail-w)',
       zIndex: 60,
-      background: 'var(--surface-0)',
-      borderRight: '1px solid var(--line)',
+      background: 'var(--sidebar-bg)',
+      borderRight: '1px solid var(--sidebar-border)',
       display: 'flex', flexDirection: 'column',
       transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)',
       transition: 'transform var(--t-slow) var(--ease-out)',
       boxShadow: drawerOpen ? 'var(--shadow-lg)' : 'none',
     } : {
       width: collapsed ? 'var(--leftrail-w-collapsed)' : 'var(--leftrail-w)',
-      flexShrink: 0, borderRight: '1px solid var(--line)',
-      background: 'var(--surface-0)', overflow: 'hidden',
+      flexShrink: 0, borderRight: '1px solid var(--sidebar-border)',
+      background: 'var(--sidebar-bg)', overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
       transition: 'width var(--t-slow) var(--ease-out)',
     }} aria-label="Main navigation">
-      <nav style={{ padding: '8px 8px', flex: 1, overflow: 'auto' }}>
+
+      {/* Branding */}
+      <div style={{
+        padding: collapsed ? '14px 0' : '14px 16px',
+        borderBottom: '1px solid var(--sidebar-border)',
+        display: 'flex', alignItems: 'center', gap: 10,
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        flexShrink: 0,
+      }}>
+        <svg width={28} height={28} viewBox="0 0 32 32" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <rect width="32" height="32" rx="7" fill="var(--sidebar-teal)" />
+          <path d="M9 9h8a5 5 0 010 10H9V9z" fill="white" fillOpacity=".9" />
+          <rect x="9" y="20" width="5" height="4" rx="1" fill="white" fillOpacity=".6" />
+          <circle cx="22" cy="21" r="3.5" fill="white" fillOpacity=".25" stroke="white" strokeWidth="1.5" />
+          <path d="M20.8 21l.8.8 1.8-1.8" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {!collapsed && (
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--sidebar-fg)', whiteSpace: 'nowrap' }}>PDPL Reviewer</div>
+            <div style={{ fontSize: 10, color: 'var(--sidebar-fg-muted)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Compliance System</div>
+          </div>
+        )}
+      </div>
+
+      <nav style={{ padding: '8px', flex: 1, overflow: 'auto' }}>
         <ul>
           {navItems.map((item) => {
             const active = isActive(item)
@@ -334,14 +361,14 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 10px', borderRadius: 'var(--r-md)',
                     fontSize: 13.5, fontWeight: active ? 600 : 400,
-                    color: active ? 'var(--brand-700)' : 'var(--ink-600)',
-                    background: active ? 'var(--brand-50)' : 'transparent',
+                    color: active ? 'var(--sidebar-accent-fg)' : 'var(--sidebar-fg-muted)',
+                    background: active ? 'var(--sidebar-accent-bg)' : 'transparent',
                     transition: 'background var(--t-fast), color var(--t-fast)',
                     cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden',
                   }}
-                  onMouseEnter={(e) => { if (!active) (e.currentTarget as HTMLSpanElement).style.background = 'var(--surface-2)' }}
-                  onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLSpanElement).style.background = 'transparent' }}>
-                    <span style={{ flexShrink: 0, opacity: active ? 1 : 0.7 }}>{item.icon}</span>
+                  onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLSpanElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLSpanElement).style.color = 'var(--sidebar-fg)' } }}
+                  onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLSpanElement).style.background = 'transparent'; (e.currentTarget as HTMLSpanElement).style.color = 'var(--sidebar-fg-muted)' } }}>
+                    <span style={{ flexShrink: 0, opacity: active ? 1 : 0.8 }}>{item.icon}</span>
                     {!collapsed && item.label}
                   </span>
                 </Link>
@@ -352,13 +379,13 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
       </nav>
 
       {/* Bottom: user info + sign out */}
-      <div style={{ borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+      <div style={{ borderTop: '1px solid var(--sidebar-border)', flexShrink: 0 }}>
         {!collapsed && (
           <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Avatar initials={user.initials} color={user.avatarColor} size={28} />
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.fullName}</div>
-              <div style={{ fontSize: 11, color: 'var(--ink-400)' }}>{ROLE_LABELS[user.role]}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--sidebar-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.fullName}</div>
+              <div style={{ fontSize: 11, color: 'var(--sidebar-fg-muted)' }}>{ROLE_LABELS[user.role]}</div>
             </div>
           </div>
         )}
@@ -368,11 +395,11 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
             width: '100%', padding: collapsed ? '10px 0' : '8px 14px',
             display: 'flex', alignItems: 'center', gap: 8, justifyContent: collapsed ? 'center' : 'flex-start',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            fontSize: 13, color: 'var(--ink-500)',
-            transition: 'background var(--t-fast)',
+            fontSize: 13, color: 'var(--sidebar-fg-muted)',
+            transition: 'background var(--t-fast), color var(--t-fast)',
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--sidebar-fg)' }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--sidebar-fg-muted)' }}
         >
           <SignOutIcon />
           {!collapsed && <span>Sign Out</span>}

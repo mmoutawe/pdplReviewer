@@ -4,7 +4,7 @@ import type { RequestType, Ticket, TicketPayload } from '../../data/types'
 import { REQUEST_TYPE_LABELS, VENDORS, PROJECTS } from '../../data/seed'
 import { Stepper } from '../../components/forms'
 import { FormField } from '../../components/forms'
-import { showToast, saveDraft, loadDraft, clearDraft, authStore, updateTicket, demoAddTicket, ticketStore, demoAddVendor, demoAddProject } from '../../store'
+import { showToast, saveDraft, loadDraft, clearDraft, authStore, demoAddTicket, ticketStore, demoAddVendor, demoAddProject, refreshTickets } from '../../store'
 import { getWorkflowSettings } from '../../lib/workflowSettings'
 import { useStore } from '../../hooks/useStore'
 import { isDataverseConfigured as isSupabaseConfigured } from '../../lib/dataverse'
@@ -18,6 +18,8 @@ import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentVie
 type Method = 'manual' | 'ai' | 'xlsx'
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
+
+// Internal navigation steps (unchanged — drive next/back/validate logic)
 const STEPS = [
   { key: 'method',         label: 'Creation method' },
   { key: 'vendor_project', label: 'Vendor & Project' },
@@ -27,6 +29,29 @@ const STEPS = [
 ]
 
 function StepIndex(step: string) { return STEPS.findIndex((s) => s.key === step) }
+
+// Display stepper — full 8-step lifecycle shown to the user (matches TicketWorkspace)
+const DISPLAY_STEPS = [
+  { index: 0, label: 'Vendor & Project' },
+  { index: 1, label: 'Initiation' },
+  { index: 2, label: 'Questionnaire' },
+  { index: 3, label: 'AI Assessment' },
+  { index: 4, label: 'Data Mgmt' },
+  { index: 5, label: 'Legal' },
+  { index: 6, label: 'Security' },
+  { index: 7, label: 'Decision' },
+]
+
+function displayStepIndex(step: string): number {
+  switch (step) {
+    case 'method':
+    case 'vendor_project': return 0
+    case 'initiation':     return 1
+    case 'declaration':    return 2
+    case 'assessment':     return 3
+    default:               return 0
+  }
+}
 
 interface WizardState {
   method: Method
@@ -188,7 +213,6 @@ export default function Wizard() {
   }, [chatLoading, chatMessages.length, chatDone])
 
   const requestType = type as RequestType
-  const stepIndex = StepIndex(currentStep)
 
   useEffect(() => {
     document.title = `New ${REQUEST_TYPE_LABELS[requestType] ?? 'Request'} — PDPL Reviewer`
@@ -552,10 +576,11 @@ export default function Wizard() {
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
         }, user.id)
         const ready = await submitTicket(ticket.id)
-        updateTicket(ready.id, ready)
+        demoAddTicket(ready)
         clearDraft()
         showToast('Request submitted successfully.', 'success')
         navigate(`/requests/${ready.id}`)
+        void refreshTickets()
       } else {
         // Demo mode — build a full Ticket and inject it into the store
         const sensitive = ['biometric', 'health', 'national_id']
@@ -666,29 +691,47 @@ export default function Wizard() {
     )
   }
 
+  const displayIdx = displayStepIndex(currentStep)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Wizard header */}
-      <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface-0)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-          <button className="btn btn-ghost btn-sm" onClick={back} aria-label="Go back">
-            ← Back
+      <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-0)' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 40px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <button className="btn btn-ghost btn-sm" onClick={back} style={{ display: 'flex', alignItems: 'center', gap: 4 }} aria-label="Go back">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Back
           </button>
-          <h1 style={{ fontSize: 16, fontWeight: 600, color: 'var(--ink-900)' }}>
-            {REQUEST_TYPE_LABELS[requestType] ?? 'New Request'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>
+              New Compliance Review Request
+            </h1>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center',
+              padding: '2px 10px', borderRadius: 'var(--r-full)',
+              fontSize: 12, fontWeight: 500,
+              background: 'var(--teal-50)', color: 'var(--teal-600)',
+              border: '1px solid var(--teal-100)',
+            }}>
+              {REQUEST_TYPE_LABELS[requestType] ?? 'New Request'}
+            </span>
+          </div>
         </div>
-        <Stepper steps={STEPS.map((s, i) => ({
-          ...s, index: i,
-          done: i < stepIndex,
-          active: i === stepIndex,
+        <Stepper steps={DISPLAY_STEPS.map((s) => ({
+          key: String(s.index),
+          label: s.label,
+          index: s.index,
+          done: s.index < displayIdx,
+          active: s.index === displayIdx,
         }))} />
+        </div>
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflow: 'auto', display: 'flex', minHeight: 0 }}>
+      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {/* Main content */}
-        <div style={{ flex: 1, padding: '28px 32px', maxWidth: 680, minWidth: 0 }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 40px', minWidth: 0 }}>
 
           {/* ── Step: Vendor & Project ── */}
           {currentStep === 'vendor_project' && (
@@ -698,132 +741,223 @@ export default function Wizard() {
                 You must link this request to a vendor and a project before proceeding.
               </p>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+
               {/* Vendor card */}
-              <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true" style={{ color: 'var(--ink-500)', flexShrink: 0 }}>
-                    <rect x="1" y="4" width="13" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/>
-                    <path d="M4 4V3a3 3 0 016 0v1" stroke="currentColor" strokeWidth="1.3"/>
-                  </svg>
-                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>Vendor</span>
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <rect x="1" y="5" width="16" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M5 5V4a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>Vendor</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>Select the third-party vendor involved in this request</div>
+                  </div>
                 </div>
 
                 {/* Search row */}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"
-                      style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-400)', pointerEvents: 'none' }}>
-                      <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.3"/>
-                      <path d="M8.5 8.5l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                    </svg>
-                    <input
-                      type="text" placeholder="Search vendors…"
-                      value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)}
-                      style={{ width: '100%', padding: '7px 10px 7px 28px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                  <button className="btn btn-ghost btn-sm" style={{ whiteSpace: 'nowrap', gap: 4 }} onClick={() => setShowNewVendorModal(true)}>
-                    <span aria-hidden="true">+</span> New Vendor
-                  </button>
+                <div style={{ position: 'relative', marginBottom: 10 }}>
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true"
+                    style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--ink-400)', pointerEvents: 'none' }}>
+                    <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.3"/>
+                    <path d="M8.5 8.5l3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    type="text" placeholder="Search vendors…"
+                    value={vendorSearch} onChange={(e) => setVendorSearch(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px 8px 28px', fontSize: 13, border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', background: 'var(--surface-0)', color: 'var(--ink-900)', outline: 'none', boxSizing: 'border-box' }}
+                  />
                 </div>
 
                 {/* Vendor list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {[...VENDORS, ...extraVendors].filter((v) => !vendorSearch || v.tradeName.toLowerCase().includes(vendorSearch.toLowerCase()) || v.category.toLowerCase().includes(vendorSearch.toLowerCase())).map((v) => {
                     const selected = form.linkedVendorId === v.id
                     return (
                       <button key={v.id}
                         onClick={() => update({ linkedVendorId: selected ? '' : v.id, linkedProjectId: '' })}
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-                          border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '12px 14px', textAlign: 'left', width: '100%',
+                          border: selected ? '2px solid var(--teal-600)' : '1px solid var(--line)',
                           borderRadius: 'var(--r-md)',
-                          background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
-                          transition: 'all var(--t-fast)',
-                        }}>
-                        <div>
+                          background: selected ? 'var(--teal-50)' : 'var(--surface-0)',
+                          boxShadow: selected ? '0 0 0 3px var(--teal-100)' : 'none',
+                          cursor: 'pointer', transition: 'all var(--t-fast)',
+                        }}
+                        onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line-strong)' }}
+                        onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)' }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: selected ? 'var(--teal-600)' : 'var(--surface-2)', color: selected ? '#fff' : 'var(--ink-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="11" rx="1" stroke="currentColor" strokeWidth="1.4"/><path d="M4 4V3a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{v.tradeName}</div>
                           <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{v.category} · {v.jurisdiction}</div>
                         </div>
-                        <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: v.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: v.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
+                        <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 'var(--r-full)', fontWeight: 500,
+                          background: v.status === 'active' ? 'var(--emerald-50)' : 'var(--amber-50)',
+                          color: v.status === 'active' ? 'var(--emerald-700)' : 'var(--amber-700)',
+                          border: `1px solid ${v.status === 'active' ? 'var(--emerald-200)' : 'var(--amber-200)'}`,
+                          flexShrink: 0,
+                        }}>
                           {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
                         </span>
+                        {selected && (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--teal-600)', flexShrink: 0 }}>
+                            <circle cx="8" cy="8" r="7" fill="var(--teal-600)"/>
+                            <path d="M5 8l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
                       </button>
                     )
                   })}
-                </div>
-              </div>
-              {errors.linkedVendorId && (
-                <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginBottom: 10, marginTop: -8 }}>{errors.linkedVendorId}</p>
-              )}
-
-              {/* Project card — only shown after a vendor is selected */}
-              {form.linkedVendorId && (
-                <div className="card" style={{ padding: '16px 18px', marginBottom: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true" style={{ color: 'var(--ink-500)', flexShrink: 0 }}>
-                      <rect x="1" y="3" width="13" height="10" rx="1" stroke="currentColor" strokeWidth="1.3"/>
-                      <path d="M5 3V2h5v1" stroke="currentColor" strokeWidth="1.3"/>
-                    </svg>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-800)' }}>
-                      Project under {VENDORS.find((v) => v.id === form.linkedVendorId)?.tradeName}
-                    </span>
-                  </div>
-
-                  <button className="btn btn-ghost btn-sm" style={{ marginBottom: 10, gap: 4 }} onClick={() => setShowNewProjectModal(true)}>
-                    <span aria-hidden="true">+</span> New Project
+                  <button
+                    onClick={() => setShowNewVendorModal(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '10px 14px', width: '100%',
+                      border: '1.5px dashed var(--teal-500)',
+                      borderRadius: 'var(--r-md)',
+                      background: 'transparent', color: 'var(--teal-600)',
+                      cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                      transition: 'all var(--t-fast)',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal-50)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                    Add New Vendor
                   </button>
-
-                  {(() => {
-                    const vendorProjects = [...PROJECTS, ...extraProjects].filter((p) => p.vendorId === form.linkedVendorId)
-                    if (vendorProjects.length === 0) {
-                      return <p style={{ fontSize: 13, color: 'var(--ink-400)', padding: '8px 0' }}>No projects linked to this vendor yet.</p>
-                    }
-                    return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {vendorProjects.map((p) => {
-                          const selected = form.linkedProjectId === p.id
-                          return (
-                            <button key={p.id}
-                              onClick={() => update({ linkedProjectId: selected ? '' : p.id })}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                padding: '10px 12px', textAlign: 'left', cursor: 'pointer',
-                                border: `1px solid ${selected ? 'var(--brand-700)' : 'var(--line)'}`,
-                                borderRadius: 'var(--r-md)',
-                                background: selected ? 'var(--brand-50)' : 'var(--surface-0)',
-                                transition: 'all var(--t-fast)',
-                              }}>
-                              <div>
-                                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{p.name}</div>
-                                <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{p.code} · {p.businessUnit}</div>
-                              </div>
-                              <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 99, background: p.status === 'active' ? 'var(--green-100)' : 'var(--amber-100)', color: p.status === 'active' ? 'var(--green-700)' : 'var(--amber-700)', fontWeight: 600 }}>
-                                {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
                 </div>
-              )}
-              {errors.linkedProjectId && (
-                <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginBottom: 10 }}>{errors.linkedProjectId}</p>
-              )}
+                {errors.linkedVendorId && (
+                  <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginTop: 8 }}>{errors.linkedVendorId}</p>
+                )}
+              </div>
+
+              {/* Project card — right column */}
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M2 5a2 2 0 012-2h3l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink-900)' }}>Project</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>
+                      {form.linkedVendorId
+                        ? <>Select a project under <strong>{[...VENDORS, ...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}</strong></>
+                        : 'Select a vendor first to see its projects'}
+                    </div>
+                  </div>
+                </div>
+
+                {!form.linkedVendorId ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', color: 'var(--ink-400)', gap: 8 }}>
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ opacity: 0.35 }}><path d="M4 9a4 4 0 014-4h6l4 4h10a4 4 0 014 4v10a4 4 0 01-4 4H8a4 4 0 01-4-4V9z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/></svg>
+                    <span style={{ fontSize: 13 }}>Select a vendor on the left first</span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(() => {
+                      const vendorProjects = [...PROJECTS, ...extraProjects].filter((p) => p.vendorId === form.linkedVendorId)
+                      return (
+                        <>
+                          {vendorProjects.length === 0 && (
+                            <p style={{ fontSize: 13, color: 'var(--ink-400)', padding: '4px 0 8px' }}>No projects linked to this vendor yet.</p>
+                          )}
+                          {vendorProjects.map((p) => {
+                            const selected = form.linkedProjectId === p.id
+                            return (
+                              <button key={p.id}
+                                onClick={() => update({ linkedProjectId: selected ? '' : p.id })}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 12,
+                                  padding: '12px 14px', textAlign: 'left', width: '100%',
+                                  border: selected ? '2px solid var(--teal-600)' : '1px solid var(--line)',
+                                  borderRadius: 'var(--r-md)',
+                                  background: selected ? 'var(--teal-50)' : 'var(--surface-0)',
+                                  boxShadow: selected ? '0 0 0 3px var(--teal-100)' : 'none',
+                                  cursor: 'pointer', transition: 'all var(--t-fast)',
+                                }}
+                                onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line-strong)' }}
+                                onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)' }}
+                              >
+                                <div style={{ width: 36, height: 36, borderRadius: 'var(--r-md)', background: selected ? 'var(--teal-600)' : 'var(--surface-2)', color: selected ? '#fff' : 'var(--ink-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4a2 2 0 012-2h2l2 2h4a2 2 0 012 2v5a2 2 0 01-2 2H4a2 2 0 01-2-2V4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink-900)' }}>{p.name}</div>
+                                  <div style={{ fontSize: 12, color: 'var(--ink-500)', marginTop: 2 }}>{p.code} · {p.businessUnit}</div>
+                                </div>
+                                <span style={{ fontSize: 11.5, padding: '2px 8px', borderRadius: 'var(--r-full)', fontWeight: 500,
+                                  background: p.status === 'active' ? 'var(--emerald-50)' : 'var(--amber-50)',
+                                  color: p.status === 'active' ? 'var(--emerald-700)' : 'var(--amber-700)',
+                                  border: `1px solid ${p.status === 'active' ? 'var(--emerald-200)' : 'var(--amber-200)'}`,
+                                  flexShrink: 0,
+                                }}>
+                                  {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                                </span>
+                                {selected && (
+                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--teal-600)', flexShrink: 0 }}>
+                                    <circle cx="8" cy="8" r="7" fill="var(--teal-600)"/>
+                                    <path d="M5 8l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                )}
+                              </button>
+                            )
+                          })}
+                          <button
+                            onClick={() => setShowNewProjectModal(true)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              padding: '10px 14px', width: '100%',
+                              border: '1.5px dashed var(--teal-500)',
+                              borderRadius: 'var(--r-md)',
+                              background: 'transparent', color: 'var(--teal-600)',
+                              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+                              transition: 'all var(--t-fast)',
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--teal-50)' }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                            Add New Project
+                          </button>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+                {errors.linkedProjectId && (
+                  <p style={{ fontSize: 12.5, color: 'var(--red-600)', marginTop: 6 }}>{errors.linkedProjectId}</p>
+                )}
+              </div>{/* end project column */}
+
+              </div>{/* end 2-col grid */}
 
               {/* ── New Project Modal ── */}
               {showNewProjectModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={(e) => { if (e.target === e.currentTarget) setShowNewProjectModal(false) }}>
                   <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-                      <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>
-                        New Project under {VENDORS.find((v) => v.id === form.linkedVendorId)?.tradeName ?? [...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}
-                      </h3>
-                      <button onClick={() => setShowNewProjectModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 20, lineHeight: 1, padding: 2 }}>×</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2 5a2 2 0 012-2h3l2 2h7a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>New Project</h3>
+                        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0, marginTop: 1 }}>
+                          Under {[...VENDORS, ...extraVendors].find((v) => v.id === form.linkedVendorId)?.tradeName}
+                        </p>
+                      </div>
+                      <button onClick={() => setShowNewProjectModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      </button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -874,9 +1008,17 @@ export default function Wizard() {
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   onClick={(e) => { if (e.target === e.currentTarget) setShowNewVendorModal(false) }}>
                   <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: 480, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-                      <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>New Vendor</h3>
-                      <button onClick={() => setShowNewVendorModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', fontSize: 20, lineHeight: 1, padding: 2 }}>×</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="6" width="16" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M6 6V5a4 4 0 018 0v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>New Vendor</h3>
+                        <p style={{ fontSize: 12.5, color: 'var(--ink-500)', margin: 0, marginTop: 1 }}>Add a new third-party vendor to the registry</p>
+                      </div>
+                      <button onClick={() => setShowNewVendorModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-400)', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      </button>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 16px' }}>
@@ -950,27 +1092,74 @@ export default function Wizard() {
               <p style={{ color: 'var(--ink-500)', marginBottom: 24, fontSize: 13.5 }}>
                 The AI builder helps you describe your use case in plain language and generates a structured form.
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
                 {([
-                  { m: 'manual' as Method, icon: '📋', label: 'Fill out manually', desc: 'Complete the form fields directly.' },
-                  { m: 'ai' as Method, icon: '✨', label: 'AI request builder', desc: 'Describe your use case in plain language and let AI structure it for you.' },
-                  { m: 'xlsx' as Method, icon: '📊', label: 'Upload Excel template', desc: 'Download the blank template, fill it in offline, then upload for automatic field extraction.' },
-                ]).map(({ m, icon, label, desc }) => (
-                  <button key={m}
-                    onClick={() => { update({ method: m }); if (m !== 'xlsx') next() }}
-                    style={{
-                      padding: '18px 20px', borderRadius: 'var(--r-lg)',
-                      border: `1px solid ${form.method === m ? 'var(--brand-700)' : 'var(--line)'}`,
-                      background: form.method === m ? 'var(--brand-50)' : 'var(--surface-0)',
-                      cursor: 'pointer', textAlign: 'left',
-                      transition: 'all var(--t-fast)',
-                    }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 4 }}>
-                      {icon} {label}
-                    </div>
-                    <div style={{ fontSize: 13, color: 'var(--ink-500)' }}>{desc}</div>
-                  </button>
-                ))}
+                  {
+                    m: 'manual' as Method,
+                    label: 'Fill in the form manually',
+                    desc: 'Step through the wizard yourself — vendor & project, initiation, and questionnaire.',
+                    icon: (
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="3" y="2" width="14" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M6 7h8M6 10.5h8M6 14h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                    ),
+                  },
+                  {
+                    m: 'ai' as Method,
+                    label: 'Create the request with AI',
+                    desc: 'Chat with an AI assistant that asks you the questions one by one and builds the request.',
+                    icon: (
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                        <path d="M16 14l.75 2.25L19 17l-2.25.75L16 20l-.75-2.25L13 17l2.25-.75L16 14z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                      </svg>
+                    ),
+                  },
+                  {
+                    m: 'xlsx' as Method,
+                    label: 'Upload request form',
+                    desc: 'Download a template, fill it in, and upload it — AI will extract the data automatically.',
+                    icon: (
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="2" y="4" width="16" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M2 8h16M8 8v8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                    ),
+                  },
+                ]).map(({ m, icon, label, desc }) => {
+                  const isSelected = form.method === m
+                  return (
+                    <button key={m}
+                      onClick={() => { update({ method: m }); if (m !== 'xlsx') next() }}
+                      style={{
+                        display: 'flex', flexDirection: 'column', gap: 12,
+                        padding: '18px 16px', borderRadius: 'var(--r-lg)',
+                        border: `2px solid ${isSelected ? 'var(--teal-600)' : 'var(--line)'}`,
+                        background: 'var(--surface-0)',
+                        cursor: 'pointer', textAlign: 'left', width: '100%',
+                        transition: 'all var(--t-fast)',
+                        boxShadow: isSelected ? '0 0 0 3px var(--teal-100)' : 'none',
+                      }}
+                      onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--teal-600)' }}
+                      onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--line)' }}
+                    >
+                      <div style={{
+                        width: 44, height: 44, borderRadius: 'var(--r-lg)', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: isSelected ? 'var(--teal-600)' : 'var(--teal-50)',
+                        color: isSelected ? 'white' : 'var(--teal-600)',
+                        transition: 'all var(--t-fast)',
+                      }}>
+                        {icon}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 4 }}>{label}</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--ink-500)', lineHeight: 1.55 }}>{desc}</div>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
 
               {/* XLSX upload panel — shown after selecting the xlsx method */}
@@ -1908,26 +2097,52 @@ export default function Wizard() {
           {/* ── Step: AI assessment ── */}
           {currentStep === 'assessment' && (
             <section aria-labelledby="step-assess">
-              <h2 id="step-assess" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
-                AI PDPL assessment
-              </h2>
-              <p style={{ color: 'var(--ink-500)', marginBottom: 20, fontSize: 13.5 }}>
-                Review the AI-generated assessment before submitting. Address any critical or high-risk findings before proceeding.
-              </p>
+
+              {/* Section header row */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 20 }}>
+                <div>
+                  <h2 id="step-assess" style={{ fontSize: 18, fontWeight: 700, marginBottom: 4, color: 'var(--ink-900)' }}>
+                    AI Pre-Submission Assessment
+                  </h2>
+                  <p style={{ color: 'var(--ink-500)', fontSize: 13.5, margin: 0 }}>
+                    Review the AI analysis before submitting your request.
+                  </p>
+                </div>
+                {assessmentData && !assessmentLoading && (
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
+                    <button className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      onClick={() => setCurrentStep('initiation')}>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1.5 6.5h10M8.5 3.5l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Edit answers
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Loading */}
               {assessmentLoading && (
-                <div style={{
-                  padding: '16px 18px', background: 'var(--surface-1)',
-                  border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', marginBottom: 16,
-                  display: 'flex', alignItems: 'center', gap: 10,
-                }}>
-                  <span style={{ fontSize: 16, animation: 'spin 1.2s linear infinite', display: 'inline-block' }} aria-hidden="true">⏳</span>
-                  <span style={{ fontSize: 13.5, color: 'var(--ink-600)' }}>Generating PDPL assessment…</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', gap: 16 }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: '50%',
+                    border: '3px solid var(--teal-100)',
+                    borderTop: '3px solid var(--teal-600)',
+                    animation: 'spin 0.9s linear infinite',
+                  }} aria-hidden="true" />
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--ink-900)', marginBottom: 6 }}>Analyzing your request…</p>
+                    <p style={{ fontSize: 13, color: 'var(--ink-500)', margin: 0 }}>Evaluating PDPL compliance, inferring roles, and identifying risks.</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, fontSize: 12, color: 'var(--ink-400)', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    {['Evaluating risks', 'Checking compliance', 'Inferring roles', 'Identifying gaps'].map((s, i, arr) => (
+                      <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {s}{i < arr.length - 1 && <span style={{ color: 'var(--line-strong)' }}>·</span>}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Structured assessment */}
+              {/* Assessment */}
               {assessmentData && !assessmentLoading && (
                 <PresubmitAssessmentView data={assessmentData} requestType={requestType} />
               )}
@@ -1935,12 +2150,17 @@ export default function Wizard() {
               {/* Error */}
               {assessmentError && (
                 <div style={{
-                  padding: '14px 16px', background: 'var(--red-50)',
-                  border: '1px solid #FECACA', borderRadius: 'var(--r-md)',
-                  fontSize: 13, color: 'var(--red-700)', display: 'flex', gap: 10, alignItems: 'center',
+                  padding: '16px 18px', background: 'var(--red-50)',
+                  border: '1px solid #FECACA', borderRadius: 'var(--r-lg)',
+                  display: 'flex', gap: 12, alignItems: 'flex-start',
                 }}>
-                  <span aria-hidden="true">⚠️</span>
-                  <span style={{ flex: 1 }}>{assessmentError}</span>
+                  <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L13.5 12.5H.5L7 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M7 6v2.5M7 10.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: '#991B1B', margin: '0 0 2px' }}>Assessment failed</p>
+                    <p style={{ fontSize: 13, color: '#B91C1C', margin: 0 }}>{assessmentError}</p>
+                  </div>
                   <button className="btn btn-sm" onClick={() => void runAssessment()}>Retry</button>
                 </div>
               )}
@@ -1948,13 +2168,13 @@ export default function Wizard() {
               {/* Action bar */}
               {!assessmentLoading && (
                 <div style={{
-                  marginTop: 24, padding: '14px 18px',
+                  marginTop: 24, padding: '16px 20px',
                   background: 'var(--surface-1)', border: '1px solid var(--line)',
                   borderRadius: 'var(--r-lg)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
                 }}>
                   <p style={{ fontSize: 13.5, color: 'var(--ink-600)', margin: 0 }}>
-                    Review the findings above and choose an action.
+                    Review the findings above, then submit or go back to revise your answers.
                   </p>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => setCurrentStep('initiation')}>
