@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { VENDORS } from '../data/seed'
 import type { Vendor } from '../data/types'
+import { fetchVendors, createVendor } from '../api/vendors'
+import { isDataverseConfigured } from '../lib/dataverse'
+import { showToast } from '../store'
 
 const inputSt: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13,
@@ -46,25 +49,38 @@ function CreateVendorDialog({ onClose, onCreated }: { onClose: () => void; onCre
   const [primaryContact, setPrimaryContact] = useState('')
   const [hasDPA, setHasDPA]                 = useState(false)
   const [error, setError]                   = useState<string | null>(null)
+  const [saving, setSaving]                 = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!tradeName.trim()) { setError('Trade name is required.'); return }
     if (!legalName.trim()) { setError('Legal name is required.'); return }
-    const now = new Date().toISOString()
-    const newVendor: Vendor = {
-      id: `v-new-${Date.now()}`,
+    const vendorData = {
       tradeName: tradeName.trim(),
       legalName: legalName.trim(),
       jurisdiction: jurisdiction.trim() || 'KSA',
       category: category.trim() || 'Other',
       primaryContact: primaryContact.trim(),
-      riskScore: 50, riskTier: 'medium', status: 'pending',
+      riskScore: 50 as number, riskTier: 'medium' as const, status: 'pending' as const,
       certifications: [], hasDPA,
-      lastReviewedAt: now, ticketIds: [], notes: '',
+      lastReviewedAt: new Date().toISOString().slice(0, 10), notes: '',
     }
-    onCreated(newVendor)
-    onClose()
+    if (isDataverseConfigured) {
+      setSaving(true)
+      try {
+        const saved = await createVendor(vendorData)
+        onCreated(saved)
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save vendor')
+        showToast('Failed to save vendor.', 'error')
+      } finally {
+        setSaving(false)
+      }
+    } else {
+      onCreated({ ...vendorData, id: `v-new-${Date.now()}`, ticketIds: [] })
+      onClose()
+    }
   }
 
   return (
@@ -72,7 +88,7 @@ function CreateVendorDialog({ onClose, onCreated }: { onClose: () => void; onCre
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
       <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: '28px 32px', zIndex: 1 }}>
         <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>New vendor</h2>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>TRADE NAME *</label>
             <input value={tradeName} onChange={(e) => setTradeName(e.target.value)} placeholder="e.g. Acme Cloud" style={inputSt}
@@ -111,8 +127,10 @@ function CreateVendorDialog({ onClose, onCreated }: { onClose: () => void; onCre
           </label>
           {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Create vendor</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Create vendor'}
+            </button>
           </div>
         </form>
       </div>
@@ -123,10 +141,20 @@ function CreateVendorDialog({ onClose, onCreated }: { onClose: () => void; onCre
 export default function VendorLibrary() {
   useEffect(() => { document.title = 'Vendors — PDPL Reviewer' }, [])
   const navigate = useNavigate()
-  const [search, setSearch]       = useState('')
+  const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [vendors, setVendors]     = useState<Vendor[]>([...VENDORS])
-  const [showCreate, setShowCreate] = useState(false)
+  const [vendors, setVendors]           = useState<Vendor[]>([...VENDORS])
+  const [loading, setLoading]           = useState(false)
+  const [showCreate, setShowCreate]     = useState(false)
+
+  useEffect(() => {
+    if (!isDataverseConfigured) return
+    setLoading(true)
+    fetchVendors()
+      .then(setVendors)
+      .catch(() => showToast('Failed to load vendors.', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
 
   const visible = vendors.filter((v) => {
     if (statusFilter && v.status !== statusFilter) return false
@@ -204,7 +232,9 @@ export default function VendorLibrary() {
           </div>
 
           {/* Table */}
-          {visible.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading vendors…</div>
+          ) : visible.length === 0 ? (
             <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>
               No vendors match your search.
             </div>

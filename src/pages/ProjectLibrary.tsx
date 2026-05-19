@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PROJECTS, TICKETS, VENDORS } from '../data/seed'
-import type { Project } from '../data/types'
+import type { Project, Vendor } from '../data/types'
+import { fetchProjects, createProject } from '../api/projects'
+import { fetchVendors } from '../api/vendors'
+import { isDataverseConfigured } from '../lib/dataverse'
+import { authStore, showToast } from '../store'
+import { useStore } from '../hooks/useStore'
 
 const inputSt: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13,
@@ -28,27 +33,41 @@ function StatusBadge({ status }: { status: Project['status'] }) {
   )
 }
 
-function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Project) => void }) {
+function CreateProjectDialog({ onClose, onCreated, userId }: { onClose: () => void; onCreated: (p: Project) => void; userId: string }) {
   const [name, setName]               = useState('')
   const [businessUnit, setBusinessUnit] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus]           = useState<Project['status']>('active')
   const [error, setError]             = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) { setError('Project name is required.'); return }
     if (!businessUnit.trim()) { setError('Business unit is required.'); return }
-    const now = new Date().toISOString()
-    const newProject: Project = {
-      id: `p-new-${Date.now()}`,
-      code: `PROJ-${Date.now().toString(36).toUpperCase().slice(-6)}`,
+    const projectData = {
+      code: `PRJ-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-4)}`,
       name: name.trim(), businessUnit: businessUnit.trim(),
       description: description.trim(), status,
-      ownerId: '', dataInventoryCount: 0, ticketIds: [], startedAt: now,
+      ownerId: userId, dataInventoryCount: 0,
+      startedAt: new Date().toISOString().slice(0, 10),
     }
-    onCreated(newProject)
-    onClose()
+    if (isDataverseConfigured) {
+      setSaving(true)
+      try {
+        const saved = await createProject(projectData)
+        onCreated(saved)
+        onClose()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save project')
+        showToast('Failed to save project.', 'error')
+      } finally {
+        setSaving(false)
+      }
+    } else {
+      onCreated({ ...projectData, id: `p-new-${Date.now()}`, ticketIds: [] })
+      onClose()
+    }
   }
 
   return (
@@ -56,7 +75,7 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
       <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 460, padding: '28px 32px', zIndex: 1 }}>
         <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>New project</h2>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>PROJECT NAME *</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Open Banking Integration" style={inputSt}
@@ -88,8 +107,10 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
           </div>
           {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Create project</button>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Create project'}
+            </button>
           </div>
         </form>
       </div>
@@ -100,12 +121,24 @@ function CreateProjectDialog({ onClose, onCreated }: { onClose: () => void; onCr
 export default function ProjectLibrary() {
   useEffect(() => { document.title = 'Projects — PDPL Reviewer' }, [])
   const navigate  = useNavigate()
-  const [search, setSearch]           = useState('')
+  const { user }  = useStore(authStore)
+  const [search, setSearch]             = useState('')
   const [vendorFilter, setVendorFilter] = useState('')
-  const [projects, setProjects]       = useState<Project[]>([...PROJECTS])
-  const [showCreate, setShowCreate]   = useState(false)
+  const [projects, setProjects]         = useState<Project[]>([...PROJECTS])
+  const [vendors, setVendors]           = useState<Vendor[]>([...VENDORS])
+  const [loading, setLoading]           = useState(false)
+  const [showCreate, setShowCreate]     = useState(false)
 
-  // Derive cross-border flag from ticket types associated with each project
+  useEffect(() => {
+    if (!isDataverseConfigured) return
+    setLoading(true)
+    Promise.all([fetchProjects(), fetchVendors()])
+      .then(([projs, vends]) => { setProjects(projs); setVendors(vends) })
+      .catch(() => showToast('Failed to load projects.', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  // Derive cross-border flag from seed tickets (only meaningful in demo mode)
   const crossBorderProjects = new Set(
     TICKETS.filter((t) => t.type === 'cross_border_transfer' && t.projectId).map((t) => t.projectId!)
   )
@@ -168,7 +201,7 @@ export default function ProjectLibrary() {
                 }}
               >
                 <option value="">All Vendors</option>
-                {VENDORS.map((v) => (
+                {vendors.map((v) => (
                   <option key={v.id} value={v.id}>{v.tradeName}</option>
                 ))}
               </select>
@@ -180,7 +213,9 @@ export default function ProjectLibrary() {
           </div>
 
           {/* Table */}
-          {visible.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading projects…</div>
+          ) : visible.length === 0 ? (
             <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>
               No projects match your filters.
             </div>
@@ -195,7 +230,7 @@ export default function ProjectLibrary() {
               </thead>
               <tbody>
                 {visible.map((p, i) => {
-                  const vendor = p.vendorId ? VENDORS.find((v) => v.id === p.vendorId) : null
+                  const vendor = p.vendorId ? vendors.find((v) => v.id === p.vendorId) : null
                   const hasCrossBorder = crossBorderProjects.has(p.id)
                   return (
                     <tr
@@ -249,6 +284,7 @@ export default function ProjectLibrary() {
         <CreateProjectDialog
           onClose={() => setShowCreate(false)}
           onCreated={(p) => setProjects((prev) => [p, ...prev])}
+          userId={user.id}
         />
       )}
     </div>
