@@ -10,7 +10,7 @@ function toProjectDocument(r: DvRow): ProjectDocument {
   return {
     id:                 r['pdplr_projectdocumentid'] as string,
     project_id:         (r['pdplr_projectid'] as string) ?? null,
-    vendor_id:          (r['pdplr_vendorid'] as string) ?? null,
+    vendor_id:          (r['pdplr_vendorref'] as string) ?? null,
     parent_document_id: (r['pdplr_parentdocumentid'] as string) ?? null,
     title:              r['pdplr_title'] as string,
     document_type:      r['pdplr_documenttype'] as ProjectDocument['document_type'],
@@ -32,7 +32,7 @@ function toProjectDocument(r: DvRow): ProjectDocument {
 export async function fetchDocuments(filters?: { projectId?: string; vendorId?: string }): Promise<ProjectDocument[]> {
   const parts: string[] = []
   if (filters?.projectId) parts.push(`pdplr_projectid eq '${filters.projectId}'`)
-  if (filters?.vendorId)  parts.push(`pdplr_vendorid eq '${filters.vendorId}'`)
+  if (filters?.vendorId)  parts.push(`pdplr_vendorref eq '${filters.vendorId}'`)
 
   const query = `$orderby=createdon desc${parts.length ? `&$filter=${parts.join(' and ')}` : ''}`
   const rows = await dvList<DvRow>(T.projectDocuments, query)
@@ -58,7 +58,7 @@ export async function uploadDocument(
     pdplr_documenttype:      meta.document_type,
     pdplr_description:       meta.description ?? null,
     pdplr_projectid:         meta.project_id ?? null,
-    pdplr_vendorid:          meta.vendor_id ?? null,
+    pdplr_vendorref:          meta.vendor_id ?? null,
     pdplr_filepath:          `${meta.project_id ?? 'general'}/${docId}/${file.name}`,
     pdplr_filetype:          file.type || 'application/octet-stream',
     pdplr_filesize:          file.size,

@@ -283,7 +283,7 @@ export function toTicket(
     title:        str(r, 'title'),
     description:  str(r, 'description'),
     requesterId:  str(r, 'requesterid'),
-    vendorId:     nullable(r, 'vendorid'),
+    vendorId:     nullable(r, 'vendorref'),
     projectId:    nullable(r, 'projectid'),
     externalRecipientEmail: nullable(r, 'externalrecipientemail'),
     tags:         arr(r, 'tags'),

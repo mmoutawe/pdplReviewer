@@ -84,7 +84,7 @@ export async function fetchTickets(filters?: {
     parts.push(`(${filters.state.map((s) => `pdplr_state eq '${s}'`).join(' or ')})`)
   if (filters?.requesterId) parts.push(`pdplr_requesterid eq '${filters.requesterId}'`)
   if (filters?.projectId)   parts.push(`pdplr_projectid eq '${filters.projectId}'`)
-  if (filters?.vendorId)    parts.push(`pdplr_vendorid eq '${filters.vendorId}'`)
+  if (filters?.vendorId)    parts.push(`pdplr_vendorref eq '${filters.vendorId}'`)
 
   const query = `$orderby=createdon desc${parts.length ? `&$filter=${parts.join(' and ')}` : ''}`
   const tickets = await dvList<DvRow>(T.tickets, query)
@@ -158,7 +158,7 @@ export async function createTicket(input: CreateTicketInput, requesterId: string
     pdplr_title:              input.title,
     pdplr_description:        input.description,
     pdplr_requesterid:        requesterId,
-    pdplr_vendorid:           input.vendorId ?? null,
+    pdplr_vendorref:          input.vendorId ?? null,
     pdplr_projectid:          input.projectId ?? null,
     pdplr_tags:               (input.tags ?? []).join(','),
     pdplr_payload:            JSON.stringify(input.payload),

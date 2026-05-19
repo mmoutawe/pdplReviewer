@@ -305,7 +305,7 @@ async function buildTables() {
     strAttr(n('title'),                   'Title',                  200),
     memoAttr(n('description'),            'Description'),
     strAttr(n('requesterid'),             'Requester ID',            50),
-    strAttr(n('vendorid'),                'Vendor ID',               50),
+    strAttr(n('vendorref'),               'Vendor Ref',              50),
     strAttr(n('projectid'),               'Project ID',              50),
     strAttr(n('externalrecipientemail'),   'External Recipient Email',200),
     memoAttr(n('tags'),                   'Tags',                   500),
@@ -439,7 +439,7 @@ async function buildTables() {
     strAttr(n('code'),               'Code',              50),
     strAttr(n('businessunit'),       'Business Unit',    100),
     strAttr(n('ownerid'),            'Owner ID',          50),
-    strAttr(n('vendorid'),           'Vendor ID',         50),
+    strAttr(n('vendorref'),          'Vendor Ref',        50),
     strAttr(n('status'),             'Status',            20),
     intAttr(n('datainventorycount'), 'Data Inventory Count'),
     memoAttr(n('description'),       'Description'),
@@ -451,7 +451,7 @@ async function buildTables() {
     strAttr(n('title'), 'Title', 200, true))
   await addCols(n('projectdocument'), [
     strAttr(n('projectid'),      'Project ID',       50),
-    strAttr(n('vendorid'),       'Vendor ID',        50),
+    strAttr(n('vendorref'),      'Vendor Ref',       50),
     strAttr(n('parentdocumentid'),'Parent Doc ID',   50),
     strAttr(n('documenttype'),   'Document Type',    30),
     intAttr(n('version'),        'Version'),
