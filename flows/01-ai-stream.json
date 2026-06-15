@@ -1,0 +1,100 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "aoai_key": {
+      "type": "securestring",
+      "metadata": { "description": "Azure OpenAI API key (from Azure Portal → your OpenAI resource → Keys)" }
+    },
+    "aoai_endpoint": {
+      "type": "string",
+      "metadata": { "description": "Azure OpenAI endpoint, no trailing slash. e.g. https://myresource.openai.azure.com" }
+    },
+    "aoai_deployment": {
+      "defaultValue": "gpt-4o",
+      "type": "string",
+      "metadata": { "description": "Deployment name in Azure OpenAI Studio" }
+    }
+  },
+  "triggers": {
+    "When_HTTP_request_received": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "feature":  { "type": "string" },
+            "message":  { "type": "string" },
+            "ticketId": { "type": "string" },
+            "policyId": { "type": "string" },
+            "context":  { "type": "object" }
+          },
+          "required": ["message"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Initialize_SystemPrompt": {
+      "type": "InitializeVariable",
+      "runAfter": {},
+      "inputs": {
+        "variables": [
+          {
+            "name": "SystemPrompt",
+            "type": "string",
+            "value": "@{if(equals(triggerBody()?['feature'], 'pre_assessment'), 'You are a PDPL compliance reviewer performing a pre-submission risk assessment. Review the provided ticket details and identify: 1) missing information, 2) data categories present, 3) cross-border transfer risks, 4) legal basis adequacy under PDPL Article 4-6. Respond in structured markdown.', if(equals(triggerBody()?['feature'], 'evaluate_reply'), 'You are a PDPL compliance reviewer evaluating a requester reply to reviewer comments. Score the reply on: completeness (did they address every point?), specificity (concrete answers vs vague), evidentiary support (attachments cited). Respond with JSON: {\"score\":0-100,\"completeness\":\"...\",\"specificity\":\"...\",\"evidence\":\"...\",\"recommendation\":\"...\"}', if(equals(triggerBody()?['feature'], 'document_chat'), 'You are a PDPL compliance assistant. Answer questions about the provided document content in the context of Saudi PDPL compliance. Be concise and cite relevant PDPL articles where applicable.', if(equals(triggerBody()?['feature'], 'policy_chat'), 'You are a PDPL policy expert. Answer questions about PDPL policies, articles, and obligations for Saudi organizations. Cite specific articles (e.g. Article 4, Article 14) in your answers.', 'You are a PDPL compliance copilot. Help the user with PDPL compliance questions, ticket drafting, and risk identification. Be concise and practical.'))))}"
+          }
+        ]
+      }
+    },
+    "Call_Azure_OpenAI": {
+      "type": "Http",
+      "runAfter": { "Initialize_SystemPrompt": ["Succeeded"] },
+      "inputs": {
+        "method": "POST",
+        "uri": "@{parameters('aoai_endpoint')}/openai/deployments/@{parameters('aoai_deployment')}/chat/completions?api-version=2025-04-01-preview",
+        "headers": {
+          "Content-Type": "application/json",
+          "api-key": "@parameters('aoai_key')"
+        },
+        "body": {
+          "messages": [
+            { "role": "system", "content": "@variables('SystemPrompt')" },
+            { "role": "user",   "content": "@triggerBody()?['message']" }
+          ],
+          "max_completion_tokens": 1024
+        }
+      }
+    },
+    "Respond_success": {
+      "type": "Response",
+      "runAfter": { "Call_Azure_OpenAI": ["Succeeded"] },
+      "inputs": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        },
+        "body": "@{concat('data: {\"token\":\"', replace(replace(body('Call_Azure_OpenAI')?['choices']?[0]?['message']?['content'], '\\', '\\\\'), '\"', '\\\"'), '\"}\ndata: {\"done\":true}')}"
+      }
+    },
+    "Respond_error": {
+      "type": "Response",
+      "runAfter": { "Call_Azure_OpenAI": ["Failed", "TimedOut"] },
+      "inputs": {
+        "statusCode": 502,
+        "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        "body": {
+          "error": "Azure OpenAI call failed",
+          "detail": "@{body('Call_Azure_OpenAI')}"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

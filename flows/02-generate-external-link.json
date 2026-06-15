@@ -1,0 +1,109 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "tenant_id":     { "type": "string" },
+    "client_id":     { "type": "string" },
+    "client_secret": { "type": "securestring" },
+    "dataverse_url": { "type": "string", "metadata": { "description": "e.g. https://orgXXX.crm4.dynamics.com" } },
+    "app_url":       { "type": "string", "metadata": { "description": "Your deployed app URL, e.g. https://pdplreviewer.vercel.app" } },
+    "dv_prefix":     { "defaultValue": "pdplr_", "type": "string" }
+  },
+  "triggers": {
+    "When_HTTP_request_received": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "ticketId":        { "type": "string" },
+            "recipientEmail":  { "type": "string" },
+            "expiresInHours":  { "type": "number" }
+          },
+          "required": ["ticketId", "recipientEmail"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_AAD_Token": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "https://login.microsoftonline.com/@{parameters('tenant_id')}/oauth2/v2.0/token",
+        "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+        "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{encodeUriComponent(parameters('client_secret'))}&scope=@{parameters('dataverse_url')}/.default"
+      }
+    },
+    "Initialize_Token": {
+      "type": "InitializeVariable",
+      "runAfter": { "Get_AAD_Token": ["Succeeded"] },
+      "inputs": {
+        "variables": [{ "name": "LinkToken", "type": "string", "value": "@{guid()}" }]
+      }
+    },
+    "Initialize_ExpiresAt": {
+      "type": "InitializeVariable",
+      "runAfter": { "Initialize_Token": ["Succeeded"] },
+      "inputs": {
+        "variables": [{
+          "name": "ExpiresAt",
+          "type": "string",
+          "value": "@{addHours(utcNow(), if(equals(triggerBody()?['expiresInHours'], null), 72, int(triggerBody()?['expiresInHours'])))}"
+        }]
+      }
+    },
+    "Create_External_Link_Row": {
+      "type": "Http",
+      "runAfter": { "Initialize_ExpiresAt": ["Succeeded"] },
+      "inputs": {
+        "method": "POST",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}externallinks",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer @{body('Get_AAD_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0",
+          "Prefer": "return=representation"
+        },
+        "body": {
+          "@{parameters('dv_prefix')}token":          "@{variables('LinkToken')}",
+          "@{parameters('dv_prefix')}label":          "External Review — @{triggerBody()?['ticketId']}",
+          "@{parameters('dv_prefix')}recipientemail": "@{triggerBody()?['recipientEmail']}",
+          "@{parameters('dv_prefix')}expiresat":      "@{variables('ExpiresAt')}",
+          "@{parameters('dv_prefix')}status":         "pending",
+          "@{parameters('dv_prefix')}revoked":        false
+        }
+      }
+    },
+    "Respond_success": {
+      "type": "Response",
+      "runAfter": { "Create_External_Link_Row": ["Succeeded"] },
+      "inputs": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        },
+        "body": {
+          "token":     "@{variables('LinkToken')}",
+          "link":      "@{parameters('app_url')}/external/@{variables('LinkToken')}",
+          "expiresAt": "@{variables('ExpiresAt')}"
+        }
+      }
+    },
+    "Respond_error": {
+      "type": "Response",
+      "runAfter": { "Create_External_Link_Row": ["Failed"] },
+      "inputs": {
+        "statusCode": 500,
+        "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        "body": { "error": "@{body('Create_External_Link_Row')}" }
+      }
+    }
+  },
+  "outputs": {}
+}

@@ -1,0 +1,136 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "tenant_id":     { "type": "string" },
+    "client_id":     { "type": "string", "metadata": { "description": "App Registration with User.ReadWrite.All and Dataverse user_impersonation" } },
+    "client_secret": { "type": "securestring" },
+    "dataverse_url": { "type": "string" },
+    "app_url":       { "type": "string", "metadata": { "description": "Your deployed app URL" } },
+    "dv_prefix":     { "defaultValue": "pdplr_", "type": "string" }
+  },
+  "triggers": {
+    "When_HTTP_request_received": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "method": "POST",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "email":      { "type": "string" },
+            "fullName":   { "type": "string" },
+            "label":      { "type": "string" },
+            "expiresAt":  { "type": "string" }
+          },
+          "required": ["email", "fullName"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_Graph_Token": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "https://login.microsoftonline.com/@{parameters('tenant_id')}/oauth2/v2.0/token",
+        "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+        "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{encodeUriComponent(parameters('client_secret'))}&scope=https://graph.microsoft.com/.default"
+      }
+    },
+    "Get_Dataverse_Token": {
+      "type": "Http",
+      "runAfter": {},
+      "inputs": {
+        "method": "POST",
+        "uri": "https://login.microsoftonline.com/@{parameters('tenant_id')}/oauth2/v2.0/token",
+        "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+        "body": "grant_type=client_credentials&client_id=@{parameters('client_id')}&client_secret=@{encodeUriComponent(parameters('client_secret'))}&scope=@{parameters('dataverse_url')}/.default"
+      }
+    },
+    "Initialize_TempPassword": {
+      "type": "InitializeVariable",
+      "runAfter": { "Get_Graph_Token": ["Succeeded"], "Get_Dataverse_Token": ["Succeeded"] },
+      "inputs": {
+        "variables": [{
+          "name": "TempPassword",
+          "type": "string",
+          "value": "@{concat(toUpper(substring(guid(), 0, 4)), toLower(substring(guid(), 9, 4)), substring(guid(), 19, 4), '!7')}"
+        }]
+      }
+    },
+    "Create_Entra_User": {
+      "type": "Http",
+      "runAfter": { "Initialize_TempPassword": ["Succeeded"] },
+      "inputs": {
+        "method": "POST",
+        "uri": "https://graph.microsoft.com/v1.0/users",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer @{body('Get_Graph_Token')?['access_token']}"
+        },
+        "body": {
+          "accountEnabled": true,
+          "displayName": "@{triggerBody()?['fullName']}",
+          "mailNickname": "@{replace(toLower(triggerBody()?['fullName']), ' ', '.')}",
+          "userPrincipalName": "@{triggerBody()?['email']}",
+          "passwordProfile": {
+            "forceChangePasswordNextSignIn": true,
+            "password": "@{variables('TempPassword')}"
+          },
+          "usageLocation": "SA"
+        }
+      }
+    },
+    "Create_Dataverse_User": {
+      "type": "Http",
+      "runAfter": { "Create_Entra_User": ["Succeeded"] },
+      "inputs": {
+        "method": "POST",
+        "uri": "@{parameters('dataverse_url')}/api/data/v9.2/@{parameters('dv_prefix')}users",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer @{body('Get_Dataverse_Token')?['access_token']}",
+          "OData-MaxVersion": "4.0",
+          "OData-Version": "4.0"
+        },
+        "body": {
+          "@{parameters('dv_prefix')}entraobjectid": "@{body('Create_Entra_User')?['id']}",
+          "@{parameters('dv_prefix')}fullname":      "@{triggerBody()?['fullName']}",
+          "@{parameters('dv_prefix')}email":         "@{triggerBody()?['email']}",
+          "@{parameters('dv_prefix')}role":          "external_recipient",
+          "@{parameters('dv_prefix')}initials":      "@{concat(toUpper(first(split(triggerBody()?['fullName'], ' '))), if(greater(length(split(triggerBody()?['fullName'], ' ')), 1), toUpper(first(last(split(triggerBody()?['fullName'], ' ')))), ''))}"
+        }
+      }
+    },
+    "Respond_success": {
+      "type": "Response",
+      "runAfter": { "Create_Dataverse_User": ["Succeeded"] },
+      "inputs": {
+        "statusCode": 200,
+        "headers": {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        },
+        "body": {
+          "tempPassword": "@{variables('TempPassword')}",
+          "portalUrl":    "@{parameters('app_url')}"
+        }
+      }
+    },
+    "Respond_error": {
+      "type": "Response",
+      "runAfter": { "Create_Entra_User": ["Failed"] },
+      "inputs": {
+        "statusCode": 400,
+        "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        "body": {
+          "error": "Failed to create Entra ID user",
+          "detail": "@{body('Create_Entra_User')}"
+        }
+      }
+    }
+  },
+  "outputs": {}
+}
