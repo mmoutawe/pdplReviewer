@@ -2,9 +2,25 @@ import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/fu
 import { AzureOpenAI } from 'openai'
 import { corsHeaders, handlePreflight, jsonError } from '../lib/cors'
 
-type AIFeature = 'pre_assessment' | 'copilot' | 'document_chat' | 'policy_chat' | 'evaluate_reply'
+type AIFeature = 'pre_assessment' | 'copilot' | 'document_chat' | 'policy_chat' | 'evaluate_reply' | 'request_builder'
 
 const SYSTEM_PROMPTS: Record<AIFeature, string> = {
+  request_builder: `You are a PDPL compliance intake assistant for a Saudi FinTech organization operating under the Personal Data Protection Law (Royal Decree M/19, 2021).
+
+Given a freeform description of a data processing activity, extract the relevant fields and respond with ONLY valid JSON — no markdown, no code fences, no explanations, nothing before or after the JSON object.
+
+The JSON must have exactly these keys:
+{
+  "title": "concise specific title, max 80 chars",
+  "description": "formal complete description of the data processing activity",
+  "dataCategories": ["array", "of", "data category strings"],
+  "estimatedSubjects": "number as string, e.g. 5000",
+  "crossBorder": true or false,
+  "hasDPA": true or false,
+  "legalBasis": "legal basis under PDPL with article reference",
+  "notes": "PDPL compliance observations, relevant article numbers, risks"
+}`,
+
   pre_assessment: `You are a PDPL compliance reviewer at a Saudi FinTech organization. You are conducting a pre-assessment of a data processing activity submitted for review under the Personal Data Protection Law (PDPL, Royal Decree M/19, 2021).
 
 Analyze the ticket details provided and give a structured assessment covering:
@@ -82,6 +98,7 @@ export async function aiStreamHandler(
     ],
     stream: true,
     max_tokens: 2048,
+    ...(feature === 'request_builder' ? { response_format: { type: 'json_object' as const } } : {}),
   })
 
   const encoder = new TextEncoder()
