@@ -87,6 +87,24 @@ export function ConfirmDialog({ open, title, body, confirmLabel = 'Confirm', dan
   )
 }
 
+// ─── LoadingOverlay ──────────────────────────────────────────────────────────
+interface LoadingOverlayProps { show: boolean; label?: string }
+export function LoadingOverlay({ show, label = 'Submitting…' }: LoadingOverlayProps) {
+  if (!show) return null
+  return (
+    <div className="modal-overlay" role="status" aria-live="polite" style={{ zIndex: 300 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%',
+          border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{label}</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Toast stack ─────────────────────────────────────────────────────────────
 const KIND_ICON: Record<string, string> = {
   success: '✓', error: '✕', info: 'ℹ', default: '·',

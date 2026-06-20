@@ -14,6 +14,7 @@ import { EvidenceUploader } from '../components/forms'
 import { CitationChip } from '../components/AICoPilotPanel'
 import { AuditTimeline } from '../components/AuditTimeline'
 import { CommentThread } from '../components/CommentThread'
+import { ConfirmDialog, LoadingOverlay } from '../components/overlays'
 import { formatDate, formatDateTime } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured, dvDownloadFile, T } from '../lib/dataverse'
 import { exportAssessmentPdf } from '../lib/exportAssessmentPdf'
@@ -114,6 +115,8 @@ export default function TicketWorkspace() {
   const [libraryTemplates, setLibraryTemplates] = useState<ReviewerTemplate[]>([])
   const [attachLibraryLoading, setAttachLibraryLoading] = useState(false)
   const [evaluatingEntryId, setEvaluatingEntryId] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [threadReplying, setThreadReplying] = useState(false)
 
   useEffect(() => {
     document.title = ticket ? `${ticket.id} — PDPL Reviewer` : 'Ticket — PDPL Reviewer'
@@ -241,7 +244,7 @@ export default function TicketWorkspace() {
         }
       }
       showToast('Decision recorded.', 'success')
-      navigate('/requests')
+      navigate('/dashboard')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save decision.', 'error')
     } finally { setDmSaving(false) }
@@ -264,6 +267,7 @@ export default function TicketWorkspace() {
       setRequesterReply('')
       setRequesterAttachments([])
       showToast('Response submitted. Ticket sent back to reviewer.', 'success')
+      navigate('/dashboard')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Submission failed.', 'error')
     } finally { setRequesterReplying(false) }
@@ -296,7 +300,7 @@ export default function TicketWorkspace() {
 
   async function handleDeleteTicket() {
     if (!ticket) return
-    if (!confirm(`Delete ticket "${ticket.title}"? This cannot be undone.`)) return
+    setShowDeleteConfirm(false)
     try {
       if (isSupabaseConfigured) await apiDeleteTicket(ticket.id)
       demoDeleteTicket(ticket.id)
@@ -309,6 +313,18 @@ export default function TicketWorkspace() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={`Delete "${ticket?.title}"?`}
+        body="This ticket will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => void handleDeleteTicket()}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+      <LoadingOverlay show={dmSaving} label="Saving decision…" />
+      <LoadingOverlay show={requesterReplying} label="Submitting response…" />
+      <LoadingOverlay show={threadReplying} label="Submitting reply…" />
 
       {/* ── Header ── */}
       <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--line)', background: 'var(--surface-0)', flexShrink: 0 }}>
@@ -349,7 +365,7 @@ export default function TicketWorkspace() {
             )}
             {user.role === 'admin' && (
               <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-600)' }}
-                onClick={() => void handleDeleteTicket()}>Delete</button>
+                onClick={() => setShowDeleteConfirm(true)}>Delete</button>
             )}
           </div>
         </div>
@@ -576,28 +592,39 @@ export default function TicketWorkspace() {
           <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', minHeight: 0 }}>
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-              {/* Return thread — shown for requester when ticket is returned */}
-              {ticket.state === 'returned_to_requester' && (
-                <section className="card" style={{ padding: '18px 20px', borderColor: '#FDE68A', background: 'var(--amber-50)' }}>
+              {/* Conversation thread — visible to requester and whichever role is currently reviewing */}
+              {ticket.returnThread.length > 0 && (
+                <section className="card" style={{
+                  padding: '18px 20px',
+                  ...(ticket.state === 'returned_to_requester' ? { borderColor: '#FDE68A', background: 'var(--amber-50)' } : {}),
+                }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                    <CornerUpLeft size={18} color="var(--amber-700)" aria-hidden="true" />
-                    <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--amber-700)' }}>Ticket returned for clarification</h2>
+                    <CornerUpLeft size={18} color={ticket.state === 'returned_to_requester' ? 'var(--amber-700)' : 'var(--ink-500)'} aria-hidden="true" />
+                    <h2 style={{ fontSize: 14, fontWeight: 700, color: ticket.state === 'returned_to_requester' ? 'var(--amber-700)' : 'var(--ink-800)' }}>
+                      {ticket.state === 'returned_to_requester' ? 'Ticket returned for clarification' : 'Conversation'}
+                    </h2>
                   </div>
                   <CommentThread
                     entries={ticket.returnThread}
                     attachments={ticket.attachments}
                     readOnly={false}
                     onReply={async (msg) => {
-                      if (isSupabaseConfigured) {
-                        try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Comment added.', 'success') }
-                        catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
-                      } else {
-                        demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                      setThreadReplying(true)
+                      try {
+                        if (isSupabaseConfigured) {
+                          await addReturnComment(ticket.id, msg, undefined, user.id, user.role)
+                          await refreshTickets()
+                        } else {
+                          demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                        }
                         showToast('Comment added.', 'success')
-                      }
+                        navigate('/dashboard')
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : 'Failed.', 'error')
+                      } finally { setThreadReplying(false) }
                     }}
                   />
-                  {user.id === ticket.requesterId && (
+                  {user.id === ticket.requesterId && ticket.state === 'returned_to_requester' && (
                     <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate(`/requests/${ticket.id}/respond`)}>
                       Submit formal response →
                     </button>
@@ -903,19 +930,21 @@ export default function TicketWorkspace() {
                   onEvaluate={canReview || user.role === 'admin' ? handleEvaluateReply : undefined}
                   evaluatingId={evaluatingEntryId ?? undefined}
                   onReply={async (msg) => {
+                    setThreadReplying(true)
                     const attIds = reviewerAttachments.map((a) => a.id)
-                    if (isSupabaseConfigured) {
-                      try {
+                    try {
+                      if (isSupabaseConfigured) {
                         await addReturnComment(ticket.id, msg, attIds, user.id, user.role)
                         setReviewerAttachments([])
                         await refreshTickets()
-                        showToast('Reply added.', 'success')
+                      } else {
+                        demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
                       }
-                      catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
-                    } else {
-                      demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
                       showToast('Reply added.', 'success')
-                    }
+                      navigate('/dashboard')
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : 'Failed.', 'error')
+                    } finally { setThreadReplying(false) }
                   }}
                 />
               </div>
@@ -1141,13 +1170,19 @@ export default function TicketWorkspace() {
                   attachments={ticket.attachments}
                   readOnly={!canReview}
                   onReply={async (msg) => {
-                    if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
-                      catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
-                    } else {
-                      demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                    setThreadReplying(true)
+                    try {
+                      if (isSupabaseConfigured) {
+                        await addReturnComment(ticket.id, msg, undefined, user.id, user.role)
+                        await refreshTickets()
+                      } else {
+                        demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                      }
                       showToast('Reply added.', 'success')
-                    }
+                      navigate('/dashboard')
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : 'Failed.', 'error')
+                    } finally { setThreadReplying(false) }
                   }}
                 />
               </div>
@@ -1219,13 +1254,19 @@ export default function TicketWorkspace() {
                   attachments={ticket.attachments}
                   readOnly={!canReview}
                   onReply={async (msg) => {
-                    if (isSupabaseConfigured) {
-                      try { await addReturnComment(ticket.id, msg, undefined, user.id, user.role); await refreshTickets(); showToast('Reply added.', 'success') }
-                      catch (err) { showToast(err instanceof Error ? err.message : 'Failed.', 'error') }
-                    } else {
-                      demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                    setThreadReplying(true)
+                    try {
+                      if (isSupabaseConfigured) {
+                        await addReturnComment(ticket.id, msg, undefined, user.id, user.role)
+                        await refreshTickets()
+                      } else {
+                        demoAddReturnComment(ticket.id, msg, user.role as Role, user.fullName)
+                      }
                       showToast('Reply added.', 'success')
-                    }
+                      navigate('/dashboard')
+                    } catch (err) {
+                      showToast(err instanceof Error ? err.message : 'Failed.', 'error')
+                    } finally { setThreadReplying(false) }
                   }}
                 />
               </div>
@@ -1528,6 +1569,7 @@ function SecurityControlsChecklist({ readOnly }: { readOnly: boolean }) {
 // ─── Split Route Dialog ───────────────────────────────────────────────────────
 
 function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types').Ticket; onClose: () => void }) {
+  const navigate = useNavigate()
   const { user } = useStore(authStore)
   const [tracks, setTracks] = useState<Record<SplitTrack, boolean>>({ legal: true, security: true })
   const [notes, setNotes] = useState<Record<SplitTrack, string>>({ legal: '', security: '' })
@@ -1564,6 +1606,7 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
 
       showToast('Ticket routed to parallel review tracks.', 'success')
       onClose()
+      navigate('/dashboard')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Routing failed.', 'error')
     } finally { setSaving(false) }
@@ -1572,6 +1615,7 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <LoadingOverlay show={saving} label="Routing ticket…" />
       <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Split to parallel review</h2>
         <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 20, lineHeight: 1.6 }}>
@@ -1661,7 +1705,7 @@ function SecurityReturnAction({ ticket, userName }: { ticket: import('../data/ty
         if (notes.trim()) demoAddReturnComment(ticket.id, notes, 'security', userName)
       }
       showToast('Returned to Data Management.', 'success')
-      navigate('/requests')
+      navigate('/dashboard')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed.', 'error')
     } finally { setSaving(false); setShowDialog(false) }
@@ -1669,6 +1713,7 @@ function SecurityReturnAction({ ticket, userName }: { ticket: import('../data/ty
 
   return (
     <>
+      <LoadingOverlay show={saving} label="Returning to Data Management…" />
       <div style={{ padding: '16px 18px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)' }}>
         <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>Security Decision</h3>
         <button className="btn" onClick={() => setShowDialog(true)}>↩ Return to Data Management</button>
@@ -1742,7 +1787,7 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
         if (pending === 'return' && notes.trim()) demoAddReturnComment(ticket.id, notes, role, userName)
       }
       showToast(`Decision recorded: ${pending}`, 'success')
-      navigate('/requests')
+      navigate('/dashboard')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save decision.', 'error')
     } finally { setSaving(false); setPending(null); setNotes('') }
@@ -1750,6 +1795,7 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
 
   return (
     <>
+      <LoadingOverlay show={saving} label="Saving decision…" />
       <button className="btn" onClick={() => { setPending('return'); setNotes('') }}>Return to requester</button>
       <button className="btn btn-danger" onClick={() => { setPending('reject'); setNotes('') }}>Reject</button>
       <button className="btn btn-primary" onClick={() => { setPending('approve'); setNotes('') }}>Approve</button>

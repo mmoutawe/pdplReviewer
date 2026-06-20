@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ClipboardList, CheckCircle } from 'lucide-react'
 import { authStore, ticketStore, showToast, demoDeleteTicket } from '../store'
 import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, PRE_ASSESSMENTS } from '../data/seed'
 import { StatusPill, EmptyState, RiskBadge } from '../components/primitives'
+import { ConfirmDialog } from '../components/overlays'
 import { formatDate } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
@@ -14,13 +15,18 @@ export default function Dashboard() {
   const { user } = useStore(authStore)
   const { tickets } = useStore(ticketStore)
   const navigate = useNavigate()
+  const [delConfirm, setDelConfirm] = useState<{ open: boolean; id: string; title: string }>({ open: false, id: '', title: '' })
 
-  async function handleDeleteTicket(e: React.MouseEvent, id: string, title: string) {
+  function promptDelete(e: React.MouseEvent, id: string, title: string) {
     e.stopPropagation()
-    if (!confirm(`Delete ticket "${title}"? This cannot be undone.`)) return
+    setDelConfirm({ open: true, id, title })
+  }
+
+  async function executeDelete() {
+    setDelConfirm((c) => ({ ...c, open: false }))
     try {
-      if (isSupabaseConfigured) await apiDeleteTicket(id)
-      demoDeleteTicket(id)
+      if (isSupabaseConfigured) await apiDeleteTicket(delConfirm.id)
+      demoDeleteTicket(delConfirm.id)
     } catch (err) { showToast(err instanceof Error ? err.message : 'Delete failed.', 'error') }
   }
 
@@ -148,7 +154,7 @@ export default function Dashboard() {
                           {user.role === 'admin' && (
                             <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
                               <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-600)', fontSize: 12 }}
-                                onClick={(e) => void handleDeleteTicket(e, t.id, t.title)}>Delete</button>
+                                onClick={(e) => promptDelete(e, t.id, t.title)}>Delete</button>
                             </td>
                           )}
                         </tr>
@@ -175,6 +181,15 @@ export default function Dashboard() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={delConfirm.open}
+        title={`Delete "${delConfirm.title}"?`}
+        body="This ticket will be permanently deleted. This cannot be undone."
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => void executeDelete()}
+        onCancel={() => setDelConfirm((c) => ({ ...c, open: false }))}
+      />
       <div className="page-header">
         <div>
           <h1 className="page-title">Dashboard</h1>
@@ -258,7 +273,7 @@ export default function Dashboard() {
                         {user.role === 'admin' && (
                           <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
                             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-600)', fontSize: 12 }}
-                              onClick={(e) => void handleDeleteTicket(e, t.id, t.title)}>Delete</button>
+                              onClick={(e) => promptDelete(e, t.id, t.title)}>Delete</button>
                           </td>
                         )}
                       </tr>

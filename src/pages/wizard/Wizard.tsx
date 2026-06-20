@@ -15,6 +15,7 @@ import { fetchProjects, createProject } from '../../api/projects'
 import { chatWithRequestBuilder, type ChatMessage, type RequestBuilderResult, type RequestBuilderType } from '../../api/aiRequestBuilder'
 import { runPresubmitAssessment, type PresubmitRequestType } from '../../api/aiPresubmit'
 import { PresubmitAssessmentView } from '../../components/PresubmitAssessmentView'
+import { LoadingOverlay } from '../../components/overlays'
 
 type Method = 'manual' | 'ai' | 'xlsx'
 
@@ -735,6 +736,7 @@ export default function Wizard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <LoadingOverlay show={submitting} label="Submitting request…" />
       {/* Wizard header */}
       <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-0)' }}>
         <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 40px' }}>

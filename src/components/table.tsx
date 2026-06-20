@@ -3,7 +3,7 @@ import { type ReactNode, useState } from 'react'
 // ─── EnterpriseTable ──────────────────────────────────────────────────────────
 export interface Column<T> {
   key: string
-  label: string
+  label: ReactNode
   width?: number | string
   numeric?: boolean
   sortable?: boolean

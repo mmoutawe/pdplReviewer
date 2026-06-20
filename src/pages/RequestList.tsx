@@ -5,6 +5,7 @@ import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, STATE_LABELS } from '../data/seed'
 import { StatusPill, SLAIndicator } from '../components/primitives'
 import { EnterpriseTable, FilterBar, type Column } from '../components/table'
+import { ConfirmDialog } from '../components/overlays'
 import type { Ticket } from '../data/types'
 import { formatDate } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
@@ -18,15 +19,8 @@ export default function RequestList() {
   const [search, setSearch] = useState('')
   const [filterState, setFilterState] = useState('')
   const [filterType, setFilterType] = useState('')
-
-  async function handleDeleteTicket(e: React.MouseEvent, id: string, title: string) {
-    e.stopPropagation()
-    if (!confirm(`Delete ticket "${title}"? This cannot be undone.`)) return
-    try {
-      if (isSupabaseConfigured) await apiDeleteTicket(id)
-      demoDeleteTicket(id)
-    } catch (err) { showToast(err instanceof Error ? err.message : 'Delete failed.', 'error') }
-  }
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const visible = tickets.filter((t) => {
     if (user.role === 'requester' && t.requesterId !== user.id) return false
@@ -39,7 +33,70 @@ export default function RequestList() {
     return true
   })
 
+  const visibleIds = visible.map((t) => t.id)
+  const allChecked = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
+  const someChecked = visibleIds.some((id) => selected.has(id))
+  const selectedCount = visibleIds.filter((id) => selected.has(id)).length
+
+  function toggleAll(e: React.ChangeEvent<HTMLInputElement>) {
+    e.stopPropagation()
+    if (allChecked) {
+      setSelected((prev) => { const next = new Set(prev); visibleIds.forEach((id) => next.delete(id)); return next })
+    } else {
+      setSelected((prev) => new Set([...prev, ...visibleIds]))
+    }
+  }
+
+  function toggleOne(e: React.ChangeEvent<HTMLInputElement>, id: string) {
+    e.stopPropagation()
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  async function executeDeleteSelected() {
+    setConfirmOpen(false)
+    const toDelete = visible.filter((t) => selected.has(t.id))
+    try {
+      for (const t of toDelete) {
+        if (isSupabaseConfigured) await apiDeleteTicket(t.id)
+        demoDeleteTicket(t.id)
+      }
+      setSelected(new Set())
+      showToast(`Deleted ${toDelete.length} ticket${toDelete.length !== 1 ? 's' : ''}.`, 'success')
+    } catch (err) { showToast(err instanceof Error ? err.message : 'Delete failed.', 'error') }
+  }
+
+  const isAdmin = user.role === 'admin'
+
+  const checkboxHeader = isAdmin ? (
+    <input
+      type="checkbox"
+      checked={allChecked}
+      ref={(el) => { if (el) el.indeterminate = someChecked && !allChecked }}
+      onChange={toggleAll}
+      onClick={(e) => e.stopPropagation()}
+      style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--brand-700)' }}
+      aria-label="Select all"
+    />
+  ) : ''
+
   const columns: Column<Ticket>[] = [
+    ...(isAdmin ? [{
+      key: 'select', label: checkboxHeader, width: 44,
+      render: (t: Ticket) => (
+        <input
+          type="checkbox"
+          checked={selected.has(t.id)}
+          onChange={(e) => toggleOne(e, t.id)}
+          onClick={(e) => e.stopPropagation()}
+          style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--brand-700)' }}
+          aria-label={`Select ${t.title}`}
+        />
+      ),
+    }] : []),
     {
       key: 'id', label: 'ID', width: 160, sortable: true,
       render: (t) => <span className="mono" style={{ fontSize: 12, color: 'var(--ink-500)' }}>{t.id}</span>,
@@ -71,13 +128,6 @@ export default function RequestList() {
         </span>
       ),
     },
-    ...(user.role === 'admin' ? [{
-      key: 'actions', label: '', width: 80,
-      render: (t: Ticket) => (
-        <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-600)', fontSize: 12 }}
-          onClick={(e) => void handleDeleteTicket(e, t.id, t.title)}>Delete</button>
-      ),
-    }] : []),
   ]
 
   const stateOptions = Object.entries(STATE_LABELS).map(([v, l]) => ({ value: v, label: l }))
@@ -111,12 +161,26 @@ export default function RequestList() {
 
   return (
     <div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Delete ${selectedCount} ticket${selectedCount !== 1 ? 's' : ''}?`}
+        body={`This will permanently delete ${selectedCount} selected ticket${selectedCount !== 1 ? 's' : ''}. This cannot be undone.`}
+        confirmLabel={`Delete ${selectedCount}`}
+        danger
+        onConfirm={() => void executeDeleteSelected()}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <div className="page-header">
         <div>
           <h1 className="page-title">{user.role === 'requester' ? 'My Requests' : 'All Requests'}</h1>
           <p className="page-subtitle">{visible.length} record{visible.length !== 1 ? 's' : ''}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {isAdmin && someChecked && (
+            <span style={{ fontSize: 13, color: 'var(--ink-500)', marginRight: 4 }}>
+              {selectedCount} selected
+            </span>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={exportCSV} title="Export filtered results to CSV">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
               <path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -124,6 +188,11 @@ export default function RequestList() {
             </svg>
             Export CSV
           </button>
+          {isAdmin && someChecked && (
+            <button className="btn btn-danger btn-sm" onClick={() => setConfirmOpen(true)}>
+              Delete selected ({selectedCount})
+            </button>
+          )}
           {user.role === 'requester' && (
             <button className="btn btn-primary btn-lg" onClick={() => navigate('/requests/new')}>
               New request
