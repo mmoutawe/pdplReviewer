@@ -7,7 +7,6 @@ import { apiResetPassword } from '../api/auth'
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
@@ -36,7 +35,6 @@ export default function ForgotPassword() {
     setLoading(true)
     try {
       await apiResetPassword(email)
-      setSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send reset email.')
     } finally {
@@ -58,25 +56,10 @@ export default function ForgotPassword() {
           <Logo size="lg" />
         </div>
 
-        {sent ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }} aria-hidden="true">✉️</div>
-            <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Check your email</h1>
-            <p style={{ fontSize: 13.5, color: 'var(--ink-500)', lineHeight: 1.6, marginBottom: 24 }}>
-              We sent a password reset link to <strong>{email}</strong>. Click the link in the email to set a new password.
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--ink-400)' }}>
-              Didn't receive it?{' '}
-              <button className="btn btn-ghost btn-sm" style={{ fontSize: 12, padding: '0 4px' }} onClick={() => setSent(false)}>
-                Try again
-              </button>
-            </p>
-          </div>
-        ) : (
           <>
             <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Reset your password</h1>
             <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 24, lineHeight: 1.6 }}>
-              Enter your work email and we'll send you a reset link.
+              Passwords are managed through Microsoft Entra ID. Enter your work email and you'll be redirected to Microsoft to complete the reset.
             </p>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -110,11 +93,10 @@ export default function ForgotPassword() {
                 color: '#fff', fontSize: 14, fontWeight: 600,
                 border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
               }}>
-                {loading ? 'Sending…' : 'Send reset link'}
+                {loading ? 'Redirecting…' : 'Reset via Microsoft'}
               </button>
             </form>
           </>
-        )}
 
         <div style={{ marginTop: 24, textAlign: 'center', fontSize: 13, color: 'var(--ink-400)' }}>
           <Link to="/sign-in" style={{ color: 'var(--brand-700)', textDecoration: 'none' }}>← Back to sign in</Link>

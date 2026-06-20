@@ -135,7 +135,7 @@ export default function App() {
           <Route path="/architecture" element={<RequireAuth><Architecture /></RequireAuth>} />
 
           {/* Fallback */}
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<RequireAuth><NotFound /></RequireAuth>} />
         </Routes>
       </Suspense>
     </Layout>

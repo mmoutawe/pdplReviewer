@@ -33,11 +33,8 @@ function SupabaseSignIn() {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [credsOpen, setCredsOpen] = useState(false)
   const navigate = useNavigate()
   const { isSignedIn } = useStore(authStore)
 
@@ -59,15 +56,8 @@ function SupabaseSignIn() {
     }
   }
 
-  async function handleSignUp(e: React.FormEvent) {
-    e.preventDefault()
-    // User accounts are managed in Microsoft Entra ID.
-    // Self-registration is not supported — contact your administrator.
-    setError('Account creation is managed through Microsoft Entra ID. Please contact your administrator.')
-  }
-
-  const tabBtn = (tab: 'signin' | 'signup', label: string) => (
-    <button type="button" onClick={() => { setActiveTab(tab); setError(null); setSuccess(null) }}
+const tabBtn = (tab: 'signin' | 'signup', label: string) => (
+    <button type="button" onClick={() => { setActiveTab(tab); setError(null) }}
       style={{
         flex: 1, padding: '8px 0', fontSize: 13.5, fontWeight: activeTab === tab ? 600 : 400,
         color: activeTab === tab ? 'var(--brand-700)' : 'var(--ink-500)',
@@ -126,74 +116,14 @@ function SupabaseSignIn() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <label htmlFor="su-name" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>FULL NAME</label>
-              <input id="su-name" type="text" autoComplete="name" required value={fullName}
-                onChange={(e) => setFullName(e.target.value)} placeholder="Your full name" style={inputStyle}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          <div style={{ padding: '8px 0 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 'var(--r-lg)', background: 'var(--brand-50)', color: 'var(--brand-700)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true"><rect x="5" y="10" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.6"/><path d="M8 10V7a3 3 0 016 0v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
             </div>
-            <div>
-              <label htmlFor="su-email" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>WORK EMAIL</label>
-              <input id="su-email" type="email" autoComplete="email" required value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" style={inputStyle}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
-            </div>
-            <div>
-              <label htmlFor="su-password" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5, letterSpacing: '0.02em' }}>PASSWORD</label>
-              <input id="su-password" type="password" autoComplete="new-password" required minLength={8} value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" style={inputStyle}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
-            </div>
-            {error && <div role="alert" style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', background: '#FEF2F2', border: '1px solid #FECACA', fontSize: 13, color: '#B91C1C' }}>{error}</div>}
-            {success && <div role="status" style={{ padding: '8px 12px', borderRadius: 'var(--r-sm)', background: '#F0FDF4', border: '1px solid #BBF7D0', fontSize: 13, color: '#15803D' }}>{success}</div>}
-            <button type="submit" disabled={loading}
-              style={{ marginTop: 4, padding: '10px 0', borderRadius: 'var(--r-sm)', background: loading ? 'var(--brand-300)' : 'var(--brand-700)', color: '#fff', fontSize: 14, fontWeight: 600, border: 'none', cursor: loading ? 'not-allowed' : 'pointer', transition: 'background var(--t-fast)' }}>
-              {loading ? 'Creating account…' : 'Create Account'}
-            </button>
-          </form>
-        )}
-
-        {/* Demo credentials accordion — only on sign-in tab */}
-        {activeTab === 'signin' && (
-          <div style={{ marginTop: 20, borderRadius: 'var(--r-md)', border: '1px solid var(--line)', overflow: 'hidden' }}>
-            <button type="button" onClick={() => setCredsOpen((o) => !o)}
-              style={{ width: '100%', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface-1)', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink-600)' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                  <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
-                  <path d="M6.5 4v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                </svg>
-                Demo credentials
-              </span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"
-                style={{ transform: credsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-            </button>
-            {credsOpen && (
-              <div style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
-                {DEMO_CREDENTIALS.map((c) => (
-                  <button key={c.email} type="button"
-                    onClick={() => { setEmail(c.email); setPassword(c.password); setCredsOpen(false) }}
-                    style={{ width: '100%', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'background var(--t-fast)' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)' }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#fff', background: ROLE_PILL_COLOR[c.role] ?? '#6B7280' }}>
-                      {c.label.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--ink-800)' }}>{c.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-500)', fontFamily: 'var(--font-mono)' }}>{c.email}</div>
-                    </div>
-                    <span style={{ fontSize: 11, color: 'var(--ink-400)', fontFamily: 'var(--font-mono)' }}>{c.password}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-800)', margin: 0 }}>Accounts are managed by your administrator</p>
+            <p style={{ fontSize: 13, color: 'var(--ink-500)', lineHeight: 1.6, margin: 0 }}>
+              Access is granted through Microsoft Entra ID. Contact your system administrator to request an account.
+            </p>
           </div>
         )}
 
