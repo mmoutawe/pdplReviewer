@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { authStore, signIn } from '../store'
 import { useStore } from '../hooks/useStore'
 import Logo from '../components/Logo'
@@ -31,7 +31,8 @@ const inputStyle: React.CSSProperties = {
 
 function SupabaseSignIn() {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('')
+  const [searchParams] = useSearchParams()
+  const [email, setEmail] = useState(searchParams.get('email') ?? '')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -129,6 +130,12 @@ const tabBtn = (tab: 'signin' | 'signup', label: string) => (
 
         <p style={{ marginTop: 16, fontSize: 11.5, color: 'var(--ink-400)', textAlign: 'center', lineHeight: 1.5 }}>
           PDPL Reviewer — Saudi FinTech privacy compliance under Royal Decree M/19, 2021.
+        </p>
+        <p style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-300)', textAlign: 'center' }}>
+          First time?{' '}
+          <Link to="/setup" style={{ color: 'var(--ink-400)', textDecoration: 'underline' }}>
+            Set up admin account
+          </Link>
         </p>
       </div>
     </div>

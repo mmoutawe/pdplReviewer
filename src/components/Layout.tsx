@@ -4,7 +4,7 @@ import Shell from './Shell'
 import { ToastStack } from './overlays'
 import PolicyChatbot from './PolicyChatbot'
 
-const SHELL_LESS = ['/sign-in', '/forgot-password', '/auth/', '/external/', '/change-password']
+const SHELL_LESS = ['/sign-in', '/setup', '/forgot-password', '/auth/', '/external/', '/change-password']
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()

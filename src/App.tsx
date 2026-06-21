@@ -35,6 +35,7 @@ const Settings = lazy(() => import('./pages/Settings'))
 const ExternalDashboard = lazy(() => import('./pages/ExternalDashboard'))
 const NotFound        = lazy(() => import('./pages/NotFound'))
 const Profile         = lazy(() => import('./pages/Profile'))
+const Setup           = lazy(() => import('./pages/Setup'))
 
 function PageSkeleton() {
   return (
@@ -77,6 +78,7 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/setup" element={<Setup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/auth/reset-password" element={<ResetPassword />} />
           <Route path="/external/redeem/:token" element={<ExternalRedeem />} />

@@ -74,6 +74,14 @@ export function getImpersonatedRole(): Role | null {
   return sessionStorage.getItem(IMPERSONATE_KEY) as Role | null
 }
 
+/** Called by the Setup page after creating the first admin profile via Dataverse. */
+export function setAuthUser(user: User) {
+  sessionStorage.setItem('pdpl_real_role', user.role)
+  const impersonated = sessionStorage.getItem(IMPERSONATE_KEY) as Role | null
+  authStore.setState({ user: impersonated ? { ...user, role: impersonated } : user, isSignedIn: true, loading: false })
+  void loadUserData(user)
+}
+
 export function signOut() {
   if (isDataverseConfigured) {
     void apiSignOut().then(() => {

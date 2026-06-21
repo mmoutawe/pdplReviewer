@@ -17,6 +17,7 @@ import {
 } from '../api/adminSettings'
 import { getWorkflowSettings, setWorkflowSetting, type WorkflowSettings } from '../lib/workflowSettings'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
+import { fetchAllUsers, inviteUser as apiInviteUser, updateUserAdmin } from '../api/users'
 
 const ROLE_LABELS: Record<Role, string> = {
   requester: 'Requester',
@@ -69,6 +70,11 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   const [localUsers, setLocalUsers] = useState<User[]>([...USERS])
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [showInvite, setShowInvite] = useState(false)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return
+    fetchAllUsers().then(setLocalUsers).catch(() => {})
+  }, [])
 
   // ── Policies tab ──
   const [localPolicies, setLocalPolicies] = useState<Policy[]>([...POLICIES])
@@ -184,6 +190,20 @@ export default function Admin({ tab: initialTab }: AdminProps) {
       setLinks((prev) => prev.filter((l) => l.id !== link.id))
       showToast('Link deleted.', 'success')
     } catch (err) { showToast(err instanceof Error ? err.message : 'Delete failed.', 'error') }
+  }
+
+  async function handleSaveUser(updated: User) {
+    if (isSupabaseConfigured) {
+      try {
+        await updateUserAdmin(updated.id, { role: updated.role, department: updated.department, jobTitle: updated.jobTitle })
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Update failed.', 'error')
+        return
+      }
+    }
+    setLocalUsers((prev) => prev.map((u) => u.id === updated.id ? updated : u))
+    setEditingUser(null)
+    showToast('User updated.', 'success')
   }
 
   const TABS = [
@@ -666,11 +686,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
         <EditUserDialog
           user={editingUser}
           onClose={() => setEditingUser(null)}
-          onSave={(updated) => {
-            setLocalUsers((prev) => prev.map((u) => u.id === updated.id ? updated : u))
-            setEditingUser(null)
-            showToast('User updated.', 'success')
-          }}
+          onSave={(updated) => void handleSaveUser(updated)}
         />
       )}
 
@@ -681,7 +697,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
           onInvited={(u) => {
             setLocalUsers((prev) => [...prev, u])
             setShowInvite(false)
-            showToast('User invited.', 'success')
+            if (!isSupabaseConfigured) showToast('User added (demo).', 'success')
           }}
         />
       )}
@@ -797,80 +813,141 @@ function EditUserDialog({ user, onClose, onSave }: {
 function InviteUserDialog({ onClose, onInvited }: {
   onClose: () => void; onInvited: (u: User) => void
 }) {
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState<Role>('requester')
+  const [fullName, setFullName]     = useState('')
+  const [email, setEmail]           = useState('')
+  const [role, setRole]             = useState<Role>('requester')
   const [department, setDepartment] = useState('')
-  const [jobTitle, setJobTitle] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [jobTitle, setJobTitle]     = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState<string | null>(null)
+  const [invited, setInvited]       = useState<User | null>(null)
+  const [copied, setCopied]         = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  const inviteLink = invited
+    ? `${window.location.origin}/#/sign-in?email=${encodeURIComponent(invited.email)}`
+    : ''
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!fullName.trim() || !email.trim()) { setError('Full name and email are required.'); return }
-    const initials = fullName.trim().split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
-    const colors = ['#0B5FFF', '#5B21B6', '#047857', '#B45309', '#0E7490', '#9333EA']
-    const newUser: User = {
-      id: `u-new-${Date.now()}`,
-      fullName: fullName.trim(),
-      email: email.trim(),
-      role,
-      department: department.trim() || 'Unknown',
-      jobTitle: jobTitle.trim() || 'Unknown',
-      initials,
-      avatarColor: colors[Math.floor(Math.random() * colors.length)],
+    setError(null)
+
+    if (isSupabaseConfigured) {
+      setLoading(true)
+      try {
+        const user = await apiInviteUser({ fullName, email, role, department, jobTitle })
+        setInvited(user)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create user.')
+      } finally {
+        setLoading(false)
+      }
+    } else {
+      // Demo mode — create locally
+      const inits = fullName.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+      const colors = ['#0B5FFF', '#5B21B6', '#047857', '#B45309', '#0E7490', '#9333EA']
+      const newUser: User = {
+        id: `u-new-${Date.now()}`, fullName: fullName.trim(), email: email.trim(), role,
+        department: department.trim() || 'Unknown', jobTitle: jobTitle.trim() || 'Unknown',
+        initials: inits, avatarColor: colors[Math.floor(Math.random() * colors.length)],
+      }
+      onInvited(newUser)
     }
-    onInvited(newUser)
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(inviteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleDone() {
+    if (invited) onInvited(invited)
+    onClose()
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={invited ? handleDone : onClose} />
       <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 460, padding: '28px 32px', zIndex: 1 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Invite user</h2>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={dlgLabelSt}>FULL NAME *</label>
-              <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Layla Al-Harbi" style={dlgInputSt}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+
+        {invited ? (
+          /* ── Success state ── */
+          <>
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--emerald-50)', color: 'var(--emerald-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M4 10l4 4 8-8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 4 }}>Account created</h2>
+              <p style={{ fontSize: 13, color: 'var(--ink-500)' }}>
+                Share the link below with <strong style={{ color: 'var(--ink-800)' }}>{invited.fullName}</strong>. They sign in with their Microsoft account — no password needed.
+              </p>
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={dlgLabelSt}>WORK EMAIL *</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="layla@company.com" style={dlgInputSt}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            <div style={{ background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: 'var(--ink-400)', fontWeight: 600, letterSpacing: '0.04em', marginBottom: 4 }}>INVITE LINK</div>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-700)', wordBreak: 'break-all' }}>{inviteLink}</div>
             </div>
-            <div>
-              <label style={dlgLabelSt}>ROLE</label>
-              <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={dlgInputSt}>
-                {ROLES_SELECTABLE.map((r) => <option key={r} value={r}>{ROLE_LABELS_FULL[r]}</option>)}
-              </select>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={handleCopy}>
+                {copied ? '✓ Copied' : 'Copy link'}
+              </button>
+              <button className="btn btn-primary" onClick={handleDone}>Done</button>
             </div>
-            <div>
-              <label style={dlgLabelSt}>DEPARTMENT</label>
-              <input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Legal" style={dlgInputSt}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
-            </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={dlgLabelSt}>JOB TITLE</label>
-              <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Privacy Analyst" style={dlgInputSt}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
-            </div>
-          </div>
-          {!isSupabaseConfigured && (
-            <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
-              Demo mode — user will be added to the local list this session only. In production, the user is created in Dataverse via <code>npm run create:user</code>.
-            </p>
-          )}
-          {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Send invitation</button>
-          </div>
-        </form>
+          </>
+        ) : (
+          /* ── Form ── */
+          <>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Invite user</h2>
+            <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={dlgLabelSt}>FULL NAME *</label>
+                  <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Layla Al-Harbi" style={dlgInputSt}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={dlgLabelSt}>WORK EMAIL *</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="layla@company.com" style={dlgInputSt}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+                </div>
+                <div>
+                  <label style={dlgLabelSt}>ROLE</label>
+                  <select value={role} onChange={(e) => setRole(e.target.value as Role)} style={dlgInputSt}>
+                    {ROLES_SELECTABLE.map((r) => <option key={r} value={r}>{ROLE_LABELS_FULL[r]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={dlgLabelSt}>DEPARTMENT</label>
+                  <input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. Legal" style={dlgInputSt}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={dlgLabelSt}>JOB TITLE</label>
+                  <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Privacy Analyst" style={dlgInputSt}
+                    onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+                </div>
+              </div>
+              {!isSupabaseConfigured && (
+                <p style={{ fontSize: 11.5, color: 'var(--amber-700)', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-sm)', padding: '8px 10px' }}>
+                  Demo mode — user will be added to the local list this session only.
+                </p>
+              )}
+              {error && <div role="alert" style={{ fontSize: 12.5, color: '#B91C1C', padding: '6px 10px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 'var(--r-sm)' }}>{error}</div>}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+                <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                <button type="submit" disabled={loading} className="btn btn-primary">
+                  {loading ? 'Creating…' : 'Create account'}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
       </div>
     </div>
   )

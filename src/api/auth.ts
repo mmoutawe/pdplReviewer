@@ -4,8 +4,10 @@ import {
   type AccountInfo,
   type AuthenticationResult,
 } from '@azure/msal-browser'
-import { dvList, isDataverseConfigured, initDataverseTokenProvider, T, toUser } from '../lib/dataverse'
+import { dvList, dvCreate, dvUpdate, isDataverseConfigured, initDataverseTokenProvider, T, toUser } from '../lib/dataverse'
 import type { User } from '../data/types'
+
+const AVATAR_COLORS = ['#0B5FFF', '#5B21B6', '#047857', '#B45309', '#0E7490', '#9333EA']
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const env = (import.meta as any).env as Record<string, string | undefined>
@@ -43,13 +45,54 @@ initDataverseTokenProvider(async () => {
 // ── User profile lookup ────────────────────────────────────
 
 async function fetchUserProfile(account: AccountInfo): Promise<User | null> {
-  // The user's object ID from Entra ID is used as the Dataverse user record's ID
+  // Primary lookup: by Entra Object ID (fast path after first sign-in)
   const rows = await dvList<Record<string, unknown>>(
     T.users,
     `$filter=pdplr_entraobjectid eq '${account.localAccountId}'&$top=1`,
   )
-  if (!rows.length) return null
-  return toUser(rows[0])
+  if (rows.length) return toUser(rows[0])
+
+  // First sign-in: admin pre-created the record with email only — match by email
+  // then stamp the Entra Object ID so future lookups use the fast path
+  const byEmail = await dvList<Record<string, unknown>>(
+    T.users,
+    `$filter=pdplr_email eq '${account.username.toLowerCase()}'&$top=1`,
+  )
+  if (!byEmail.length) return null
+
+  const record = byEmail[0]
+  const recordId = record['pdplr_userid'] as string
+  await dvUpdate(T.users, recordId, { pdplr_entraobjectid: account.localAccountId })
+  return toUser({ ...record, pdplr_entraobjectid: account.localAccountId })
+}
+
+// ── First-run setup ────────────────────────────────────────
+
+/** Returns true when no users exist in Dataverse — safe to call after MSAL login. */
+export async function checkIsFirstSetup(): Promise<boolean> {
+  if (!isDataverseConfigured) return false
+  const rows = await dvList<unknown>(T.users, '$top=1&$select=pdplr_userid')
+  return rows.length === 0
+}
+
+/** Creates the first admin account after MSAL authentication. */
+export async function createAdminProfile(
+  account: AccountInfo,
+  fields: { fullName: string; department: string; jobTitle: string },
+): Promise<User> {
+  const inits = fields.fullName.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+  const avatarColor = AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]
+  const row = await dvCreate<Record<string, unknown>>(T.users, {
+    pdplr_entraobjectid: account.localAccountId,
+    pdplr_email:         account.username.toLowerCase(),
+    pdplr_fullname:      fields.fullName.trim(),
+    pdplr_role:          'admin',
+    pdplr_department:    fields.department.trim(),
+    pdplr_jobtitle:      fields.jobTitle.trim(),
+    pdplr_initials:      inits,
+    pdplr_avatarcolor:   avatarColor,
+  })
+  return toUser(row)
 }
 
 // ── Public API ─────────────────────────────────────────────
