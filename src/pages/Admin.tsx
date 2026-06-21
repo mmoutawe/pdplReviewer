@@ -17,7 +17,7 @@ import {
 } from '../api/adminSettings'
 import { getWorkflowSettings, setWorkflowSetting, type WorkflowSettings } from '../lib/workflowSettings'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
-import { fetchAllUsers, inviteUser as apiInviteUser, updateUserAdmin } from '../api/users'
+import { fetchAllUsers, inviteUser as apiInviteUser, updateUserAdmin, deactivateUser, reactivateUser } from '../api/users'
 
 const ROLE_LABELS: Record<Role, string> = {
   requester: 'Requester',
@@ -70,11 +70,35 @@ export default function Admin({ tab: initialTab }: AdminProps) {
   const [localUsers, setLocalUsers] = useState<User[]>([...USERS])
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [showInvite, setShowInvite] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isSupabaseConfigured) return
     fetchAllUsers().then(setLocalUsers).catch(() => {})
   }, [])
+
+  async function handleDeactivate(u: User) {
+    if (!confirm(`Deactivate ${u.fullName}? They will be signed out and unable to sign back in.`)) return
+    if (isSupabaseConfigured) {
+      setTogglingId(u.id)
+      try { await deactivateUser(u.id) }
+      catch (err) { showToast(err instanceof Error ? err.message : 'Deactivate failed.', 'error'); setTogglingId(null); return }
+      setTogglingId(null)
+    }
+    setLocalUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: false } : x))
+    showToast(`${u.fullName} deactivated.`, 'success')
+  }
+
+  async function handleReactivate(u: User) {
+    if (isSupabaseConfigured) {
+      setTogglingId(u.id)
+      try { await reactivateUser(u.id) }
+      catch (err) { showToast(err instanceof Error ? err.message : 'Reactivate failed.', 'error'); setTogglingId(null); return }
+      setTogglingId(null)
+    }
+    setLocalUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, isActive: true } : x))
+    showToast(`${u.fullName} reactivated.`, 'success')
+  }
 
   // ── Policies tab ──
   const [localPolicies, setLocalPolicies] = useState<Policy[]>([...POLICIES])
@@ -231,7 +255,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
 
       {/* KPI strip */}
       <div style={{ display: 'flex', gap: 12, padding: '0 24px 16px', flexWrap: 'wrap' }}>
-        <KPI label="Total users" value={USERS.filter((u) => u.role !== 'external_recipient').length} style={{ flex: '1 1 120px' }} />
+        <KPI label="Total users" value={localUsers.filter((u) => u.role !== 'external_recipient' && u.isActive !== false).length} style={{ flex: '1 1 120px' }} />
         <KPI label="Active policies" value={POLICIES.filter((p) => p.status === 'active').length} style={{ flex: '1 1 120px' }} />
         <KPI label="Total tickets" value={tickets.length} style={{ flex: '1 1 120px' }} />
         <KPI label="AI features" value={Object.values(aiSettings).filter(Boolean).length} style={{ flex: '1 1 120px' }} sub="enabled" />
@@ -258,21 +282,41 @@ export default function Admin({ tab: initialTab }: AdminProps) {
                   <span style={{ fontSize: 13, color: 'var(--ink-500)' }}>{users.length} user{users.length !== 1 ? 's' : ''}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {users.map((u) => (
-                    <div key={u.id} className="card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <Avatar initials={u.initials} color={u.avatarColor} size={36} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{u.fullName}</div>
-                        <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>{u.email} · {u.department}</div>
+                  {users.map((u) => {
+                    const isDeactivated = u.isActive === false
+                    const isPending = !isDeactivated && !u.entraObjectId
+                    const isToggling = togglingId === u.id
+                    return (
+                      <div key={u.id} className="card" style={{ padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'center', opacity: isDeactivated ? 0.6 : 1 }}>
+                        <Avatar initials={u.initials} color={u.avatarColor} size={36} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-900)' }}>{u.fullName}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>{u.email} · {u.department}</div>
+                        </div>
+                        <RoleBadge role={u.role} size="sm" />
+                        {isDeactivated ? (
+                          <span className="pill pill-no-dot pill-red" style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>deactivated</span>
+                        ) : isPending ? (
+                          <span className="pill pill-no-dot pill-amber" style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>pending</span>
+                        ) : (
+                          <span className="pill pill-no-dot pill-emerald" style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>active</span>
+                        )}
+                        <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}
+                          onClick={() => setEditingUser(u)}>Edit</button>
+                        {isDeactivated ? (
+                          <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0, color: 'var(--emerald-700)' }}
+                            disabled={isToggling} onClick={() => void handleReactivate(u)}>
+                            {isToggling ? '…' : 'Reactivate'}
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0, color: 'var(--red-600)' }}
+                            disabled={isToggling} onClick={() => void handleDeactivate(u)}>
+                            {isToggling ? '…' : 'Deactivate'}
+                          </button>
+                        )}
                       </div>
-                      <RoleBadge role={u.role} size="sm" />
-                      <span className="pill pill-no-dot pill-emerald" style={{ height: 18, fontSize: 10.5, padding: '0 6px' }}>
-                        active
-                      </span>
-                      <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }}
-                        onClick={() => setEditingUser(u)}>Edit</button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             ))}

@@ -41,6 +41,8 @@ export interface User {
   jobTitle: string
   initials: string
   avatarColor: string
+  entraObjectId?: string  // set on first sign-in; absent = pending invite
+  isActive?: boolean      // false = deactivated; undefined/true = active
 }
 
 export interface Citation {

@@ -233,15 +233,21 @@ function sysDt(r: DvRow, name: string): string {
 // ── Row → TypeScript transformers ─────────────────────────
 
 export function toUser(r: DvRow): User {
+  const entraObjectId = str(r, 'entraobjectid') || undefined
+  const status = str(r, 'status')
   return {
-    id:          pk(r, 'userid'),
-    fullName:    str(r, 'fullname'),
-    email:       str(r, 'email'),
-    role:        str(r, 'role') as User['role'],
-    department:  str(r, 'department'),
-    jobTitle:    str(r, 'jobtitle'),
-    initials:    str(r, 'initials'),
-    avatarColor: str(r, 'avatarcolor'),
+    id:           pk(r, 'userid'),
+    fullName:     str(r, 'fullname'),
+    email:        str(r, 'email'),
+    role:         str(r, 'role') as User['role'],
+    department:   str(r, 'department'),
+    jobTitle:     str(r, 'jobtitle'),
+    initials:     str(r, 'initials'),
+    avatarColor:  str(r, 'avatarcolor'),
+    entraObjectId,
+    // If the status column doesn't exist, the field is absent from the response
+    // and str() returns '' — treat that the same as 'active'.
+    isActive:     status !== 'inactive',
   }
 }
 

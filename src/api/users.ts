@@ -45,3 +45,11 @@ export async function updateUserAdmin(id: string, fields: {
     pdplr_jobtitle:   fields.jobTitle.trim(),
   })
 }
+
+export async function deactivateUser(id: string): Promise<void> {
+  await dvUpdate(T.users, id, { pdplr_status: 'inactive' })
+}
+
+export async function reactivateUser(id: string): Promise<void> {
+  await dvUpdate(T.users, id, { pdplr_status: 'active' })
+}

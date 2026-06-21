@@ -114,6 +114,7 @@ export async function apiSignIn(email: string, _password: string): Promise<User>
 
   const profile = await fetchUserProfile(result.account)
   if (!profile) throw new Error('User profile not found in Dataverse. Contact your administrator.')
+  if (profile.isActive === false) throw new Error('Your account has been deactivated. Contact your administrator.')
   return profile
 }
 
@@ -135,7 +136,9 @@ export async function apiGetSession(): Promise<User | null> {
   try {
     // Refresh token silently to verify session is still valid
     await msalInstance.acquireTokenSilent({ scopes: DV_SCOPES, account: accounts[0] })
-    return await fetchUserProfile(accounts[0])
+    const profile = await fetchUserProfile(accounts[0])
+    if (profile?.isActive === false) return null   // treat deactivated as not signed in
+    return profile
   } catch {
     return null
   }
