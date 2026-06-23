@@ -1,3 +1,6 @@
+import { getDataverseToken } from './auth'
+import { isDataverseConfigured } from '../lib/dataverse'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const viteEnv = (import.meta as any).env as Record<string, string | undefined>
 
@@ -97,6 +100,21 @@ export const REVIEWER_SECTION_LABELS: Record<string, string> = {
   required_legal_actions:      'Required Legal Actions',
 }
 
+function demoReviewerResult(): Record<string, unknown> {
+  return {
+    executive_summary: 'AI assessment not available — set VITE_AZURE_OPENAI_KEY in .env.local to enable direct Azure OpenAI, or configure VITE_AF_BASE_URL with a /reviewerAssessment endpoint.',
+    issues: [],
+    recommendations: ['Complete the review manually using the checklist below.'],
+    compliance_checks: [],
+    risk_assessment: [],
+    document_findings: [],
+    approval_guidance: {
+      recommendation: 'return',
+      rationale: 'AI assessment is not configured. Manual review required.',
+    },
+  }
+}
+
 export async function runReviewerAssessment(
   requestType: ReviewerRequestType,
   ticket: Record<string, unknown>,
@@ -104,8 +122,7 @@ export async function runReviewerAssessment(
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
   const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+  const afBase     = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
 
   const attachments = (ticket.attachments as Array<{ filename: string; category: string; classification: string; summary?: string }> | undefined) ?? []
   const attachmentBlock = attachments.length > 0
@@ -116,28 +133,45 @@ export async function runReviewerAssessment(
 Ticket:
 ${JSON.stringify({ ...ticket, attachments: undefined }, null, 2)}${attachmentBlock}`
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPTS[requestType] },
-        { role: 'user',   content: userMessage },
-      ],
-
-      max_completion_tokens: 4096,
-      response_format: { type: 'json_object' },
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+  // Path 1: Direct Azure OpenAI (when VITE_AZURE_OPENAI_KEY is configured)
+  if (apiKey && base) {
+    const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPTS[requestType] },
+          { role: 'user',   content: userMessage },
+        ],
+        max_completion_tokens: 4096,
+        response_format: { type: 'json_object' },
+      }),
+    })
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+    }
+    const data = await response.json()
+    const content = data?.choices?.[0]?.message?.content ?? '{}'
+    return JSON.parse(content) as Record<string, unknown>
   }
 
-  const data = await response.json()
-  const content = data?.choices?.[0]?.message?.content ?? '{}'
-  return JSON.parse(content) as Record<string, unknown>
+  // Path 2: Azure Functions (when VITE_AF_BASE_URL is configured)
+  if (afBase && isDataverseConfigured) {
+    const tok = await getDataverseToken()
+    const res = await fetch(`${afBase}/reviewerAssessment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ requestType, ticket: { ...ticket, systemPrompt: SYSTEM_PROMPTS[requestType] } }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Reviewer AI error ${res.status}: ${err}`)
+    }
+    return res.json() as Promise<Record<string, unknown>>
+  }
+
+  // Demo mode: neither key nor AF configured
+  return demoReviewerResult()
 }

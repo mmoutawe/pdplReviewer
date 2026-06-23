@@ -1,3 +1,6 @@
+import { getDataverseToken } from './auth'
+import { isDataverseConfigured } from '../lib/dataverse'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const viteEnv = (import.meta as any).env as Record<string, string | undefined>
 
@@ -61,38 +64,54 @@ export async function runChecklistReview(
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
   const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+  const afBase     = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
 
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
-
-  const itemsList = CHECKLIST_ITEMS.map((i) => `${i.key} - ${i.label}`).join('\n')
+  const itemsList   = CHECKLIST_ITEMS.map((i) => `${i.key} - ${i.label}`).join('\n')
   const userMessage = `Checklist items:\n${itemsList}\n\nRequest data:\n${JSON.stringify(ticketData, null, 2)}`
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: CHECKLIST_SYSTEM },
-        { role: 'user',   content: userMessage },
-      ],
-      tools:       [CHECKLIST_TOOL],
-      tool_choice: { type: 'function', function: { name: 'submit_checklist' } },
-
-      max_completion_tokens:  512,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+  // Path 1: Direct Azure OpenAI
+  if (apiKey && base) {
+    const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: CHECKLIST_SYSTEM },
+          { role: 'user',   content: userMessage },
+        ],
+        tools:       [CHECKLIST_TOOL],
+        tool_choice: { type: 'function', function: { name: 'submit_checklist' } },
+        max_completion_tokens: 512,
+      }),
+    })
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+    }
+    const data = await response.json()
+    const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
+    if (!args) throw new Error('No checklist returned from model.')
+    return JSON.parse(args) as ChecklistResult
   }
 
-  const data = await response.json()
-  const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
-  if (!args) throw new Error('No checklist returned from model.')
-  return JSON.parse(args) as ChecklistResult
+  // Path 2: Azure Functions
+  if (afBase && isDataverseConfigured) {
+    const tok = await getDataverseToken()
+    const res = await fetch(`${afBase}/checklistReview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ ticketData }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Checklist AI error ${res.status}: ${err}`)
+    }
+    return res.json() as Promise<ChecklistResult>
+  }
+
+  // Demo mode
+  throw new Error('AI checklist is not available — configure VITE_AZURE_OPENAI_KEY or VITE_AF_BASE_URL to enable.')
 }
 
 export const CHECKLIST_LABELS: Record<string, string> = {
@@ -163,8 +182,7 @@ export async function validateQuestionnaireDocument(opts: {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
   const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+  if (!apiKey || !base) throw new Error('VITE_AZURE_OPENAI_KEY or VITE_AZURE_OPENAI_ENDPOINT not configured.')
 
   const today = new Date().toISOString().slice(0, 10)
   const url   = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
@@ -242,8 +260,7 @@ export async function extractRequestForm(documentText: string): Promise<Extracte
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
   const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+  if (!apiKey || !base) throw new Error('VITE_AZURE_OPENAI_KEY or VITE_AZURE_OPENAI_ENDPOINT not configured.')
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 

@@ -1,3 +1,6 @@
+import { getDataverseToken } from './auth'
+import { isDataverseConfigured } from '../lib/dataverse'
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const viteEnv = (import.meta as any).env as Record<string, string | undefined>
 
@@ -83,38 +86,52 @@ export async function evaluateReply(opts: {
   const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
   const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
   const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
-
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
+  const afBase     = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
 
   const attachmentContext = buildAttachmentContext(attachments)
   const systemPrompt      = buildSystemPrompt(roleLabel, reviewerComment, ticketContext, attachmentContext)
   const userMessage       = `${roleLabel}'s reply: "${requesterReply}"`
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userMessage },
-      ],
-      tools:        [TOOL_DEF],
-      tool_choice:  { type: 'function', function: { name: 'submit_reply_evaluation' } },
-
-      max_completion_tokens: 1024,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+  // Path 1: Direct Azure OpenAI
+  if (apiKey && base) {
+    const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userMessage },
+        ],
+        tools:       [TOOL_DEF],
+        tool_choice: { type: 'function', function: { name: 'submit_reply_evaluation' } },
+        max_completion_tokens: 1024,
+      }),
+    })
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
+    }
+    const data   = await response.json()
+    const args   = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments
+    if (!args) throw new Error('No evaluation returned from model.')
+    return JSON.parse(args) as ReplyEvaluation
   }
 
-  const data   = await response.json()
-  const choice = data?.choices?.[0]
-  const args   = choice?.message?.tool_calls?.[0]?.function?.arguments
-  if (!args) throw new Error('No evaluation returned from model.')
-  return JSON.parse(args) as ReplyEvaluation
+  // Path 2: Azure Functions
+  if (afBase && isDataverseConfigured) {
+    const tok = await getDataverseToken()
+    const res = await fetch(`${afBase}/evaluateReply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+      body: JSON.stringify({ roleLabel, reviewerComment, requesterReply, ticketContext, attachments }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Reply evaluation error ${res.status}: ${err}`)
+    }
+    return res.json() as Promise<ReplyEvaluation>
+  }
+
+  throw new Error('AI reply evaluation is not available — configure VITE_AZURE_OPENAI_KEY or VITE_AF_BASE_URL to enable.')
 }
