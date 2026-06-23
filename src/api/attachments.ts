@@ -5,8 +5,7 @@ import {
 } from '../lib/dataverse'
 import type { Attachment } from '../data/types'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { config } from '../lib/config'
 
 async function extractFileText(file: File): Promise<string> {
   const lower = file.name.toLowerCase()
@@ -45,9 +44,9 @@ async function extractFileText(file: File): Promise<string> {
 }
 
 async function generateDocumentSummary(file: File): Promise<string | undefined> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-4o'
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
   if (!apiKey || !base) return undefined
 
   let contentSnippet = ''

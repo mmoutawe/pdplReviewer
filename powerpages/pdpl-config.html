@@ -1,0 +1,31 @@
+{% comment %}
+  PDPL Reviewer — runtime config injection
+  Place this snippet inside the <head> of the page template that hosts the app.
+
+  For each key, create a Power Pages Site Setting:
+    Name                          | Value
+    ------------------------------|------------------------------------------
+    PDPL/DataverseUrl             | https://yourorg.crm4.dynamics.com
+    PDPL/MsalClientId             | <App Registration Client ID>
+    PDPL/MsalTenantId             | <Tenant ID or "common">
+    PDPL/AfBaseUrl                | https://pdpl-reviewer-api.azurewebsites.net/api
+    PDPL/OpenAiKey                | (leave empty if using Azure Functions)
+    PDPL/OpenAiEndpoint           | https://your-resource.openai.azure.com
+    PDPL/OpenAiDeployment         | gpt-5.1-chat
+    PDPL/DvTablePrefix            | pdplr_
+
+  Any key left blank in Site Settings falls through to VITE_* env vars baked
+  at build time, then to the hard-coded defaults in src/lib/config.ts.
+{% endcomment %}
+<script>
+window.PDPL_CONFIG = {
+  dataverseUrl:     "{{ site.settings['PDPL/DataverseUrl'] | default: '' }}",
+  msalClientId:     "{{ site.settings['PDPL/MsalClientId'] | default: '' }}",
+  msalTenantId:     "{{ site.settings['PDPL/MsalTenantId'] | default: '' }}",
+  afBaseUrl:        "{{ site.settings['PDPL/AfBaseUrl'] | default: '' }}",
+  openAiKey:        "{{ site.settings['PDPL/OpenAiKey'] | default: '' }}",
+  openAiEndpoint:   "{{ site.settings['PDPL/OpenAiEndpoint'] | default: '' }}",
+  openAiDeployment: "{{ site.settings['PDPL/OpenAiDeployment'] | default: '' }}",
+  dvTablePrefix:    "{{ site.settings['PDPL/DvTablePrefix'] | default: '' }}"
+};
+</script>

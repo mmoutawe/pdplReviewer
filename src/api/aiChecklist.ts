@@ -1,8 +1,6 @@
 import { getDataverseToken } from './auth'
 import { isDataverseConfigured } from '../lib/dataverse'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { config } from '../lib/config'
 
 // ── A.1  Checklist Review ─────────────────────────────────────────────────────
 
@@ -61,10 +59,10 @@ const CHECKLIST_TOOL = {
 export async function runChecklistReview(
   ticketData: Record<string, unknown>,
 ): Promise<ChecklistResult> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  const afBase     = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
+  const afBase     = config.afBaseUrl?.replace(/\/$/, '')
 
   const itemsList   = CHECKLIST_ITEMS.map((i) => `${i.key} - ${i.label}`).join('\n')
   const userMessage = `Checklist items:\n${itemsList}\n\nRequest data:\n${JSON.stringify(ticketData, null, 2)}`
@@ -179,10 +177,10 @@ export async function validateQuestionnaireDocument(opts: {
 }): Promise<DocValidationResult> {
   const { questionKey, questionLabel, documentText } = opts
 
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey || !base) throw new Error('VITE_AZURE_OPENAI_KEY or VITE_AZURE_OPENAI_ENDPOINT not configured.')
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
+  if (!apiKey || !base) throw new Error('Azure OpenAI key or endpoint not configured.')
 
   const today = new Date().toISOString().slice(0, 10)
   const url   = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
@@ -257,10 +255,10 @@ const FORM_EXTRACT_TOOL = {
 const FORM_EXTRACT_SYSTEM = `You extract PDPL compliance review request data from uploaded request forms. The document is the contents of an Excel template with three columns: Section, Field, Value. Use the Value column to populate the structured output. For fields the user left blank, use sensible defaults: empty strings, false for booleans, "other" for unknown enums, and "no" for yes/no/partially fields. Always call the extract_request_data tool with the complete structured object.`
 
 export async function extractRequestForm(documentText: string): Promise<ExtractedRequest> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey || !base) throw new Error('VITE_AZURE_OPENAI_KEY or VITE_AZURE_OPENAI_ENDPOINT not configured.')
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
+  if (!apiKey || !base) throw new Error('Azure OpenAI key or endpoint not configured.')
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 

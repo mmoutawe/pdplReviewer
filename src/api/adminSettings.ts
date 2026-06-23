@@ -2,9 +2,10 @@ import { dvList, dvUpdate, dvDelete, T } from '../lib/dataverse'
 import { getDataverseToken } from './auth'
 import type { AdminExternalLink } from '../data/types'
 import type { WorkflowSettings } from '../lib/workflowSettings'
+import { config } from '../lib/config'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const env = (import.meta as any).env as Record<string, string | undefined>
+const _legacyEnv = (import.meta as any).env as Record<string, string | undefined>
 
 type DvRow = Record<string, unknown>
 
@@ -86,8 +87,9 @@ export async function createExternalAccount(params: {
   label: string
   expiresAt: string | null
 }): Promise<{ tempPassword: string; portalUrl: string }> {
-  const url = env.VITE_PA_CREATE_ACCOUNT_URL
-  if (!url) throw new Error('VITE_PA_CREATE_ACCOUNT_URL is not configured')
+  const afBase = config.afBaseUrl?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/createAccount` : _legacyEnv.VITE_PA_CREATE_ACCOUNT_URL
+  if (!url) throw new Error('VITE_AF_BASE_URL or VITE_PA_CREATE_ACCOUNT_URL is not configured')
 
   const tok = await getDataverseToken()
   const res = await fetch(url, {

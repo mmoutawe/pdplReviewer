@@ -1,13 +1,10 @@
 import {
   dvList, dvGet, dvCreate, dvUpdate, dvDelete, dvUpsert,
-  T, toTicket, toAttachment, startPolling,
+  dvOrgUrl, T, toTicket, toAttachment, startPolling,
 } from '../lib/dataverse'
 import type { Ticket, TicketState, RequestType, DataDeclaration } from '../data/types'
 import { cacheUsers } from '../lib/userCache'
 import { getDataverseToken } from './auth'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const env = (import.meta as any).env as Record<string, string | undefined>
 
 type DvRow = Record<string, unknown>
 
@@ -22,7 +19,7 @@ async function hydrateAttachments(attRows: DvRow[]): Promise<import('../data/typ
       try {
         const tok = await getDataverseToken()
         const res = await fetch(
-          `${env.VITE_DATAVERSE_URL}/api/data/v9.2/${T.attachments}(${id})/pdplr_filecontent/$value`,
+          `${dvOrgUrl}/api/data/v9.2/${T.attachments}(${id})/pdplr_filecontent/$value`,
           { headers: { Authorization: `Bearer ${tok}` } },
         )
         const blobUrl = res.ok ? URL.createObjectURL(await res.blob()) : undefined

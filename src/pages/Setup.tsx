@@ -7,10 +7,9 @@ import { msalInstance, checkIsFirstSetup, createAdminProfile } from '../api/auth
 import { authStore } from '../store'
 import { setAuthUser } from '../store'
 import { useStore } from '../hooks/useStore'
+import { config } from '../lib/config'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _env = (import.meta as any).env as Record<string, string | undefined>
-const DV_SCOPES = isDataverseConfigured ? [`${_env.VITE_DATAVERSE_URL}/.default`] : []
+const DV_SCOPES = isDataverseConfigured ? [`${config.dataverseUrl}/.default`] : []
 
 type Step = 'landing' | 'checking' | 'already-set-up' | 'profile' | 'creating' | 'done'
 

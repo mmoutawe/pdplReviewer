@@ -6,23 +6,17 @@ import {
 } from '@azure/msal-browser'
 import { dvList, dvCreate, dvUpdate, isDataverseConfigured, initDataverseTokenProvider, T, toUser } from '../lib/dataverse'
 import type { User } from '../data/types'
+import { config } from '../lib/config'
 
 const AVATAR_COLORS = ['#0B5FFF', '#5B21B6', '#047857', '#B45309', '#0E7490', '#9333EA']
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const env = (import.meta as any).env as Record<string, string | undefined>
-
-const clientId  = env.VITE_MSAL_CLIENT_ID  ?? ''
-const tenantId  = env.VITE_MSAL_TENANT_ID  ?? 'common'
-const dvUrl     = env.VITE_DATAVERSE_URL   ?? ''
-
 // Scopes needed to call the Dataverse Web API
-const DV_SCOPES = dvUrl ? [`${dvUrl}/.default`] : []
+const DV_SCOPES = config.dataverseUrl ? [`${config.dataverseUrl}/.default`] : []
 
 export const msalInstance = new PublicClientApplication({
   auth: {
-    clientId,
-    authority: `https://login.microsoftonline.com/${tenantId}`,
+    clientId:    config.msalClientId,
+    authority:   `https://login.microsoftonline.com/${config.msalTenantId}`,
     redirectUri: window.location.origin,
   },
   cache: {

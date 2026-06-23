@@ -3,16 +3,15 @@ import type {
   Attachment, ReviewSlot, ReturnThreadEntry,
 } from '../data/types'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const env = (import.meta as any).env as Record<string, string | undefined>
+import { config } from './config'
 
-export const dvOrgUrl = env.VITE_DATAVERSE_URL  // e.g. https://org.crm.dynamics.com
+export const dvOrgUrl = config.dataverseUrl   // e.g. https://org.crm.dynamics.com
 export const isDataverseConfigured = !!dvOrgUrl
 
 const API = `${dvOrgUrl}/api/data/v9.2`
 
 // Publisher prefix — must match your Dataverse solution publisher (default: pdplr_)
-const PFX = env.VITE_DV_TABLE_PREFIX ?? 'pdplr_'
+const PFX = config.dvTablePrefix
 
 // Convenience: prefix a column logical name
 const c = (name: string) => `${PFX}${name}`

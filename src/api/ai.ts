@@ -3,9 +3,11 @@ import { getDataverseToken } from './auth'
 import { aiStreamStore } from '../store'
 import { streamTokens } from '../lib/mockAi'
 import { resetAIStream } from '../store'
+import { config } from '../lib/config'
 
+// Legacy Power Automate flow URLs (superseded by config.afBaseUrl in production)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+const _legacyEnv = (import.meta as any).env as Record<string, string | undefined>
 
 type AIFeature =
   | 'pre_assessment'
@@ -41,9 +43,9 @@ The JSON must have exactly these keys:
 }`
 
 async function callAzureOpenAI(message: string): Promise<string> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
@@ -79,7 +81,7 @@ async function callAzureOpenAI(message: string): Promise<string> {
  */
 export async function streamAI(opts: AIStreamOptions): Promise<string> {
   // Route request_builder through Azure OpenAI whenever the key is available
-  if (opts.feature === 'request_builder' && viteEnv.VITE_AZURE_OPENAI_KEY) {
+  if (opts.feature === 'request_builder' && config.openAiKey) {
     resetAIStream()
     aiStreamStore.setState({ streaming: true, tokens: [], done: false, error: null })
     try {
@@ -94,8 +96,8 @@ export async function streamAI(opts: AIStreamOptions): Promise<string> {
     }
   }
 
-  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
-  const paStreamUrl = afBase ? `${afBase}/aiStream` : viteEnv.VITE_PA_AI_STREAM_URL
+  const afBase = config.afBaseUrl?.replace(/\/$/, '')
+  const paStreamUrl = afBase ? `${afBase}/aiStream` : _legacyEnv.VITE_PA_AI_STREAM_URL
   if (!isDataverseConfigured || !paStreamUrl) {
     // Demo mode: simulate token-by-token streaming
     resetAIStream()
@@ -179,8 +181,8 @@ export async function generateExternalLink(
   recipientEmail: string,
   expiresInHours = 72,
 ): Promise<{ token: string; link: string; expiresAt: string }> {
-  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
-  const url = afBase ? `${afBase}/generateLink` : viteEnv.VITE_PA_EL_GENERATE_URL
+  const afBase = config.afBaseUrl?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/generateLink` : _legacyEnv.VITE_PA_EL_GENERATE_URL
   if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const tok = await getDataverseToken()
@@ -208,8 +210,8 @@ export async function redeemExternalLink(token: string): Promise<{
   alreadyDecided: boolean
   decision: string | null
 }> {
-  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
-  const url = afBase ? `${afBase}/redeemLink` : viteEnv.VITE_PA_EL_REDEEM_URL
+  const afBase = config.afBaseUrl?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/redeemLink` : _legacyEnv.VITE_PA_EL_REDEEM_URL
   if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const res = await fetch(url, {
@@ -234,8 +236,8 @@ export async function submitExternalDecision(
   decision: 'approve' | 'reject',
   notes?: string,
 ): Promise<void> {
-  const afBase = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
-  const url = afBase ? `${afBase}/submitDecision` : viteEnv.VITE_PA_EL_DECIDE_URL
+  const afBase = config.afBaseUrl?.replace(/\/$/, '')
+  const url = afBase ? `${afBase}/submitDecision` : _legacyEnv.VITE_PA_EL_DECIDE_URL
   if (!url) throw new Error('VITE_AF_BASE_URL is not configured')
 
   const res = await fetch(url, {

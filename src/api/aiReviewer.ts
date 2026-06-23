@@ -1,8 +1,6 @@
 import { getDataverseToken } from './auth'
 import { isDataverseConfigured } from '../lib/dataverse'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { config } from '../lib/config'
 
 export type ReviewerRequestType =
   | 'vendor_onboarding'
@@ -119,10 +117,10 @@ export async function runReviewerAssessment(
   requestType: ReviewerRequestType,
   ticket: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  const afBase     = viteEnv.VITE_AF_BASE_URL?.replace(/\/$/, '')
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
+  const afBase     = config.afBaseUrl?.replace(/\/$/, '')
 
   const attachments = (ticket.attachments as Array<{ filename: string; category: string; classification: string; summary?: string }> | undefined) ?? []
   const attachmentBlock = attachments.length > 0

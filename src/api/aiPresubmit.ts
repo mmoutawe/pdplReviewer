@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { config } from '../lib/config'
 
 export type PresubmitRequestType =
   | 'vendor_onboarding'
@@ -95,9 +94,9 @@ export async function runPresubmitAssessment(
   questionnaire: Record<string, unknown>,
   documentText?: string,
 ): Promise<Record<string, unknown>> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
+  const apiKey     = config.openAiKey
+  const base       = config.openAiEndpoint?.replace(/\/$/, '')
+  const deployment = config.openAiDeployment
   if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
   if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
 
