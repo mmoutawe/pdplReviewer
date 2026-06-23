@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "build:pages": "tsc -b && VITE_BASE_URL= vite build",
+    "deploy:pages": "npm run build:pages && pac pages upload-code-site --siteName \"PDPL Reviewer\" --rootDirectory dist",
+    "deploy:functions": "cd azure-functions && npm install && npm run build && func azure functionapp publish pdpl-reviewer-api",
     "setup:dataverse": "node scripts/setup-dataverse.mjs",
     "create:user": "node scripts/create-user.mjs"
   },

@@ -1,4 +1,7 @@
 import './functions/aiStream'
+import './functions/reviewerAssessment'
+import './functions/checklistReview'
+import './functions/evaluateReply'
 import './functions/generateLink'
 import './functions/redeemLink'
 import './functions/submitDecision'
