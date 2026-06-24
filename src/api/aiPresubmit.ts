@@ -97,8 +97,16 @@ export async function runPresubmitAssessment(
   const apiKey     = config.openAiKey
   const base       = config.openAiEndpoint?.replace(/\/$/, '')
   const deployment = config.openAiDeployment
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+
+  if (!apiKey || !base) {
+    return {
+      riskLevel: 'medium',
+      summary: 'AI pre-submission assessment is not configured. Set VITE_AZURE_OPENAI_KEY in .env.local to enable AI-assisted assessment. Your request will proceed to manual review.',
+      flags: [],
+      canProceed: true,
+      aiConfigured: false,
+    }
+  }
 
   const userMessage = `Request type: ${requestType}
 Initiation:

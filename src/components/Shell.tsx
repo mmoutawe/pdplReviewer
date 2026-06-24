@@ -151,7 +151,7 @@ function TopBar({ collapsed, onToggle, isMobile }: TopBarProps) {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M1 6h10M7 3l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {!isMobile && (isImpersonating ? 'Testing as' : 'Demo role')}
+          {!isMobile && (isImpersonating ? 'Testing as' : isDataverseConfigured ? 'Switch role' : 'Demo role')}
           <RoleBadge role={user.role} size="sm" />
         </button>
         {roleSwitchOpen && (

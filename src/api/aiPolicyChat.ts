@@ -131,8 +131,11 @@ export async function* streamPolicyChat(
   const apiKey     = config.openAiKey
   const base       = config.openAiEndpoint?.replace(/\/$/, '')
   const deployment = config.openAiDeployment
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+
+  if (!apiKey || !base) {
+    yield 'AI Policy Assistant requires Azure OpenAI configuration. To enable this feature, set VITE_AZURE_OPENAI_KEY and VITE_AZURE_OPENAI_ENDPOINT in your .env.local file. If you are using the Azure Functions backend, ensure it is deployed and VITE_AF_BASE_URL is correctly configured.'
+    return
+  }
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 

@@ -148,8 +148,10 @@ export async function chatWithRequestBuilder(
   const apiKey     = config.openAiKey
   const base       = config.openAiEndpoint?.replace(/\/$/, '')
   const deployment = config.openAiDeployment
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+
+  if (!apiKey || !base) {
+    return { message: 'AI Request Builder requires Azure OpenAI configuration. Set VITE_AZURE_OPENAI_KEY in .env.local to enable AI-assisted request creation. You can continue filling the form manually instead.' }
+  }
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 

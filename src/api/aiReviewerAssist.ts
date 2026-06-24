@@ -57,8 +57,11 @@ export async function* streamReviewerAssist(
   const apiKey     = config.openAiKey
   const base       = config.openAiEndpoint?.replace(/\/$/, '')
   const deployment = config.openAiDeployment
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
+
+  if (!apiKey || !base) {
+    yield 'AI Reviewer Assist requires Azure OpenAI configuration. Set VITE_AZURE_OPENAI_KEY and VITE_AZURE_OPENAI_ENDPOINT in .env.local to enable this feature.'
+    return
+  }
 
   const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
 
