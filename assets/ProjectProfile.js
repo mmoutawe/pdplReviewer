@@ -1,4 +1,4 @@
-import{h as D,j as e,E as z,f as v,A as C,S as P,g as T}from"./index.js";import{f as B,u as w,b as d}from"./vendor-react.js";import{p as A,T as N,u as I}from"./seed-data.js";import{D as F,a as E}from"./types.js";import"./vendor-msal.js";/**
+import{k as D,j as e,E as z,f as v,A as C,S as P,h as T}from"./index.js";import{f as B,u as w,b as d}from"./vendor-react.js";import{p as A,T as N,u as I}from"./seed-data.js";import{D as F,a as E}from"./types.js";import"./vendor-msal.js";/**
  * @license lucide-react v1.16.0 - ISC
  *
  * This source code is licensed under the ISC license.
