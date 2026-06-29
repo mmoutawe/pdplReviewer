@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react'
+import { useSyncExternalStore } from 'react'
 
 type Store<T> = {
   getState: () => T
@@ -6,7 +6,5 @@ type Store<T> = {
 }
 
 export function useStore<T>(store: Store<T>): T {
-  const [, rerender] = useReducer((x: number) => x + 1, 0)
-  useEffect(() => store.subscribe(rerender), [store])
-  return store.getState()
+  return useSyncExternalStore(store.subscribe, store.getState)
 }

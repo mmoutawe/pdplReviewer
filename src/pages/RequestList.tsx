@@ -7,23 +7,31 @@ import { StatusPill, SLAIndicator } from '../components/primitives'
 import { EnterpriseTable, FilterBar, type Column } from '../components/table'
 import { ConfirmDialog } from '../components/overlays'
 import type { Ticket } from '../data/types'
-import { formatDate } from '../lib/utils'
+import { formatDateTime } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
 
 export default function RequestList() {
   useEffect(() => { document.title = 'Requests — PDPL Reviewer' }, [])
   const { user } = useStore(authStore)
-  const { tickets } = useStore(ticketStore)
+  const { tickets, loading: ticketsLoading } = useStore(ticketStore)
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [filterState, setFilterState] = useState('')
   const [filterType, setFilterType] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
+
+  const TERMINAL_STATES = ['approved', 'rejected', 'archived']
 
   const visible = tickets.filter((t) => {
     if (user.role === 'requester' && t.requesterId !== user.id) return false
+    if (viewMode === 'history') {
+      if (!TERMINAL_STATES.includes(t.state)) return false
+    } else {
+      if (TERMINAL_STATES.includes(t.state)) return false
+    }
     if (filterState && t.state !== filterState) return false
     if (filterType && t.type !== filterType) return false
     if (search) {
@@ -112,7 +120,7 @@ export default function RequestList() {
     },
     {
       key: 'state', label: 'Status', width: 180,
-      render: (t) => <StatusPill state={t.state} />,
+      render: (t) => <StatusPill state={t.state} reviews={t.reviews} />,
     },
     {
       key: 'sla', label: 'SLA', width: 120,
@@ -124,7 +132,7 @@ export default function RequestList() {
       key: 'date', label: 'Submitted', width: 120, sortable: true,
       render: (t) => (
         <span style={{ fontSize: 12.5, color: 'var(--ink-500)', fontFamily: 'var(--font-mono)' }}>
-          {t.submittedAt ? formatDate(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
+          {t.submittedAt ? formatDateTime(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
         </span>
       ),
     },
@@ -175,6 +183,20 @@ export default function RequestList() {
           <h1 className="page-title">{user.role === 'requester' ? 'My Requests' : 'All Requests'}</h1>
           <p className="page-subtitle">{visible.length} record{visible.length !== 1 ? 's' : ''}</p>
         </div>
+        {/* Active / History toggle */}
+        <div style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: 'var(--surface-1)', flexShrink: 0 }}>
+          {(['active', 'history'] as const).map((mode) => (
+            <button key={mode} style={{
+              padding: '6px 18px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: viewMode === mode ? 700 : 400,
+              background: viewMode === mode ? 'var(--surface-0)' : 'transparent',
+              color: viewMode === mode ? 'var(--brand-700)' : 'var(--ink-500)',
+              boxShadow: viewMode === mode ? 'inset 0 -2px 0 var(--brand-600)' : 'none',
+              transition: 'all 0.12s',
+            }} onClick={() => { setViewMode(mode); setFilterState(''); setFilterType(''); setSearch('') }}>
+              {mode === 'active' ? 'Active' : 'History'}
+            </button>
+          ))}
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isAdmin && someChecked && (
             <span style={{ fontSize: 13, color: 'var(--ink-500)', marginRight: 4 }}>
@@ -213,6 +235,7 @@ export default function RequestList() {
           rows={visible}
           rowKey={(t) => t.id}
           onRowClick={(t) => navigate(`/requests/${t.id}`)}
+          loading={ticketsLoading}
         />
       </div>
     </div>
