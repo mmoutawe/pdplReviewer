@@ -4,7 +4,8 @@ import { VENDORS } from '../data/seed'
 import type { Vendor } from '../data/types'
 import { fetchVendors, createVendor } from '../api/vendors'
 import { isDataverseConfigured } from '../lib/dataverse'
-import { showToast } from '../store'
+import { authStore, showToast } from '../store'
+import { useStore } from '../hooks/useStore'
 
 const inputSt: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 13,
@@ -138,14 +139,93 @@ function CreateVendorDialog({ onClose, onCreated }: { onClose: () => void; onCre
   )
 }
 
+function InviteVendorDialog({ onClose }: { onClose: () => void }) {
+  const [email, setEmail]   = useState('')
+  const [name,  setName]    = useState('')
+  const [link,  setLink]    = useState<string | null>(null)
+  const [error, setError]   = useState<string | null>(null)
+
+  function handleGenerate(e: React.FormEvent) {
+    e.preventDefault()
+    if (!email.trim()) { setError('Recipient email is required.'); return }
+    setError(null)
+    const token = `ext-${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`
+    const url = `${window.location.origin}/external/register/${token}`
+    setLink(url)
+    // In demo mode: just display the link. In Dataverse mode: call API to create invite record.
+  }
+
+  function copyLink() {
+    if (link) void navigator.clipboard.writeText(link)
+    showToast('Link copied to clipboard.', 'success')
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 500, padding: '28px 32px', zIndex: 1 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 6 }}>Invite vendor as External User</h2>
+        <p style={{ fontSize: 13, color: 'var(--ink-500)', marginBottom: 20, lineHeight: 1.6 }}>
+          Generate a registration link for a vendor. They'll create an account with restricted access to submit their own onboarding request.
+        </p>
+
+        {!link ? (
+          <form onSubmit={handleGenerate} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>VENDOR EMAIL *</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="contact@vendor.com" style={inputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>CONTACT NAME (optional)</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Ahmad Al-Rashid" style={inputSt}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Generate invite link</button>
+            </div>
+          </form>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: '10px 12px', background: 'var(--emerald-50)', border: '1px solid var(--emerald-200)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--emerald-700)' }}>
+              ✓ Invite link generated for <strong>{email}</strong>{name ? ` (${name})` : ''}.
+            </div>
+            <div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6, letterSpacing: '0.02em' }}>REGISTRATION LINK</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, padding: '8px 10px', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-sm)', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--ink-700)', wordBreak: 'break-all' }}>
+                  {link}
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={copyLink} style={{ flexShrink: 0 }}>Copy</button>
+              </div>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--ink-400)', lineHeight: 1.6 }}>
+              Send this link to the vendor by email. The link expires in 30 days and grants restricted access to submit a vendor onboarding request only.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function VendorLibrary() {
   useEffect(() => { document.title = 'Vendors — PDPL Reviewer' }, [])
   const navigate = useNavigate()
+  const { user } = useStore(authStore)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [vendors, setVendors]           = useState<Vendor[]>([...VENDORS])
   const [loading, setLoading]           = useState(false)
   const [showCreate, setShowCreate]     = useState(false)
+  const [showInvite, setShowInvite]     = useState(false)
 
   useEffect(() => {
     if (!isDataverseConfigured) return
@@ -156,7 +236,10 @@ export default function VendorLibrary() {
       .finally(() => setLoading(false))
   }, [])
 
+  const canInvite = user.role === 'data_management' || user.role === 'admin'
+
   const visible = vendors.filter((v) => {
+    if (user.role === 'external_user' && v.createdBy !== user.id) return false
     if (statusFilter && v.status !== statusFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
@@ -176,16 +259,44 @@ export default function VendorLibrary() {
           <h1 className="page-title">Vendor Registry</h1>
           <p className="page-subtitle">Manage vendor profiles and compliance status</p>
         </div>
-        <button
-          className="btn btn-primary"
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', fontSize: 14, fontWeight: 600 }}
-          onClick={() => setShowCreate(true)}
-        >
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <path d="M6.5 1.5v10M1.5 6.5h10" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          New Vendor
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {canInvite && (
+            <button
+              className="btn btn-ghost"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', fontSize: 14, fontWeight: 500 }}
+              onClick={() => setShowInvite(true)}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8a19.79 19.79 0 01-3.07-8.63A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Invite Vendor
+            </button>
+          )}
+          {user.role !== 'external_user' && (
+            <button
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', fontSize: 14, fontWeight: 600 }}
+              onClick={() => setShowCreate(true)}
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M6.5 1.5v10M1.5 6.5h10" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              New Vendor
+            </button>
+          )}
+          {user.role === 'external_user' && (
+            <button
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', fontSize: 14, fontWeight: 600 }}
+              onClick={() => setShowCreate(true)}
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+                <path d="M6.5 1.5v10M1.5 6.5h10" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              Add My Vendor
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Search + filter bar ── */}
@@ -320,6 +431,7 @@ export default function VendorLibrary() {
           onCreated={(v) => setVendors((prev) => [v, ...prev])}
         />
       )}
+      {showInvite && <InviteVendorDialog onClose={() => setShowInvite(false)} />}
     </div>
   )
 }

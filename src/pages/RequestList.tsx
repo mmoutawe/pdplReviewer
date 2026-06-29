@@ -26,7 +26,7 @@ export default function RequestList() {
   const TERMINAL_STATES = ['approved', 'rejected', 'archived']
 
   const visible = tickets.filter((t) => {
-    if (user.role === 'requester' && t.requesterId !== user.id) return false
+    if ((user.role === 'requester' || user.role === 'external_user') && t.requesterId !== user.id) return false
     if (viewMode === 'history') {
       if (!TERMINAL_STATES.includes(t.state)) return false
     } else {

@@ -19,6 +19,7 @@ function rowToVendor(r: DvRow): Vendor {
     lastReviewedAt:(r['pdplr_lastreviewedat'] as string) ?? '',
     ticketIds:     [],
     notes:         (r['pdplr_notes']          as string) ?? '',
+    createdBy:     (r['pdplr_createdby']      as string) ?? undefined,
   }
 }
 
@@ -41,6 +42,7 @@ export async function createVendor(v: Omit<Vendor, 'id' | 'ticketIds'>): Promise
     pdplr_hasdpa:         v.hasDPA,
     pdplr_lastreviewedat: v.lastReviewedAt,
     pdplr_notes:          v.notes,
+    ...(v.createdBy ? { pdplr_createdby: v.createdBy } : {}),
   }
   const row = await dvCreate<DvRow>(T.vendors, body)
   return rowToVendor(row)

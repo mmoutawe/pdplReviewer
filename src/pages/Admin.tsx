@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<Role, string> = {
   security: 'Security',
   admin: 'Admin',
   external_recipient: 'External Recipient',
+  external_user: 'External User',
 }
 
 const AI_SETTINGS = [
@@ -793,7 +794,7 @@ export default function Admin({ tab: initialTab }: AdminProps) {
 const ROLES_SELECTABLE: Role[] = ['requester', 'data_management', 'legal', 'security', 'admin']
 const ROLE_LABELS_FULL: Record<Role, string> = {
   requester: 'Requester', data_management: 'Data Management', legal: 'Legal',
-  security: 'Security', admin: 'Admin', external_recipient: 'External Recipient',
+  security: 'Security', admin: 'Admin', external_recipient: 'External Recipient', external_user: 'External User',
 }
 
 const dlgInputSt: React.CSSProperties = {

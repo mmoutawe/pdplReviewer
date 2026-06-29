@@ -6,7 +6,7 @@
  * works with zero backend setup.
  */
 
-import type { Ticket, User, Role, ReturnThreadEntry, Vendor, Project } from '../data/types'
+import type { Ticket, User, Role, ReturnThreadEntry, Vendor, Project, ExternalUserInvite } from '../data/types'
 import {
   NOTIFICATIONS as SEED_NOTIFS,
   TICKETS as SEED_TICKETS,
@@ -245,6 +245,23 @@ async function loadUserData(user: User) {
   _notifUnsubscribe = subscribeToNotifications(user.id, (n) => {
     notifStore.setState({ items: [n, ...notifStore.getState().items] })
   })
+}
+
+// ─── External user demo registration ─────────────────────────────────────────
+export function registerExternalUser(invite: ExternalUserInvite, fullName: string): void {
+  const initials = fullName.trim().split(/\s+/).map((p) => p[0] ?? '').join('').slice(0, 2).toUpperCase()
+  const newUser: User = {
+    id: `u-ext-${Date.now()}`,
+    fullName: fullName.trim(),
+    email: invite.recipientEmail,
+    role: 'external_user',
+    department: 'External',
+    jobTitle: 'External User',
+    initials,
+    avatarColor: '#6366f1',
+    isActive: true,
+  }
+  authStore.setState({ user: newUser, isSignedIn: true, loading: false })
 }
 
 // ─── Draft persistence ───────────────────────────────────────────────────────

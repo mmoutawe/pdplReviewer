@@ -8,6 +8,7 @@ import type {
   Attachment,
   AuditEvent,
   ExternalLink,
+  ExternalUserInvite,
   Notification,
   Policy,
   Project,
@@ -33,6 +34,7 @@ export const USERS: User[] = [
   { id: 'u-hala',     fullName: 'Hala Al-Mutairi',    email: 'hala.almutairi@pdpl-reviewer.sa',    role: 'security',          department: 'Information Security', jobTitle: 'Security Engineer',           initials: 'HM', avatarColor: colors[8] },
   { id: 'u-sara',     fullName: 'Sara Al-Faraj',      email: 'sara.alfaraj@pdpl-reviewer.sa',      role: 'admin',             department: 'Privacy Office',   jobTitle: 'Compliance Lead',                 initials: 'SF', avatarColor: colors[9] },
   { id: 'u-ext',      fullName: 'Khalid Al-Ahmadi',   email: 'khalid@sahab-cloud.com',             role: 'external_recipient', department: 'External — Sahab Cloud', jobTitle: 'Account Director',         initials: 'KA', avatarColor: colors[10] },
+  { id: 'u-ext-demo', fullName: 'Ahmad Al-Rashid',    email: 'ahmad@vendor-demo.com',              role: 'external_user',      department: 'External',              jobTitle: 'External User',            initials: 'AR', avatarColor: colors[0] },
 ]
 
 export const POLICIES: Policy[] = [
@@ -776,4 +778,23 @@ export const ROLE_LABELS: Record<import('./types').Role, string> = {
   security: 'Security',
   admin: 'Administrator',
   external_recipient: 'External Recipient',
+  external_user: 'External User',
 }
+
+// ─── External User Invites (demo seed) ──────────────────────────────────────
+
+export const EXTERNAL_USER_INVITES: ExternalUserInvite[] = [
+  {
+    id: 'ext-inv-001',
+    token: 'demo-external-invite-2026',
+    recipientEmail: 'ahmad@vendor-demo.com',
+    recipientName: 'Ahmad Al-Rashid',
+    createdBy: 'u-aisha',
+    createdAt: '2026-06-01T10:00:00Z',
+    expiresAt: '2026-12-31T23:59:59Z',
+    status: 'pending',
+  },
+]
+
+export const externalInviteByToken = (token: string) =>
+  EXTERNAL_USER_INVITES.find((i) => i.token === token)

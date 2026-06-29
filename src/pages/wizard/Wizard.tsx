@@ -203,6 +203,7 @@ export default function Wizard() {
     dataAccess: true, securityControls: true, complianceGovernance: true, contractualSafeguards: true, dataLifecycle: true,
   })
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [showAnonConfirm, setShowAnonConfirm] = useState(false)
 
   useEffect(() => {
     if (chatScrollRef.current)
@@ -435,6 +436,7 @@ export default function Wizard() {
       certifications: [], hasDPA: false,
       lastReviewedAt: new Date().toISOString().slice(0, 10),
       notes: '',
+      ...(user.role === 'external_user' ? { createdBy: user.id } : {}),
     }
     if (isSupabaseConfigured) {
       createVendor(vendorData).then((saved) => {
@@ -547,6 +549,18 @@ export default function Wizard() {
     return Object.keys(e).length === 0
   }
 
+  function openFilePicker(opts: { multiple?: boolean; accept?: string; onFiles: (files: File[]) => void }) {
+    const input = document.createElement('input')
+    input.type = 'file'
+    if (opts.multiple) input.multiple = true
+    if (opts.accept)   input.accept   = opts.accept
+    input.onchange = () => {
+      const files = Array.from(input.files ?? [])
+      if (files.length) opts.onFiles(files)
+    }
+    input.click()
+  }
+
   function next() {
     if (!validate(currentStep)) return
     const idx = StepIndex(currentStep)
@@ -554,6 +568,16 @@ export default function Wizard() {
       const v = allVendors.find((x) => x.id === form.linkedVendorId)
       const p = allProjects.find((x) => x.id === form.linkedProjectId)
       if (v) update({ vendorName: v.tradeName, vendorJurisdiction: v.jurisdiction, businessUnit: p?.businessUnit ?? form.businessUnit })
+    }
+    // Gap 4: require at least one uploaded document when requester claims data can be anonymized
+    if (currentStep === 'initiation' && form.qCanAnonymize === 'yes' && uploadedFiles.length === 0) {
+      showToast('Please upload a supporting document that demonstrates data can be anonymized.', 'error')
+      return
+    }
+    // If data can be fully anonymized skip the vendor questionnaire
+    if (currentStep === 'initiation' && form.qCanAnonymize === 'yes') {
+      setCurrentStep('assessment')
+      return
     }
     if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].key)
   }
@@ -600,6 +624,7 @@ export default function Wizard() {
             consentMechanism: form.consentObtained ? 'explicit' : undefined,
           },
           tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+          preAssessmentData: assessmentData ?? undefined,
         }, user.id)
         const ready = await submitTicket(ticket.id)
 
@@ -1223,16 +1248,14 @@ export default function Wizard() {
                   {/* Step 2: upload */}
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Step 2 — Upload completed template</div>
-                    <label style={{
+                    <div style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                       gap: 8, padding: '20px 16px',
                       border: `2px dashed ${xlsxFile ? 'var(--brand-700)' : 'var(--line)'}`,
                       borderRadius: 'var(--r-md)', cursor: 'pointer',
                       background: xlsxFile ? 'var(--brand-50)' : 'var(--surface-0)',
                       transition: 'all var(--t-fast)',
-                    }}>
-                      <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }}
-                        onChange={(e) => setXlsxFile(e.target.files?.[0] ?? null)} />
+                    }} onClick={() => openFilePicker({ accept: '.csv,.xlsx,.xls', onFiles: (f) => setXlsxFile(f[0] ?? null) })}>
                       {xlsxFile ? (
                         <>
                           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -1251,7 +1274,7 @@ export default function Wizard() {
                           <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>.csv, .xlsx, .xls</span>
                         </>
                       )}
-                    </label>
+                    </div>
                   </div>
 
                   {/* Extract button */}
@@ -1368,30 +1391,6 @@ export default function Wizard() {
                           onChange={(e) => update({ engagementObjective: e.target.value })}
                           placeholder="State the business objective of this engagement…" />
                       </FormField>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor access internal systems?</div>
-                        <div style={{ display: 'flex', gap: 16 }}>
-                          {[true, false].map((val) => (
-                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                              <input type="radio" name="vendorAccess" checked={form.vendorAccessesSystems === val} onChange={() => update({ vendorAccessesSystems: val })}
-                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
-                              {val ? 'Yes' : 'No'}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor process data on behalf of the company?</div>
-                        <div style={{ display: 'flex', gap: 16 }}>
-                          {[true, false].map((val) => (
-                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
-                              <input type="radio" name="vendorProcesses" checked={form.vendorProcessesPersonalData === val} onChange={() => update({ vendorProcessesPersonalData: val })}
-                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
-                              {val ? 'Yes' : 'No'}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   </div>
 
@@ -1462,18 +1461,17 @@ export default function Wizard() {
                       {/* Upload Documents */}
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 8, letterSpacing: '0.02em' }}>Upload Documents</div>
-                        <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 16px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', cursor: 'pointer', background: 'var(--surface-1)', transition: 'all var(--t-fast)' }}
+                        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '24px 16px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surface-1)', transition: 'all var(--t-fast)', cursor: 'pointer' }}
+                          onClick={() => openFilePicker({ multiple: true, accept: '.pdf,.docx,.xlsx', onFiles: (f) => setUploadedFiles((prev) => [...prev, ...f]) })}
                           onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--brand-700)'; e.currentTarget.style.background = 'var(--brand-50)' }}
                           onDragLeave={(e) => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--surface-1)' }}
                           onDrop={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--surface-1)'; const files = Array.from(e.dataTransfer.files); setUploadedFiles((prev) => [...prev, ...files]) }}>
-                          <input type="file" multiple accept=".pdf,.docx,.xlsx" style={{ display: 'none' }}
-                            onChange={(e) => { if (e.target.files) setUploadedFiles((prev) => [...prev, ...Array.from(e.target.files!)]) }} />
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)' }}>
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ink-300)', pointerEvents: 'none' }}>
                             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
-                          <span style={{ fontSize: 13, color: 'var(--ink-600)', fontWeight: 500 }}>Drag and drop files here, or click to browse</span>
-                          <span style={{ fontSize: 11.5, color: 'var(--ink-400)' }}>PDF, DOCX, XLSX up to 20MB</span>
-                        </label>
+                          <span style={{ fontSize: 13, color: 'var(--ink-600)', fontWeight: 500, pointerEvents: 'none' }}>Drag and drop files here, or click to browse</span>
+                          <span style={{ fontSize: 11.5, color: 'var(--ink-400)', pointerEvents: 'none' }}>PDF, DOCX, XLSX up to 20MB</span>
+                        </div>
                         {uploadedFiles.length > 0 && (
                           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {uploadedFiles.map((f, i) => (
@@ -1489,6 +1487,101 @@ export default function Wizard() {
 
                     </div>
                   </div>
+
+                  {/* Section D — Data Handling */}
+                  <div className="card" style={{ padding: '18px 20px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-500)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16 }}>Section D — Data Handling</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor access internal systems?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {[true, false].map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="vendorAccess" checked={form.vendorAccessesSystems === val} onChange={() => update({ vendorAccessesSystems: val })}
+                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 10 }}>Will vendor process data on behalf of the company?</div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {[true, false].map((val) => (
+                            <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="vendorProcesses" checked={form.vendorProcessesPersonalData === val} onChange={() => update({ vendorProcessesPersonalData: val })}
+                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
+                              {val ? 'Yes' : 'No'}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        {/* Anonymized question — confirmation popup on "yes" */}
+                        {showAnonConfirm && (
+                          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+                            onClick={(e) => { if (e.target === e.currentTarget) setShowAnonConfirm(false) }}>
+                            <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" stroke="#1D4ED8" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                                </div>
+                                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)' }}>Confirm: Data Can Be Anonymized</h2>
+                              </div>
+                              <p style={{ fontSize: 13.5, color: 'var(--ink-600)', lineHeight: 1.65, marginBottom: 18 }}>
+                                By selecting <strong>Yes</strong>, you confirm that all personal data in this request can be fully anonymized before processing or sharing — meaning no individual can be identified directly or indirectly from the data.
+                              </p>
+                              <p style={{ fontSize: 13, color: 'var(--amber-700)', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 'var(--r-md)', padding: '10px 12px', marginBottom: 20, lineHeight: 1.6 }}>
+                                ⚠ This will skip the full vendor questionnaire. The Data Management team will verify this claim against any uploaded documents.
+                              </p>
+                              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                                <button className="btn" onClick={() => setShowAnonConfirm(false)}>Cancel</button>
+                                <button className="btn btn-primary" onClick={() => { update({ qCanAnonymize: 'yes' }); setShowAnonConfirm(false) }}>
+                                  Yes, data can be anonymized
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)' }}>Can data be anonymized?</span>
+                          <div style={{ position: 'relative', display: 'inline-flex' }} className="anon-tooltip-host">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--ink-400)', cursor: 'help', flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.8"/>
+                              <path d="M12 8v1m0 3v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                            <div style={{
+                              position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6,
+                              background: 'var(--ink-900)', color: '#fff', fontSize: 11.5, lineHeight: 1.5, padding: '8px 10px',
+                              borderRadius: 'var(--r-md)', width: 260, pointerEvents: 'none', zIndex: 100,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                            }} className="anon-tooltip">
+                              <strong>Anonymization</strong> means transforming personal data so that individuals cannot be identified — directly or indirectly — even by the data controller. Examples: removing names/IDs, applying k-anonymity, or aggregating records beyond re-identification risk. This is stricter than pseudonymization.
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          {(['yes', 'no', 'partially'] as const).map((v) => (
+                            <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                              <input type="radio" name="initCanAnon" checked={form.qCanAnonymize === v}
+                                onChange={() => { if (v === 'yes') { setShowAnonConfirm(true) } else { update({ qCanAnonymize: v }) } }}
+                                style={{ accentColor: 'var(--brand-700)', width: 15, height: 15 }} />
+                              {v.charAt(0).toUpperCase() + v.slice(1)}
+                            </label>
+                          ))}
+                        </div>
+                        {form.qCanAnonymize === 'yes' && (
+                          <p style={{ marginTop: 8, fontSize: 12.5, color: 'var(--brand-700)', fontWeight: 500 }}>
+                            ✓ Questionnaire will be skipped — request goes directly to Data Management review.
+                          </p>
+                        )}
+                        {form.qCanAnonymize === 'partially' && (
+                          <textarea value={form.qCanAnonymizeDetails} onChange={(e) => update({ qCanAnonymizeDetails: e.target.value })} placeholder="Please provide details..." className="textarea" rows={2} style={{ marginTop: 8, width: '100%', boxSizing: 'border-box' }} />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               )}
             </section>
@@ -1548,7 +1641,7 @@ export default function Wizard() {
                             <div>
                               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Data Elements</div>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                {['Names', 'National IDs', 'Contact details', 'Financial data', 'Location data', 'Other'].map((el) => {
+                                {['Names', 'National IDs', 'Contact details', 'Financial data', 'Health data', 'Location data', 'Other'].map((el) => {
                                   const c = form.qDataElements.includes(el)
                                   return (
                                     <label key={el} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '5px 10px', borderRadius: 'var(--r-md)', border: `1px solid ${c ? 'var(--brand-700)' : 'var(--line)'}`, background: c ? 'var(--brand-50)' : 'var(--surface-0)', fontSize: 12.5, transition: 'all var(--t-fast)' }}>
@@ -1605,20 +1698,6 @@ export default function Wizard() {
                               </label>
                             ))}
                           </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>Can data be anonymized or minimized?</div>
-                          <div style={{ display: 'flex', gap: 16 }}>
-                            {(['yes', 'no', 'partially'] as const).map((v) => (
-                              <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
-                                <input type="radio" name="q-can" checked={form.qCanAnonymize === v} onChange={() => update({ qCanAnonymize: v })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
-                                {v.charAt(0).toUpperCase() + v.slice(1)}
-                              </label>
-                            ))}
-                          </div>
-                          {form.qCanAnonymize === 'partially' && (
-                            <textarea value={form.qCanAnonymizeDetails} onChange={(e) => update({ qCanAnonymizeDetails: e.target.value })} placeholder="Please provide details..." className="textarea" rows={2} style={{ marginTop: 8, width: '100%', boxSizing: 'border-box' }} />
-                          )}
                         </div>
                       </div>
                     )}
@@ -1792,25 +1871,35 @@ export default function Wizard() {
                       <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.complianceGovernance ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
                     </button>
                     {qOpenSections.complianceGovernance && (
-                      <div style={{ padding: '16px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, borderTop: '1px solid var(--line)' }}>
-                        {([
-                          { field: 'qPdplCompliant' as const, name: 'q-pc', label: 'Vendor complies with PDPL?' },
-                          { field: 'qDataProtectionPolicies' as const, name: 'q-dpp', label: 'Data protection policies exist?' },
-                          { field: 'qIso27001' as const, name: 'q-iso', label: 'ISO 27001 or equivalent?' },
-                          { field: 'qBreachResponseProcess' as const, name: 'q-brp', label: 'Breach response process exists?' },
-                        ]).map(({ field, name, label }) => (
-                          <div key={field}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
-                            <div style={{ display: 'flex', gap: 16 }}>
-                              {([true, false] as const).map((val) => (
-                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
-                                  <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
-                                  {val ? 'Yes' : 'No'}
-                                </label>
-                              ))}
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 16, borderTop: '1px solid var(--line)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                          {([
+                            { field: 'qPdplCompliant' as const, name: 'q-pc', label: 'Vendor complies with PDPL?' },
+                            { field: 'qDataProtectionPolicies' as const, name: 'q-dpp', label: 'Data protection policies exist?' },
+                            { field: 'qIso27001' as const, name: 'q-iso', label: 'ISO 27001 or equivalent?' },
+                            { field: 'qBreachResponseProcess' as const, name: 'q-brp', label: 'Breach response process exists?' },
+                          ]).map(({ field, name, label }) => (
+                            <div key={field}>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
+                              <div style={{ display: 'flex', gap: 16 }}>
+                                {([true, false] as const).map((val) => (
+                                  <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                    <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                    {val ? 'Yes' : 'No'}
+                                  </label>
+                                ))}
+                              </div>
                             </div>
+                          ))}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 8 }}>Supporting documents (optional)</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--ink-500)', cursor: 'pointer' }}
+                            onClick={() => openFilePicker({ multiple: true, accept: '.pdf,.docx,.xlsx', onFiles: (f) => setUploadedFiles((prev) => [...prev, ...f]) })}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <span>Click to upload compliance certificates or evidence (PDF, DOCX, XLSX)</span>
                           </div>
-                        ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1822,24 +1911,60 @@ export default function Wizard() {
                       <span style={{ fontSize: 10, color: 'var(--ink-400)', display: 'inline-block', transform: qOpenSections.contractualSafeguards ? 'rotate(180deg)' : 'none', transition: 'transform var(--t-fast)' }}>▼</span>
                     </button>
                     {qOpenSections.contractualSafeguards && (
-                      <div style={{ padding: '16px 16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, borderTop: '1px solid var(--line)' }}>
-                        {([
-                          { field: 'qNdaSigned' as const, name: 'q-nda', label: 'NDA signed?' },
-                          { field: 'qDpaExists' as const, name: 'q-dpa', label: 'Data Processing Agreement (DPA)?' },
-                          { field: 'qDataProtectionClauses' as const, name: 'q-dpc', label: 'Contract includes data protection clauses?' },
-                        ]).map(({ field, name, label }) => (
-                          <div key={field}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
-                            <div style={{ display: 'flex', gap: 16 }}>
-                              {([true, false] as const).map((val) => (
-                                <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
-                                  <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
-                                  {val ? 'Yes' : 'No'}
-                                </label>
-                              ))}
+                      <div style={{ padding: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 16, borderTop: '1px solid var(--line)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                          {([
+                            { field: 'qNdaSigned' as const, name: 'q-nda', label: 'NDA signed?' },
+                            { field: 'qDpaExists' as const, name: 'q-dpa', label: 'Data Processing Agreement (DPA)?' },
+                            { field: 'qDataProtectionClauses' as const, name: 'q-dpc', label: 'Contract includes data protection clauses?' },
+                          ]).map(({ field, name, label }) => (
+                            <div key={field}>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-800)', marginBottom: 8 }}>{label}</div>
+                              <div style={{ display: 'flex', gap: 16 }}>
+                                {([true, false] as const).map((val) => (
+                                  <label key={String(val)} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontSize: 13 }}>
+                                    <input type="radio" name={name} checked={form[field] === val} onChange={() => update({ [field]: val })} style={{ accentColor: 'var(--brand-700)', width: 14, height: 14 }} />
+                                    {val ? 'Yes' : 'No'}
+                                  </label>
+                                ))}
+                              </div>
                             </div>
+                          ))}
+                        </div>
+                        {(form.qNdaSigned || form.qDpaExists || form.qDataProtectionClauses) && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {form.qNdaSigned && (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6 }}>Upload NDA document</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--ink-500)', cursor: 'pointer' }}
+                                  onClick={() => openFilePicker({ accept: '.pdf,.docx', onFiles: (f) => setUploadedFiles((prev) => [...prev, ...f]) })}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <span>Click to upload NDA (PDF or DOCX)</span>
+                                </div>
+                              </div>
+                            )}
+                            {form.qDpaExists && (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6 }}>Upload DPA document</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--ink-500)', cursor: 'pointer' }}
+                                  onClick={() => openFilePicker({ accept: '.pdf,.docx', onFiles: (f) => setUploadedFiles((prev) => [...prev, ...f]) })}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <span>Click to upload DPA (PDF or DOCX)</span>
+                                </div>
+                              </div>
+                            )}
+                            {form.qDataProtectionClauses && (
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 6 }}>Upload data protection contract</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '2px dashed var(--line)', borderRadius: 'var(--r-md)', background: 'var(--surface-1)', fontSize: 12.5, color: 'var(--ink-500)', cursor: 'pointer' }}
+                                  onClick={() => openFilePicker({ accept: '.pdf,.docx', onFiles: (f) => setUploadedFiles((prev) => [...prev, ...f]) })}>
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <span>Click to upload contract with data protection clauses (PDF or DOCX)</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -2186,7 +2311,33 @@ export default function Wizard() {
 
               {/* Assessment */}
               {assessmentData && !assessmentLoading && (
-                <PresubmitAssessmentView data={assessmentData} requestType={requestType} />
+                <>
+                  {form.qCanAnonymize !== 'yes' && (
+                    <PresubmitAssessmentView
+                      data={assessmentData}
+                      requestType={requestType}
+                    />
+                  )}
+                  {form.qCanAnonymize === 'yes' && (
+                    <div style={{
+                      marginTop: 16, padding: '14px 18px',
+                      background: 'var(--teal-50)', border: '1px solid #99F6E4',
+                      borderRadius: 'var(--r-md)', display: 'flex', gap: 12, alignItems: 'flex-start',
+                    }}>
+                      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: 'var(--teal-700)', flexShrink: 0, marginTop: 1 }}>
+                        <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5"/>
+                        <path d="M9 5.5v4.5l2.5 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                      <div>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--teal-800)', margin: '0 0 4px' }}>Anonymization pathway selected</p>
+                        <p style={{ fontSize: 13, color: 'var(--teal-700)', margin: 0 }}>
+                          Because you indicated the data can be fully anonymized, detailed risk findings are not applicable.
+                          The compliance team will verify anonymization feasibility during review.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Error */}

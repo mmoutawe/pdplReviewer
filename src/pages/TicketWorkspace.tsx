@@ -64,7 +64,7 @@ function stateToWizardStep(state: TicketState): number {
 
 function canViewWizardStep(step: number, role: Role): boolean {
   if (role === 'admin') return true
-  if (role === 'requester') return step <= 3 || step === 7
+  if (role === 'requester' || role === 'external_user') return step <= 3 || step === 7
   if (role === 'data_management') return step === 3 || step === 4 || step === 7
   if (role === 'legal') return step === 3 || step === 5 || step === 7
   if (role === 'security') return step === 3 || step === 6 || step === 7
@@ -146,7 +146,7 @@ export default function TicketWorkspace() {
     if (canViewWizardStep(def, user.role as Role)) {
       setWizardStep(def)
     } else {
-      const roleStep: Partial<Record<import('../data/types').Role, number>> = { requester: 3, legal: 5, security: 6, data_management: 4 }
+      const roleStep: Partial<Record<import('../data/types').Role, number>> = { requester: 3, external_user: 3, legal: 5, security: 6, data_management: 4 }
       setWizardStep(roleStep[user.role as import('../data/types').Role] ?? def)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,6 +185,13 @@ export default function TicketWorkspace() {
     return (
       <EmptyState title="Ticket not found" body={`No ticket with ID "${id}" exists.`} icon={<Search size={26} color="var(--teal-600)" />}
         action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>Back to requests</button>} />
+    )
+  }
+
+  if (user.role === 'external_user' && ticket.requesterId !== user.id) {
+    return (
+      <EmptyState title="Access denied" body="You can only view your own requests." icon={<Search size={26} color="var(--teal-600)" />}
+        action={<button className="btn btn-primary" onClick={() => navigate('/requests')}>My requests</button>} />
     )
   }
 
@@ -435,8 +442,8 @@ export default function TicketWorkspace() {
       <div style={{ flex: 1, overflow: 'auto', padding: isMobile ? 16 : '24px 32px', minHeight: 0 }}>
 
         {!canViewCurrentStep ? (
-          // Requester on step 4 when ticket is returned for clarification
-          ticket.state === 'returned_to_requester' && user.role === 'requester' ? (
+          // Requester / external user on step 4 when ticket is returned for clarification
+          ticket.state === 'returned_to_requester' && (user.role === 'requester' || user.role === 'external_user') ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '18px 20px', background: 'var(--amber-50)', border: '1px solid var(--amber-200)', borderRadius: 'var(--r-lg)' }}>

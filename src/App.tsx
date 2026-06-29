@@ -32,7 +32,8 @@ const TemplatesLibrary = lazy(() => import('./pages/TemplatesLibrary'))
 const ChangePassword  = lazy(() => import('./pages/ChangePassword'))
 const NotificationPreferences = lazy(() => import('./pages/NotificationPreferences'))
 const Settings = lazy(() => import('./pages/Settings'))
-const ExternalDashboard = lazy(() => import('./pages/ExternalDashboard'))
+const ExternalDashboard  = lazy(() => import('./pages/ExternalDashboard'))
+const ExternalRegister   = lazy(() => import('./pages/ExternalRegister'))
 const NotFound        = lazy(() => import('./pages/NotFound'))
 const Profile         = lazy(() => import('./pages/Profile'))
 const Setup           = lazy(() => import('./pages/Setup'))
@@ -51,6 +52,7 @@ function RootRedirect() {
   const { user, isSignedIn } = useStore(authStore)
   if (!isSignedIn) return <Navigate to="/sign-in" replace />
   if (user.role === 'external_recipient') return <Navigate to="/external-portal" replace />
+  if (user.role === 'external_user') return <Navigate to="/requests" replace />
   if (user.role === 'data_management' || user.role === 'legal' || user.role === 'security') {
     return <Navigate to={`/queue/${user.role}`} replace />
   }
@@ -83,6 +85,7 @@ export default function App() {
           <Route path="/auth/reset-password" element={<ResetPassword />} />
           <Route path="/external/redeem/:token" element={<ExternalRedeem />} />
           <Route path="/external/approval/:token" element={<ExternalApproval />} />
+          <Route path="/external/register/:token" element={<ExternalRegister />} />
 
           {/* Auth-gated */}
           <Route path="/" element={<RequireAuth><RootRedirect /></RequireAuth>} />

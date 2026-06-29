@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { RequestType } from '../../data/types'
 import { REQUEST_TYPE_LABELS } from '../../data/seed'
+import { authStore } from '../../store'
+import { useStore } from '../../hooks/useStore'
 
 const TYPE_DESCRIPTIONS: Record<RequestType, string> = {
   vendor_onboarding: 'Assess a new vendor or third-party service provider that will process personal data on your behalf.',
@@ -46,7 +48,7 @@ const TYPE_ICONS: Record<RequestType, ReactNode> = {
   ),
 }
 
-const TYPES: RequestType[] = [
+const ALL_TYPES: RequestType[] = [
   'vendor_onboarding',
   'external_document_sharing',
   'data_sharing_external',
@@ -57,7 +59,10 @@ const TYPES: RequestType[] = [
 export default function WizardStepType() {
   useEffect(() => { document.title = 'New Request — PDPL Reviewer' }, [])
   const navigate = useNavigate()
+  const { user } = useStore(authStore)
   const [selected, setSelected] = useState<RequestType | null>(null)
+
+  const TYPES = user.role === 'external_user' ? (['vendor_onboarding'] as RequestType[]) : ALL_TYPES
 
   function handleSelectType(type: RequestType) {
     setSelected(type)
@@ -73,9 +78,14 @@ export default function WizardStepType() {
       </nav>
 
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 4 }}>What kind of request is this?</h1>
-      <p style={{ color: 'var(--ink-500)', marginBottom: 28, fontSize: 13.5, lineHeight: 1.6 }}>
+      <p style={{ color: 'var(--ink-500)', marginBottom: user.role === 'external_user' ? 12 : 28, fontSize: 13.5, lineHeight: 1.6 }}>
         Choose the type that best matches your situation. The questionnaire and AI assessment will adapt accordingly.
       </p>
+      {user.role === 'external_user' && (
+        <div style={{ padding: '10px 14px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 'var(--r-sm)', fontSize: 12.5, color: 'var(--brand-700)', marginBottom: 24 }}>
+          As an external user, you can submit vendor onboarding requests only.
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
         {TYPES.map((type) => {

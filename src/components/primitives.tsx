@@ -5,15 +5,20 @@ import type { Role, TicketState, RiskLevel } from '../data/types'
 import { STATE_LABELS, ROLE_LABELS } from '../data/seed'
 
 // ─── StatusPill ──────────────────────────────────────────────────────────────
-interface StatusPillProps { state: TicketState; size?: 'sm' | 'md' }
+interface StatusPillProps {
+  state: TicketState
+  size?: 'sm' | 'md'
+  reviews?: Array<{ role: string; verdict: string }>
+}
 
-export function StatusPill({ state, size = 'md' }: StatusPillProps) {
+export function StatusPill({ state, size = 'md', reviews }: StatusPillProps) {
+  const isParallelSplit = state === 'in_legal_review' && reviews?.some((r) => r.role === 'security' && r.verdict === 'pending')
+  const label = isParallelSplit ? 'Legal & Security review' : STATE_LABELS[state]
   const c = stateColor(state)
   return (
     <span className={cn('pill', `pill-${c}`, size === 'sm' && 'pill-no-dot')}
       style={size === 'sm' ? { height: 18, fontSize: 10.5, padding: '0 6px' } : undefined}>
-      {size !== 'sm' && null}
-      {STATE_LABELS[state]}
+      {label}
     </span>
   )
 }
@@ -26,6 +31,7 @@ const ROLE_COLOR: Record<Role, string> = {
   security: 'pill-amber',
   admin: 'pill-red',
   external_recipient: 'pill-slate',
+  external_user: 'pill-teal',
 }
 
 interface RoleBadgeProps { role: Role; size?: 'sm' | 'md' }

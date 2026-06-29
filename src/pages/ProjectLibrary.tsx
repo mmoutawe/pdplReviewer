@@ -33,11 +33,12 @@ function StatusBadge({ status }: { status: Project['status'] }) {
   )
 }
 
-function CreateProjectDialog({ onClose, onCreated, userId }: { onClose: () => void; onCreated: (p: Project) => void; userId: string }) {
+function CreateProjectDialog({ onClose, onCreated, userId, vendors }: { onClose: () => void; onCreated: (p: Project) => void; userId: string; vendors: Vendor[] }) {
   const [name, setName]               = useState('')
   const [businessUnit, setBusinessUnit] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus]           = useState<Project['status']>('active')
+  const [vendorId, setVendorId]       = useState('')
   const [error, setError]             = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
@@ -49,6 +50,7 @@ function CreateProjectDialog({ onClose, onCreated, userId }: { onClose: () => vo
       code: `PRJ-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-4)}`,
       name: name.trim(), businessUnit: businessUnit.trim(),
       description: description.trim(), status,
+      vendorId: vendorId || undefined,
       ownerId: userId, dataInventoryCount: 0,
       startedAt: new Date().toISOString().slice(0, 10),
     }
@@ -98,6 +100,15 @@ function CreateProjectDialog({ onClose, onCreated, userId }: { onClose: () => vo
               onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
           </div>
           <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>VENDOR (optional)</label>
+            <select value={vendorId} onChange={(e) => setVendorId(e.target.value)} style={inputSt}>
+              <option value="">— No vendor —</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>{v.tradeName}</option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>STATUS</label>
             <select value={status} onChange={(e) => setStatus(e.target.value as Project['status'])} style={inputSt}>
               <option value="active">Active</option>
@@ -144,6 +155,7 @@ export default function ProjectLibrary() {
   )
 
   const visible = projects.filter((p) => {
+    if (user.role === 'external_user' && p.ownerId !== user.id) return false
     if (vendorFilter && p.vendorId !== vendorFilter) return false
     if (!search) return true
     const q = search.toLowerCase()
@@ -285,6 +297,7 @@ export default function ProjectLibrary() {
           onClose={() => setShowCreate(false)}
           onCreated={(p) => setProjects((prev) => [p, ...prev])}
           userId={user.id}
+          vendors={vendors}
         />
       )}
     </div>

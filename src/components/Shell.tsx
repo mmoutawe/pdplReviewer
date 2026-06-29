@@ -87,6 +87,12 @@ function getNavItems(role: Role): NavItem[] {
   ]
 
   if (role === 'requester') return [...base, ...requesterItems]
+  if (role === 'external_user') return [
+    { label: 'My Requests', path: '/requests', icon: <TicketIcon /> },
+    { label: 'New Request',  path: '/requests/new', icon: <NewIcon /> },
+    { label: 'My Vendors',   path: '/vendors', icon: <VendorIcon /> },
+    { label: 'My Projects',  path: '/projects', icon: <ProjectIcon /> },
+  ]
   if (role === 'data_management') return [...base, ...dmItems]
   if (role === 'legal' || role === 'security') return [...base, ...reviewerBaseItems]
   if (role === 'admin') return [...base, ...adminItems]
@@ -411,6 +417,26 @@ function LeftRail({ collapsed, isMobile, onClose }: RailProps) {
   )
 }
 
+// ─── Grace period banner for external users ───────────────────────────────────
+function GracePeriodBanner() {
+  const { user } = useStore(authStore)
+  if (user.role !== 'external_user' || !user.gracePeriodEndsAt) return null
+  const daysLeft = Math.ceil((new Date(user.gracePeriodEndsAt).getTime() - Date.now()) / 86_400_000)
+  if (daysLeft <= 0) return null
+  return (
+    <div style={{
+      padding: '10px 24px', background: 'var(--amber-50)', borderBottom: '1px solid var(--amber-200)',
+      display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'var(--amber-800)',
+    }}>
+      <span style={{ fontSize: 16 }}>⚠</span>
+      <span>
+        Your account access expires in <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''}</strong> ({new Date(user.gracePeriodEndsAt).toLocaleDateString()}).
+        Your request will remain on record after your account is removed.
+      </span>
+    </div>
+  )
+}
+
 // ─── Shell (Layout wrapper) ───────────────────────────────────────────────────
 interface ShellProps { children: ReactNode }
 
@@ -442,6 +468,7 @@ export default function Shell({ children }: ShellProps) {
         )}
         <LeftRail collapsed={collapsed} isMobile={isMobile} onClose={() => setCollapsed(true)} />
         <main id="main-content" style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <GracePeriodBanner />
           {children}
         </main>
       </div>

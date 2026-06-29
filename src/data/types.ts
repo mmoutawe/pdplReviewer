@@ -10,6 +10,7 @@ export type Role =
   | 'security'
   | 'admin'
   | 'external_recipient'
+  | 'external_user'
 
 export type RequestType =
   | 'vendor_onboarding'
@@ -43,6 +44,7 @@ export interface User {
   avatarColor: string
   entraObjectId?: string  // set on first sign-in; absent = pending invite
   isActive?: boolean      // false = deactivated; undefined/true = active
+  gracePeriodEndsAt?: string  // set on external_user after their ticket reaches terminal state
 }
 
 export interface Citation {
@@ -176,6 +178,7 @@ export interface Ticket {
   attachments: Attachment[]
   returnThread: ReturnThreadEntry[]
   preAssessmentGenerationId?: string
+  preAssessmentData?: Record<string, unknown>
   parentTicketId?: string          // For split tickets
   childTicketIds?: string[]
   tags: string[]
@@ -392,6 +395,7 @@ export interface Vendor {
   lastReviewedAt: string
   ticketIds: string[]
   notes: string
+  createdBy?: string                          // user ID — set for external_user-created vendors
 }
 
 export interface Project {
@@ -553,4 +557,17 @@ export interface ExternalLink {
   redeemedAt?: string
   redeemedFromIpHash?: string
   status: 'pending' | 'redeemed' | 'expired' | 'revoked'
+}
+
+// ─── External User Invite (account-level, distinct from one-time ExternalLink) ─
+export interface ExternalUserInvite {
+  id: string
+  token: string
+  recipientEmail: string
+  recipientName?: string
+  createdBy: string         // DM user ID who generated the invite
+  createdAt: string
+  expiresAt: string
+  status: 'pending' | 'registered' | 'expired' | 'revoked'
+  registeredUserId?: string
 }
