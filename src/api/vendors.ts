@@ -1,5 +1,5 @@
 import type { Vendor } from '../data/types'
-import { dvCreate, dvList, T } from '../lib/dataverse'
+import { dvCreate, dvList, dvUpdate, T } from '../lib/dataverse'
 
 type DvRow = Record<string, unknown>
 
@@ -44,4 +44,21 @@ export async function createVendor(v: Omit<Vendor, 'id' | 'ticketIds'>): Promise
   }
   const row = await dvCreate<DvRow>(T.vendors, body)
   return rowToVendor(row)
+}
+
+export async function updateVendor(id: string, patch: Partial<Omit<Vendor, 'id' | 'ticketIds'>>): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (patch.legalName      !== undefined) body.pdplr_legalname      = patch.legalName
+  if (patch.tradeName      !== undefined) body.pdplr_tradename      = patch.tradeName
+  if (patch.jurisdiction   !== undefined) body.pdplr_jurisdiction   = patch.jurisdiction
+  if (patch.riskScore      !== undefined) body.pdplr_riskscore      = patch.riskScore
+  if (patch.riskTier       !== undefined) body.pdplr_risktier       = patch.riskTier
+  if (patch.status         !== undefined) body.pdplr_status         = patch.status
+  if (patch.category       !== undefined) body.pdplr_category       = patch.category
+  if (patch.primaryContact !== undefined) body.pdplr_primarycontact = patch.primaryContact
+  if (patch.certifications !== undefined) body.pdplr_certifications = patch.certifications.join(',')
+  if (patch.hasDPA         !== undefined) body.pdplr_hasdpa         = patch.hasDPA
+  if (patch.lastReviewedAt !== undefined) body.pdplr_lastreviewedat = patch.lastReviewedAt
+  if (patch.notes          !== undefined) body.pdplr_notes          = patch.notes
+  await dvUpdate(T.vendors, id, body)
 }

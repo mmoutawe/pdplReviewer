@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Building2 } from 'lucide-react'
 import { vendorById, TICKETS } from '../data/seed'
 import { EmptyState } from '../components/primitives'
-import { fetchVendors } from '../api/vendors'
+import { fetchVendors, updateVendor } from '../api/vendors'
 import { isDataverseConfigured } from '../lib/dataverse'
 import type { Vendor } from '../data/types'
+import { showToast } from '../store'
 import { RiskMeter } from '../components/forms'
 import { formatDate, riskColor } from '../lib/utils'
 import type { ProjectDocumentType, ProjectDocumentStatus } from '../data/types'
@@ -102,6 +103,122 @@ function UploadVersionDialog({ docTitle, onClose, onUpload }: {
   )
 }
 
+const inputSt: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', fontSize: 13,
+  border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+  background: 'var(--surface-0)', color: 'var(--ink-900)',
+  outline: 'none', boxSizing: 'border-box',
+}
+
+function EditVendorDialog({ vendor, onClose, onSaved }: {
+  vendor: Vendor
+  onClose: () => void
+  onSaved: (v: Vendor) => void
+}) {
+  const [tradeName,      setTradeName]      = useState(vendor.tradeName)
+  const [legalName,      setLegalName]      = useState(vendor.legalName)
+  const [jurisdiction,   setJurisdiction]   = useState(vendor.jurisdiction)
+  const [category,       setCategory]       = useState(vendor.category)
+  const [primaryContact, setPrimaryContact] = useState(vendor.primaryContact)
+  const [status,         setStatus]         = useState<Vendor['status']>(vendor.status)
+  const [riskTier,       setRiskTier]       = useState<Vendor['riskTier']>(vendor.riskTier)
+  const [hasDPA,         setHasDPA]         = useState(vendor.hasDPA)
+  const [notes,          setNotes]          = useState(vendor.notes ?? '')
+  const [saving,         setSaving]         = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!tradeName.trim()) { setError('Trade name is required.'); return }
+    if (!legalName.trim())  { setError('Legal name is required.');  return }
+    setError(null)
+    const patch: Partial<Omit<Vendor, 'id' | 'ticketIds'>> = {
+      tradeName: tradeName.trim(), legalName: legalName.trim(),
+      jurisdiction: jurisdiction.trim(), category: category.trim(),
+      primaryContact: primaryContact.trim(), status, riskTier, hasDPA,
+      notes: notes.trim(),
+    }
+    setSaving(true)
+    try {
+      if (isDataverseConfigured) await updateVendor(vendor.id, patch)
+      onSaved({ ...vendor, ...patch })
+      showToast('Vendor updated.', 'success')
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 520, padding: '28px 32px', zIndex: 1, maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Edit vendor</h2>
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>TRADE NAME *</label>
+              <input value={tradeName} onChange={(e) => setTradeName(e.target.value)} style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>LEGAL NAME *</label>
+              <input value={legalName} onChange={(e) => setLegalName(e.target.value)} style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>JURISDICTION</label>
+              <input value={jurisdiction} onChange={(e) => setJurisdiction(e.target.value)} style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>CATEGORY</label>
+              <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="SaaS, Payments…" style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>STATUS</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value as Vendor['status'])} style={{ ...inputSt, cursor: 'pointer' }}>
+                <option value="active">Active</option>
+                <option value="pending">Pending</option>
+                <option value="sunset">Sunset</option>
+                <option value="terminated">Terminated</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>RISK TIER</label>
+              <select value={riskTier} onChange={(e) => setRiskTier(e.target.value as Vendor['riskTier'])} style={{ ...inputSt, cursor: 'pointer' }}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>PRIMARY CONTACT EMAIL</label>
+            <input type="email" value={primaryContact} onChange={(e) => setPrimaryContact(e.target.value)} placeholder="compliance@vendor.com" style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-700)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={hasDPA} onChange={(e) => setHasDPA(e.target.checked)} />
+            DPA (Data Processing Agreement) signed
+          </label>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>NOTES</label>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} style={{ ...inputSt, resize: 'vertical' }} />
+          </div>
+          {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function VendorProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -138,6 +255,7 @@ export default function VendorProfile() {
   })
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null)
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  const [showEditVendor, setShowEditVendor] = useState(false)
 
   function handleUpload(docId: string, _docTitle: string, filename: string, fileType: string) {
     setVersionHistory((prev) => {
@@ -173,6 +291,10 @@ export default function VendorProfile() {
           {v.riskTier} risk
         </span>
         <span className={`pill pill-no-dot ${v.status === 'active' ? 'pill-emerald' : 'pill-amber'}`}>{v.status}</span>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowEditVendor(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="13" height="13" viewBox="0 0 15 15" fill="none" aria-hidden="true"><path d="M10.5 2.5l2 2-8 8H2.5v-2l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+          Edit
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -289,6 +411,14 @@ export default function VendorProfile() {
           />
         )
       })()}
+
+      {showEditVendor && (
+        <EditVendorDialog
+          vendor={v}
+          onClose={() => setShowEditVendor(false)}
+          onSaved={(updated) => { setV(updated); setShowEditVendor(false) }}
+        />
+      )}
     </div>
   )
 }

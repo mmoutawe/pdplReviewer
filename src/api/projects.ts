@@ -1,5 +1,5 @@
 import type { Project } from '../data/types'
-import { dvCreate, dvList, T } from '../lib/dataverse'
+import { dvCreate, dvList, dvUpdate, T } from '../lib/dataverse'
 
 type DvRow = Record<string, unknown>
 
@@ -38,4 +38,18 @@ export async function createProject(p: Omit<Project, 'id' | 'ticketIds'>): Promi
   }
   const row = await dvCreate<DvRow>(T.projects, body)
   return rowToProject(row)
+}
+
+export async function updateProject(id: string, patch: Partial<Omit<Project, 'id' | 'ticketIds'>>): Promise<void> {
+  const body: Record<string, unknown> = {}
+  if (patch.code               !== undefined) body.pdplr_code               = patch.code
+  if (patch.name               !== undefined) body.pdplr_name               = patch.name
+  if (patch.businessUnit       !== undefined) body.pdplr_businessunit       = patch.businessUnit
+  if (patch.ownerId            !== undefined) body.pdplr_ownerid            = patch.ownerId
+  if (patch.vendorId           !== undefined) body.pdplr_vendorref          = patch.vendorId
+  if (patch.status             !== undefined) body.pdplr_status             = patch.status
+  if (patch.dataInventoryCount !== undefined) body.pdplr_datainventorycount = patch.dataInventoryCount
+  if (patch.description        !== undefined) body.pdplr_description        = patch.description
+  if (patch.startedAt          !== undefined) body.pdplr_startedat          = patch.startedAt
+  await dvUpdate(T.projects, id, body)
 }

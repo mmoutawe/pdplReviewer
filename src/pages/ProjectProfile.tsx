@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Folder } from 'lucide-react'
 import { projectById, TICKETS, userById } from '../data/seed'
 import { EmptyState, StatusPill, SLAIndicator, Avatar } from '../components/primitives'
-import { fetchProjects } from '../api/projects'
+import { fetchProjects, updateProject } from '../api/projects'
 import { isDataverseConfigured } from '../lib/dataverse'
 import type { Project } from '../data/types'
+import { showToast } from '../store'
 import { formatDate } from '../lib/utils'
 import type { ProjectDocumentType, ProjectDocumentStatus } from '../data/types'
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '../data/types'
@@ -98,6 +99,83 @@ function UploadVersionDialog({ docTitle, onClose, onUpload }: {
   )
 }
 
+const inputSt: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', fontSize: 13,
+  border: '1px solid var(--line)', borderRadius: 'var(--r-sm)',
+  background: 'var(--surface-0)', color: 'var(--ink-900)',
+  outline: 'none', boxSizing: 'border-box',
+}
+
+function EditProjectDialog({ project, onClose, onSaved }: {
+  project: Project
+  onClose: () => void
+  onSaved: (p: Project) => void
+}) {
+  const [name,         setName]         = useState(project.name)
+  const [description,  setDescription]  = useState(project.description ?? '')
+  const [businessUnit, setBusinessUnit] = useState(project.businessUnit)
+  const [status,       setStatus]       = useState<Project['status']>(project.status)
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) { setError('Project name is required.'); return }
+    setError(null)
+    const patch: Partial<Omit<Project, 'id' | 'ticketIds'>> = {
+      name: name.trim(), description: description.trim(),
+      businessUnit: businessUnit.trim(), status,
+    }
+    setSaving(true)
+    try {
+      if (isDataverseConfigured) await updateProject(project.id, patch)
+      onSaved({ ...project, ...patch })
+      showToast('Project updated.', 'success')
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div className="card" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: '28px 32px', zIndex: 1 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink-900)', marginBottom: 20 }}>Edit project</h2>
+        <form onSubmit={(e) => void handleSubmit(e)} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>PROJECT NAME *</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>BUSINESS UNIT</label>
+            <input value={businessUnit} onChange={(e) => setBusinessUnit(e.target.value)} style={inputSt} onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--brand-700)' }} onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--line)' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>STATUS</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value as Project['status'])} style={{ ...inputSt, cursor: 'pointer' }}>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, letterSpacing: '0.02em' }}>DESCRIPTION</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={{ ...inputSt, resize: 'vertical' }} />
+          </div>
+          {error && <div style={{ fontSize: 12.5, color: '#B91C1C' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ProjectProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -133,6 +211,7 @@ export default function ProjectProfile() {
   })
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null)
   const [uploadingFor, setUploadingFor] = useState<string | null>(null)
+  const [showEditProject, setShowEditProject] = useState(false)
 
   function handleUpload(docId: string, filename: string, fileType: string) {
     setVersionHistory((prev) => {
@@ -171,6 +250,10 @@ export default function ProjectProfile() {
         <span className={`pill pill-no-dot ${STATUS_COLORS[proj.status] ?? 'pill-slate'}`}>
           {proj.status.replace('_', ' ')}
         </span>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowEditProject(true)} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <svg width="13" height="13" viewBox="0 0 15 15" fill="none" aria-hidden="true"><path d="M10.5 2.5l2 2-8 8H2.5v-2l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+          Edit
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -316,6 +399,14 @@ export default function ProjectProfile() {
           />
         )
       })()}
+
+      {showEditProject && (
+        <EditProjectDialog
+          project={proj}
+          onClose={() => setShowEditProject(false)}
+          onSaved={(updated) => { setProj(updated); setShowEditProject(false) }}
+        />
+      )}
     </div>
   )
 }
