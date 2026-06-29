@@ -6,7 +6,7 @@ import { ticketStore, authStore, showToast, updateTicket, refreshTickets, demoAd
 import { useStore } from '../hooks/useStore'
 import {
   vendorById, projectById, REQUEST_TYPE_LABELS,
-  PRE_ASSESSMENTS, AUDIT,
+  PRE_ASSESSMENTS,
 } from '../data/seed'
 import type { Attachment, Role, TicketState, ProjectDocument, ReviewerTemplate } from '../data/types'
 import { StatusPill, SLAIndicator, Avatar, RoleBadge, EmptyState, RiskBadge, ArticleRefBadge } from '../components/primitives'
@@ -18,7 +18,6 @@ import { ConfirmDialog, LoadingOverlay } from '../components/overlays'
 import { formatDate, formatDateTime } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured, dvDownloadFile, T } from '../lib/dataverse'
 import { exportAssessmentPdf } from '../lib/exportAssessmentPdf'
-import { exportTicketDocx } from '../lib/exportTicketDocx'
 import { getWorkflowSettings } from '../lib/workflowSettings'
 import { saveReviewDecision, transitionTicket, addReturnComment, subscribeToTicket, deleteTicket as apiDeleteTicket } from '../api/tickets'
 import { fetchDocuments } from '../api/documentLibrary'
@@ -30,7 +29,9 @@ import { runReviewerAssessment, type ReviewerRequestType } from '../api/aiReview
 import { ReviewerAssessmentView, ControllerProcessorRolesCard } from '../components/ReviewerAssessmentView'
 import { AIDocumentChat } from '../components/AIDocumentChat'
 import { ReviewerAssistPanel } from '../components/ReviewerAssistPanel'
+import { AIDocumentGeneratorPanel } from '../components/AIDocumentGeneratorPanel'
 import { runChecklistReview, type ChecklistResult } from '../api/aiChecklist'
+import { PresubmitAssessmentView } from '../components/PresubmitAssessmentView'
 
 // ─── 8-step wizard constants ──────────────────────────────────────────────────
 
@@ -106,11 +107,15 @@ export default function TicketWorkspace() {
     purposeIsClear: false, dataIsNecessary: false, noExcessivePersonalData: false,
     recipientIsAppropriate: false, attachmentsReviewed: false,
   })
+  const [anonClaimReviewed, setAnonClaimReviewed] = useState(false)
   const [dmSaving, setDmSaving] = useState(false)
   const [requesterReply, setRequesterReply] = useState('')
   const [requesterReplying, setRequesterReplying] = useState(false)
   const [requesterAttachments, setRequesterAttachments] = useState<Attachment[]>([])
   const [attachTab, setAttachTab] = useState<'upload' | 'library' | 'templates'>('upload')
+  const [showAIDocGen, setShowAIDocGen] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const [libraryDocs, setLibraryDocs] = useState<ProjectDocument[]>([])
   const [libraryTemplates, setLibraryTemplates] = useState<ReviewerTemplate[]>([])
   const [attachLibraryLoading, setAttachLibraryLoading] = useState(false)
@@ -127,12 +132,24 @@ export default function TicketWorkspace() {
     return subscribeToTicket(id, (updated) => updateTicket(updated.id, updated))
   }, [id])
 
-  // Re-sync wizard step when ticket state changes (e.g. after review action)
+  // Re-sync wizard step when ticket state changes; fall back to user's review step if default isn't accessible
   useEffect(() => {
     if (!ticket) return
-    setWizardStep(getDefaultWizardStep(ticket.state))
+    const def = getDefaultWizardStep(ticket.state)
+    if (canViewWizardStep(def, user.role as Role)) {
+      setWizardStep(def)
+    } else {
+      const roleStep: Partial<Record<import('../data/types').Role, number>> = { requester: 3, legal: 5, security: 6, data_management: 4 }
+      setWizardStep(roleStep[user.role as import('../data/types').Role] ?? def)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.state])
+
+  // Reset AI assessment data when navigating to a different ticket
+  useEffect(() => {
+    setReviewerData(null)
+    setReviewerError(null)
+  }, [ticket?.id])
 
   // Auto-trigger AI assessment when DM tab opens
   useEffect(() => {
@@ -166,13 +183,39 @@ export default function TicketWorkspace() {
   const project = ticket.projectId ? (projectById(ticket.projectId) ?? lookupProject(ticket.projectId)) : null
   const [attachments, setAttachments] = useState<Attachment[]>(ticket.attachments)
   const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === ticket.id)
-  const auditEvents = AUDIT.filter((e) => e.targetId === ticket.id)
+  // Prefer live AI-generated risk over static seed value
+  const effectiveRisk = ((ticket.preAssessmentData?.risk_level as string | undefined) ?? assessment?.overallRisk) as import('../data/types').RiskLevel | undefined
+  const auditEvents = (() => {
+    const derived: import('../data/types').AuditEvent[] = []
+    const mk = (id: string, action: string, actorId: string, actorRole: import('../data/types').Role, ts: string, extra?: Partial<import('../data/types').AuditEvent>) => ({
+      id, ts, actorId, actorRole, action, targetType: 'ticket' as const, targetId: ticket.id, immutableHash: id, ...extra,
+    })
+    if (ticket.createdAt) derived.push(mk(`${ticket.id}-created`, 'ticket.created', ticket.requesterId, 'requester', ticket.createdAt))
+    if (ticket.submittedAt) derived.push(mk(`${ticket.id}-submitted`, 'ticket.submitted', ticket.requesterId, 'requester', ticket.submittedAt))
+    for (const r of ticket.reviews) {
+      if (r.verdict !== 'pending' && r.decidedAt) {
+        derived.push(mk(`${ticket.id}-review-${r.role}`, 'review.decided', r.reviewerId ?? ticket.requesterId, r.role, r.decidedAt, { reason: r.notes }))
+      }
+    }
+    for (const entry of ticket.returnThread) {
+      derived.push(mk(`${ticket.id}-return-${entry.id}`, 'ticket.returned', entry.by, entry.byRole, entry.createdAt, { reason: entry.message }))
+    }
+    if (ticket.decidedAt && ['approved', 'rejected'].includes(ticket.state)) {
+      derived.push(mk(`${ticket.id}-decided`, ticket.state === 'approved' ? 'ticket.approved' : 'ticket.rejected', ticket.requesterId, 'data_management' as import('../data/types').Role, ticket.decidedAt))
+    }
+    return derived
+  })()
 
   const hasParallelSecuritySlot = ticket.reviews.some((r) => r.role === 'security' && r.verdict === 'pending')
+  const canAnonymize = (ticket.payload as import('../data/types').VendorOnboardingPayload)?.questionnaire?.purposeNecessity?.canAnonymize === 'yes'
   const canReview = (
     (user.role === 'data_management' && ['submitted', 'in_data_management', 'returned_to_requester'].includes(ticket.state)) ||
     (user.role === 'legal' && ticket.state === 'in_legal_review') ||
-    (user.role === 'security' && (ticket.state === 'in_security_review' || (ticket.state === 'in_legal_review' && hasParallelSecuritySlot)))
+    (user.role === 'security' && (
+      ticket.state === 'in_security_review' ||
+      (ticket.state === 'in_legal_review' && hasParallelSecuritySlot) ||
+      (ticket.state === 'in_data_management' && hasParallelSecuritySlot)
+    ))
   )
   const canViewCurrentStep = canViewWizardStep(wizardStep, user.role as Role)
 
@@ -211,18 +254,19 @@ export default function TicketWorkspace() {
     } finally { setChecklistLoading(false) }
   }
 
-  async function handleDMAction(action: 'approve' | 'return' | 'escalate_legal' | 'escalate_security') {
+  async function handleDMAction(action: 'approve' | 'return' | 'escalate_legal' | 'escalate_security' | 'reject') {
     if (!ticket) return
     if (action === 'return' && !reviewComment.trim()) { showToast('Please add a return comment.', 'error'); return }
     setDmSaving(true)
     const nextDMState: Record<string, TicketState> = {
       approve: 'approved', return: 'returned_to_requester',
       escalate_legal: 'in_legal_review', escalate_security: 'in_security_review',
+      reject: 'rejected',
     }
     const newState = nextDMState[action] as TicketState
     try {
       if (isSupabaseConfigured) {
-        const verdict = action === 'return' ? 'return' : action === 'approve' ? 'approve' : 'escalate'
+        const verdict = action === 'return' ? 'return' : action === 'approve' ? 'approve' : action === 'reject' ? 'reject' : 'escalate'
         await saveReviewDecision(ticket.id, 'data_management', verdict as 'approve' | 'return' | 'escalate', reviewComment || undefined, user.id)
         if (action === 'return' && (reviewComment.trim() || reviewerAttachments.length > 0)) {
           await addReturnComment(ticket.id, reviewComment, reviewerAttachments.map((a) => a.id), user.id, user.role)
@@ -333,7 +377,12 @@ export default function TicketWorkspace() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
               <button className="btn btn-ghost btn-sm" onClick={() => navigate('/requests')} style={{ padding: '2px 6px', fontSize: 12 }}>← Requests</button>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--ink-500)' }}>{ticket.id}</span>
-              <StatusPill state={ticket.state} />
+              <StatusPill state={ticket.state} reviews={ticket.reviews} />
+              {['in_legal_review', 'in_security_review', 'in_data_management'].includes(ticket.state) && hasParallelSecuritySlot && (
+                <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: '100px', background: 'var(--brand-50)', color: 'var(--brand-700)', border: '1px solid var(--brand-100)', whiteSpace: 'nowrap' }}>
+                  ⚖️+🔒 Legal &amp; Security Review
+                </span>
+              )}
               {!['approved', 'rejected', 'archived', 'draft'].includes(ticket.state) && (
                 <SLAIndicator dueAt={ticket.sla.decisionDueAt} breached={ticket.sla.breached} />
               )}
@@ -348,21 +397,13 @@ export default function TicketWorkspace() {
                   {requester.fullName}
                 </span>
               )}
-              {ticket.submittedAt && <span>Submitted {formatDate(ticket.submittedAt)}</span>}
+              {ticket.submittedAt && <span>Submitted {formatDateTime(ticket.submittedAt)}</span>}
               {project && <span>Project: {project.name}</span>}
               {vendor && <span>Vendor: {vendor.tradeName}</span>}
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            {ticket.state === 'returned_to_requester' && user.id === ticket.requesterId && (
-              <button className="btn btn-primary" onClick={() => navigate(`/requests/${ticket.id}/respond`)}>
-                Respond to reviewer
-              </button>
-            )}
-            {!['data_management', 'legal', 'security'].includes(user.role) && (
-              <button className="btn btn-ghost btn-sm" onClick={() => exportTicketDocx(ticket)} title="Download as Word document">↓ DOCX</button>
-            )}
             {user.role === 'admin' && (
               <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-600)' }}
                 onClick={() => setShowDeleteConfirm(true)}>Delete</button>
@@ -632,16 +673,16 @@ export default function TicketWorkspace() {
                 </section>
               )}
 
-              {/* Pre-submission AI */}
-              {assessment && (
+              {/* Pre-submission AI — hidden for anonymized tickets; anonymization checker is the sole AI gate */}
+              {assessment && !canAnonymize && (
                 <section>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
                     <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>AI Pre-Submission Assessment</h2>
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                       <button className="btn btn-sm btn-ghost" onClick={() => exportAssessmentPdf(ticket.id, assessment, ticket.title)}>↓ Export PDF</button>
-                      {assessment.overallRisk && (
-                        <span className={`pill pill-no-dot ${assessment.overallRisk === 'low' ? 'pill-emerald' : assessment.overallRisk === 'medium' ? 'pill-amber' : 'pill-red'}`}>
-                          {assessment.overallRisk === 'high' || assessment.overallRisk === 'critical' ? '⚠ ' : ''}{assessment.overallRisk.charAt(0).toUpperCase() + assessment.overallRisk.slice(1)} Risk
+                      {effectiveRisk && (
+                        <span className={`pill pill-no-dot ${effectiveRisk === 'low' ? 'pill-emerald' : effectiveRisk === 'medium' ? 'pill-amber' : 'pill-red'}`}>
+                          {effectiveRisk === 'high' || effectiveRisk === 'critical' ? '⚠ ' : ''}{effectiveRisk.charAt(0).toUpperCase() + effectiveRisk.slice(1)} Risk
                         </span>
                       )}
                     </div>
@@ -649,8 +690,8 @@ export default function TicketWorkspace() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{
                       padding: '14px 18px',
-                      background: assessment.overallRisk === 'low' ? 'var(--emerald-50)' : 'var(--amber-50)',
-                      border: `1px solid ${assessment.overallRisk === 'low' ? '#BBF7D0' : '#FDE68A'}`,
+                      background: effectiveRisk === 'low' ? 'var(--emerald-50)' : 'var(--amber-50)',
+                      border: `1px solid ${effectiveRisk === 'low' ? '#BBF7D0' : '#FDE68A'}`,
                       borderRadius: 'var(--r-md)',
                     }}>
                       <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Executive Summary</h3>
@@ -659,7 +700,7 @@ export default function TicketWorkspace() {
                         {assessment.citations.map((c) => <CitationChip key={c.id} cite={c} />)}
                       </div>
                     </div>
-                    {assessment.findings.map((f) => {
+                    {!canAnonymize && assessment.findings.map((f) => {
                       const sev = f.severity
                       const sevColor = sev === 'critical' || sev === 'high' ? 'var(--red-700)' : sev === 'medium' ? 'var(--amber-700)' : 'var(--ink-400)'
                       return (
@@ -688,7 +729,19 @@ export default function TicketWorkspace() {
                 </section>
               )}
 
-              {!assessment && (
+              {/* Anonymization checker — shown prominently when requester declared data can be anonymized */}
+              {canAnonymize && <AnonymizationCheckCard ticket={ticket} />}
+
+              {!canAnonymize && !assessment && ticket.preAssessmentData && (
+                <section>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                    <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink-900)', margin: 0 }}>AI Pre-Submission Assessment</h2>
+                  </div>
+                  <PresubmitAssessmentView data={ticket.preAssessmentData} requestType={ticket.type} />
+                </section>
+              )}
+
+              {!canAnonymize && !assessment && !ticket.preAssessmentData && (
                 <div style={{ padding: '20px', background: 'var(--surface-1)', border: '1px dashed var(--line)', borderRadius: 'var(--r-lg)', textAlign: 'center', fontSize: 13.5, color: 'var(--ink-400)' }}>
                   No pre-submission AI assessment found for this ticket.
                 </div>
@@ -701,11 +754,6 @@ export default function TicketWorkspace() {
               </section>
             </div>
 
-            {!isMobile && (
-              <aside style={{ width: 320, flexShrink: 0 }} aria-label="Reviewer assist">
-                <ReviewerAssistPanel ticket={ticket} userRole={user.role} />
-              </aside>
-            )}
           </div>
         )}
 
@@ -713,17 +761,25 @@ export default function TicketWorkspace() {
         {wizardStep === 4 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
+            {/* Reviewer Copilot — top of Data Management step */}
+            {!isMobile && <ReviewerAssistPanel ticket={ticket} userRole={user.role} />}
+
+            {/* Anonymization verification — shown when requester declared data can be anonymized */}
+            {(ticket.payload as import('../data/types').VendorOnboardingPayload)?.questionnaire?.purposeNecessity?.canAnonymize === 'yes' && (
+              <AnonymizationCheckCard ticket={ticket} />
+            )}
+
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div>
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>Data Management Review</h2>
                 <p style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>Validate AI findings and complete the review checklist.</p>
               </div>
-              {assessment && <RiskBadge level={assessment.overallRisk} compact />}
+              {effectiveRisk && <RiskBadge level={effectiveRisk} compact />}
             </div>
 
-            {/* ── Submission Summary (collapsible) ── */}
-            {ticket.submittedAt && (
+            {/* ── Submission Summary (collapsible) — hidden when data can be anonymized since questionnaire not filled ── */}
+            {ticket.submittedAt && !canAnonymize && (
               <div className="card" style={{ padding: 0, borderColor: 'var(--emerald-300)', background: 'rgba(16,185,129,0.04)' }}>
                 <button
                   onClick={() => setSummaryOpen((o) => !o)}
@@ -744,7 +800,7 @@ export default function TicketWorkspace() {
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 2 }}>Submitted</div>
-                        <div>{formatDate(ticket.submittedAt)}</div>
+                        <div>{formatDateTime(ticket.submittedAt)}</div>
                       </div>
                       <div>
                         <div style={{ fontSize: 11, color: 'var(--ink-500)', marginBottom: 2 }}>Title</div>
@@ -791,8 +847,8 @@ export default function TicketWorkspace() {
               </div>
             )}
 
-            {/* ── AI Deep Assessment (auto-triggered) ── */}
-            <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* ── AI Deep Assessment (auto-triggered) — hidden when data can be anonymized ── */}
+            {!canAnonymize && <section style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 'var(--r-md)', background: 'var(--teal-50)', color: 'var(--teal-600)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Sparkles size={16} />
@@ -917,7 +973,7 @@ export default function TicketWorkspace() {
               )}
 
               {reviewerData && !reviewerLoading && <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />}
-            </section>
+            </section>}
 
             {/* ── Return Thread ── */}
             {ticket.returnThread.length > 0 && (
@@ -950,104 +1006,149 @@ export default function TicketWorkspace() {
               </div>
             )}
 
-            {/* ── Review Checklist with Mode Toggle ── */}
-            <div className="card" style={{ padding: '16px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <h3 style={{ fontSize: 13.5, fontWeight: 600 }}>Review Checklist</h3>
-                {canReview && (
-                  <div style={{ display: 'flex', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 2 }}>
-                    <button onClick={() => setReviewMode('manual')} style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', fontSize: 12, border: 'none', background: reviewMode === 'manual' ? 'var(--surface-0)' : 'transparent', fontWeight: reviewMode === 'manual' ? 600 : 400, cursor: 'pointer', color: 'var(--ink-800)', boxShadow: reviewMode === 'manual' ? 'var(--shadow-sm)' : 'none' }}>
-                      Manual
-                    </button>
-                    <button onClick={() => setReviewMode('ai')} style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', fontSize: 12, border: 'none', background: reviewMode === 'ai' ? 'var(--surface-0)' : 'transparent', fontWeight: reviewMode === 'ai' ? 600 : 400, cursor: 'pointer', color: 'var(--ink-800)', boxShadow: reviewMode === 'ai' ? 'var(--shadow-sm)' : 'none' }}>
-                      ✨ AI Auto-Check
+            {/* ── Review Checklist ── */}
+            {canAnonymize ? (
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Anonymization Review</h3>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    id="anon-claim-reviewed"
+                    checked={anonClaimReviewed}
+                    onChange={() => { if (canReview) setAnonClaimReviewed((v) => !v) }}
+                    disabled={!canReview}
+                    style={{ width: 15, height: 15, marginTop: 2, accentColor: 'var(--brand-600)', cursor: canReview ? 'pointer' : 'default', flexShrink: 0 }}
+                  />
+                  <label htmlFor="anon-claim-reviewed" style={{ fontSize: 13.5, color: 'var(--ink-800)', cursor: canReview ? 'pointer' : 'default' }}>
+                    Anonymization claim reviewed — I confirm the requester's anonymization claim has been verified against the uploaded document.
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="card" style={{ padding: '16px 18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <h3 style={{ fontSize: 13.5, fontWeight: 600 }}>Review Checklist</h3>
+                  {canReview && (
+                    <div style={{ display: 'flex', background: 'var(--surface-1)', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 2 }}>
+                      <button onClick={() => setReviewMode('manual')} style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', fontSize: 12, border: 'none', background: reviewMode === 'manual' ? 'var(--surface-0)' : 'transparent', fontWeight: reviewMode === 'manual' ? 600 : 400, cursor: 'pointer', color: 'var(--ink-800)', boxShadow: reviewMode === 'manual' ? 'var(--shadow-sm)' : 'none' }}>
+                        Manual
+                      </button>
+                      <button onClick={() => setReviewMode('ai')} style={{ padding: '4px 12px', borderRadius: 'var(--r-sm)', fontSize: 12, border: 'none', background: reviewMode === 'ai' ? 'var(--surface-0)' : 'transparent', fontWeight: reviewMode === 'ai' ? 600 : 400, cursor: 'pointer', color: 'var(--ink-800)', boxShadow: reviewMode === 'ai' ? 'var(--shadow-sm)' : 'none' }}>
+                        ✨ AI Auto-Check
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {reviewMode === 'ai' && canReview && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'rgba(99,102,241,0.04)', border: '1px solid var(--brand-200)', borderRadius: 'var(--r-md)', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>
+                      {checklistData
+                        ? `AI verdict generated — overall: ${checklistData.items.every((i) => i.verdict !== 'fail') ? 'PASS' : 'FAIL'}`
+                        : 'Run an AI assessment of every checklist item against the gathered evidence.'}
+                    </div>
+                    <button className="btn btn-sm" onClick={() => void generateChecklist()} disabled={checklistLoading} style={{ flexShrink: 0 }}>
+                      {checklistLoading ? '…' : checklistData ? '↺ Re-run' : '✨ Run AI Review'}
                     </button>
                   </div>
                 )}
-              </div>
-              {reviewMode === 'ai' && canReview && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', background: 'rgba(99,102,241,0.04)', border: '1px solid var(--brand-200)', borderRadius: 'var(--r-md)', marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, color: 'var(--ink-500)' }}>
-                    {checklistData
-                      ? `AI verdict generated — overall: ${checklistData.items.every((i) => i.verdict !== 'fail') ? 'PASS' : 'FAIL'}`
-                      : 'Run an AI assessment of every checklist item against the gathered evidence.'}
-                  </div>
-                  <button className="btn btn-sm" onClick={() => void generateChecklist()} disabled={checklistLoading} style={{ flexShrink: 0 }}>
-                    {checklistLoading ? '…' : checklistData ? '↺ Re-run' : '✨ Run AI Review'}
-                  </button>
-                </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {([
-                  { field: 'purposeIsClear' as const,          label: 'Purpose of data sharing is clearly stated' },
-                  { field: 'dataIsNecessary' as const,         label: 'Data included is necessary for the stated purpose' },
-                  { field: 'noExcessivePersonalData' as const, label: 'No excessive personal data beyond requirements' },
-                  { field: 'recipientIsAppropriate' as const,  label: 'Recipient is appropriate and verified' },
-                  { field: 'attachmentsReviewed' as const,     label: 'All attachments have been reviewed' },
-                ]).map(({ field, label }) => {
-                  const aiVerdict = checklistData?.items.find((i) => i.key === field)
-                  const showAI = reviewMode === 'ai' && !!aiVerdict
-                  const lockedByAIFail = reviewMode === 'ai' && aiVerdict?.verdict === 'fail'
-                  return (
-                    <div key={field} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={reviewMode === 'manual' ? manualChecklist[field] : (!!aiVerdict && aiVerdict.verdict !== 'fail')}
-                        onChange={() => { if (!canReview || lockedByAIFail || reviewMode !== 'manual') return; setManualChecklist((prev) => ({ ...prev, [field]: !prev[field] })) }}
-                        disabled={!canReview || lockedByAIFail || (reviewMode === 'ai' && !aiVerdict)}
-                        style={{ width: 15, height: 15, marginTop: 2, accentColor: 'var(--brand-600)', cursor: (canReview && !lockedByAIFail && reviewMode === 'manual') ? 'pointer' : 'default', flexShrink: 0 }}
-                      />
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: 13.5, color: 'var(--ink-800)' }}>{label}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {([
+                    { field: 'purposeIsClear' as const,          label: 'Purpose of data sharing is clearly stated' },
+                    { field: 'dataIsNecessary' as const,         label: 'Data included is necessary for the stated purpose' },
+                    { field: 'noExcessivePersonalData' as const, label: 'No excessive personal data beyond requirements' },
+                    { field: 'recipientIsAppropriate' as const,  label: 'Recipient is appropriate and verified' },
+                    { field: 'attachmentsReviewed' as const,     label: 'All attachments have been reviewed' },
+                  ]).map(({ field, label }) => {
+                    const aiVerdict = checklistData?.items.find((i) => i.key === field)
+                    const showAI = reviewMode === 'ai' && !!aiVerdict
+                    const lockedByAIFail = reviewMode === 'ai' && aiVerdict?.verdict === 'fail'
+                    return (
+                      <div key={field} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={reviewMode === 'manual' ? manualChecklist[field] : (!!aiVerdict && aiVerdict.verdict !== 'fail')}
+                          onChange={() => { if (!canReview || lockedByAIFail || reviewMode !== 'manual') return; setManualChecklist((prev) => ({ ...prev, [field]: !prev[field] })) }}
+                          disabled={!canReview || lockedByAIFail || (reviewMode === 'ai' && !aiVerdict)}
+                          style={{ width: 15, height: 15, marginTop: 2, accentColor: 'var(--brand-600)', cursor: (canReview && !lockedByAIFail && reviewMode === 'manual') ? 'pointer' : 'default', flexShrink: 0 }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <label style={{ fontSize: 13.5, color: 'var(--ink-800)' }}>{label}</label>
+                          {showAI && aiVerdict && (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0, color: aiVerdict.verdict === 'pass' ? 'var(--emerald-600)' : aiVerdict.verdict === 'warn' ? 'var(--amber-600)' : 'var(--red-600)' }}>
+                                {aiVerdict.verdict === 'pass' ? '✓' : aiVerdict.verdict === 'warn' ? '⚠' : '✕'}
+                              </span>
+                              <p style={{ fontSize: 12, color: 'var(--ink-500)', lineHeight: 1.5 }}>{aiVerdict.justification}</p>
+                            </div>
+                          )}
+                        </div>
                         {showAI && aiVerdict && (
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 4 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, flexShrink: 0, color: aiVerdict.verdict === 'pass' ? 'var(--emerald-600)' : aiVerdict.verdict === 'warn' ? 'var(--amber-600)' : 'var(--red-600)' }}>
-                              {aiVerdict.verdict === 'pass' ? '✓' : aiVerdict.verdict === 'warn' ? '⚠' : '✕'}
-                            </span>
-                            <p style={{ fontSize: 12, color: 'var(--ink-500)', lineHeight: 1.5 }}>{aiVerdict.justification}</p>
-                          </div>
+                          <span className={`pill pill-no-dot ${aiVerdict.verdict === 'pass' ? 'pill-emerald' : aiVerdict.verdict === 'warn' ? 'pill-amber' : 'pill-red'}`} style={{ fontSize: 10.5, flexShrink: 0 }}>
+                            {aiVerdict.verdict.toUpperCase()}
+                          </span>
                         )}
                       </div>
-                      {showAI && aiVerdict && (
-                        <span className={`pill pill-no-dot ${aiVerdict.verdict === 'pass' ? 'pill-emerald' : aiVerdict.verdict === 'warn' ? 'pill-amber' : 'pill-red'}`} style={{ fontSize: 10.5, flexShrink: 0 }}>
-                          {aiVerdict.verdict.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+                {reviewMode === 'ai' && checklistData && canReview && checklistData.items.some((i) => i.verdict === 'fail') && (
+                  <p style={{ marginTop: 12, fontSize: 12, color: 'var(--red-600)' }}>AI flagged failing items — switch to Manual to override.</p>
+                )}
               </div>
-              {reviewMode === 'ai' && checklistData && canReview && checklistData.items.some((i) => i.verdict === 'fail') && (
-                <p style={{ marginTop: 12, fontSize: 12, color: 'var(--red-600)' }}>AI flagged failing items — switch to Manual to override.</p>
-              )}
-            </div>
+            )}
 
-            {/* ── Attach Documents (reviewer) — 3 options ── */}
+            {/* ── Attach Documents (reviewer) ── */}
             <section>
-              <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Attach Documents</h3>
-              {/* Tab bar */}
-              <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '1px solid var(--line)', paddingBottom: 0 }}>
-                {(['upload', 'library', 'templates'] as const).map((tab) => (
-                  <button key={tab} className="btn btn-ghost btn-sm"
-                    style={{
-                      borderBottom: attachTab === tab ? '2px solid var(--brand-600)' : '2px solid transparent',
-                      borderRadius: 0, paddingBottom: 8, fontWeight: attachTab === tab ? 600 : 400,
-                      color: attachTab === tab ? 'var(--brand-700)' : 'var(--ink-500)',
-                    }}
-                    onClick={() => {
-                      setAttachTab(tab)
-                      if (tab === 'library' && libraryDocs.length === 0 && isSupabaseConfigured) {
-                        setAttachLibraryLoading(true)
-                        fetchDocuments().then((d) => setLibraryDocs(d)).finally(() => setAttachLibraryLoading(false))
-                      }
-                      if (tab === 'templates' && libraryTemplates.length === 0 && isSupabaseConfigured) {
-                        setAttachLibraryLoading(true)
-                        fetchTemplates().then((t) => setLibraryTemplates(t)).finally(() => setAttachLibraryLoading(false))
-                      }
-                    }}>
-                    {tab === 'upload' ? '↑ Upload File' : tab === 'library' ? '📁 Document Library' : '📄 Templates'}
-                  </button>
-                ))}
+              <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Attach Documents</h3>
+              {/* Segmented tab bar — centered, all options visible */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+                <div style={{ display: 'flex', border: '1px solid var(--line)', borderRadius: 'var(--r-lg)', overflow: 'hidden', background: 'var(--surface-1)', width: '100%', maxWidth: 640 }}>
+                  {([
+                    { key: 'upload', label: '↑ Upload', icon: null },
+                    { key: 'library', label: '📁 Library', icon: null },
+                    { key: 'templates', label: '📄 Templates', icon: null },
+                  ] as const).map((tab) => (
+                    <button key={tab.key}
+                      style={{
+                        flex: 1, padding: '9px 8px', border: 'none',
+                        borderRight: '1px solid var(--line)',
+                        background: attachTab === tab.key ? 'var(--surface-0)' : 'transparent',
+                        fontWeight: attachTab === tab.key ? 700 : 400,
+                        fontSize: 12.5,
+                        color: attachTab === tab.key ? 'var(--brand-700)' : 'var(--ink-500)',
+                        cursor: 'pointer',
+                        boxShadow: attachTab === tab.key ? 'inset 0 -2px 0 var(--brand-600)' : 'none',
+                        transition: 'all 0.12s',
+                      }}
+                      onClick={() => {
+                        setAttachTab(tab.key)
+                        if (tab.key === 'library' && libraryDocs.length === 0 && isSupabaseConfigured) {
+                          setAttachLibraryLoading(true)
+                          fetchDocuments().then((d) => setLibraryDocs(d)).finally(() => setAttachLibraryLoading(false))
+                        }
+                        if (tab.key === 'templates' && libraryTemplates.length === 0 && isSupabaseConfigured) {
+                          setAttachLibraryLoading(true)
+                          fetchTemplates().then((t) => setLibraryTemplates(t)).finally(() => setAttachLibraryLoading(false))
+                        }
+                      }}>
+                      {tab.label}
+                    </button>
+                  ))}
+                  {(user.role === 'data_management' || user.role === 'admin') && (
+                    <button
+                      style={{
+                        flex: 1, padding: '9px 8px', border: 'none',
+                        background: 'transparent',
+                        fontWeight: 600, fontSize: 12.5,
+                        color: 'var(--brand-700)',
+                        cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                      }}
+                      onClick={() => setShowAIDocGen(true)}>
+                      <Sparkles size={12} />✨ AI Generate
+                    </button>
+                  )}
+                </div>
               </div>
               {attachTab === 'upload' && (
                 <EvidenceUploader
@@ -1114,7 +1215,33 @@ export default function TicketWorkspace() {
                   ))}
                 </div>
               )}
+
+              {/* AI Document Generator modal */}
+              {showAIDocGen && (
+                <AIDocumentGeneratorPanel
+                  ticket={ticket}
+                  vendor={vendor ?? null}
+                  project={project ?? null}
+                  assessment={assessment}
+                  onGenerated={(att) => {
+                    setReviewerAttachments((prev) => [...prev, att])
+                    setAttachTab('upload')
+                  }}
+                  onClose={() => setShowAIDocGen(false)}
+                />
+              )}
             </section>
+
+            {/* ── Monitoring banner — DM watching ticket in legal/security review ── */}
+            {user.role === 'data_management' && ['in_legal_review', 'in_security_review'].includes(ticket.state) && (
+              <div style={{ padding: '12px 16px', background: 'var(--amber-50)', border: '1px solid #FDE68A', borderRadius: 'var(--r-md)', fontSize: 13, color: 'var(--amber-800)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 18 }}>⏳</span>
+                <div>
+                  <strong>Monitoring Mode</strong> — This ticket is under <strong>{ticket.state === 'in_legal_review' && hasParallelSecuritySlot ? 'Legal & Security' : ticket.state === 'in_legal_review' ? 'Legal' : 'Security'} Review</strong>.
+                  You can view the ticket but cannot take action until {hasParallelSecuritySlot ? 'both reviewers respond' : 'the reviewer responds'}.
+                </div>
+              </div>
+            )}
 
             {/* ── Review Comments + Action Buttons (DM only) ── */}
             {canReview && user.role === 'data_management' && (
@@ -1127,12 +1254,15 @@ export default function TicketWorkspace() {
                   <button
                     className="btn btn-primary"
                     onClick={() => void handleDMAction('approve')}
-                    disabled={dmSaving || !(reviewMode === 'manual' ? Object.values(manualChecklist).every(Boolean) : (checklistData !== null && checklistData.items.every((i) => i.verdict !== 'fail')))}
+                    disabled={dmSaving || !(canAnonymize ? anonClaimReviewed : reviewMode === 'manual' ? Object.values(manualChecklist).every(Boolean) : (checklistData !== null && checklistData.items.every((i) => i.verdict !== 'fail')))}
                   >
                     {dmSaving ? '…' : 'Approve'}
                   </button>
                   <button className="btn" onClick={() => void handleDMAction('return')} disabled={dmSaving}>
                     Return to Requester
+                  </button>
+                  <button className="btn btn-danger" onClick={() => { setRejectReason(''); setShowRejectDialog(true) }} disabled={dmSaving}>
+                    Reject
                   </button>
                   <button className="btn" style={{ color: 'var(--amber-700)', borderColor: 'rgba(217,119,6,0.4)' }} onClick={() => void handleDMAction('escalate_legal')} disabled={dmSaving}>
                     Escalate to Legal
@@ -1143,6 +1273,35 @@ export default function TicketWorkspace() {
                   <button className="btn" style={{ color: 'var(--brand-700)', borderColor: 'rgba(99,102,241,0.4)' }} onClick={() => setShowSplitDialog(true)} disabled={dmSaving}>
                     <GitBranch size={13} style={{ marginRight: 4 }} /> Split &amp; Route in Parallel
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Reject confirmation dialog */}
+            {showRejectDialog && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+                onClick={(e) => { if (e.target === e.currentTarget) setShowRejectDialog(false) }}>
+                <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: 'var(--red-700)' }}>Reject Request</h2>
+                  <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 18, lineHeight: 1.6 }}>
+                    This decision is final and will be recorded in the audit log. The requester will be notified.
+                  </p>
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--ink-700)', marginBottom: 5 }}>REJECTION REASON *</label>
+                    <textarea className="textarea" rows={4} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Explain why this request is being rejected…" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button className="btn" onClick={() => setShowRejectDialog(false)} disabled={dmSaving}>Cancel</button>
+                    <button className="btn btn-danger" disabled={dmSaving || !rejectReason.trim()}
+                      onClick={async () => {
+                        setShowRejectDialog(false)
+                        // Override reviewComment temporarily so handleDMAction records the reason
+                        setReviewComment(rejectReason)
+                        await handleDMAction('reject')
+                      }}>
+                      {dmSaving ? 'Rejecting…' : 'Confirm rejection'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1158,7 +1317,7 @@ export default function TicketWorkspace() {
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>⚖️ Legal Review</h2>
                 <p style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>Evaluate legal compliance, cross-border risks, and sensitive data handling.</p>
               </div>
-              {assessment && <RiskBadge level={assessment.overallRisk} compact />}
+              {effectiveRisk && <RiskBadge level={effectiveRisk} compact />}
             </div>
 
             {/* Return thread */}
@@ -1242,7 +1401,7 @@ export default function TicketWorkspace() {
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>🔒 Security Review</h2>
                 <p style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>Define sharing controls and assess security requirements.</p>
               </div>
-              {assessment && <RiskBadge level={assessment.overallRisk} compact />}
+              {effectiveRisk && <RiskBadge level={effectiveRisk} compact />}
             </div>
 
             {/* Return thread */}
@@ -1315,7 +1474,7 @@ export default function TicketWorkspace() {
                 <h2 style={{ fontSize: 16, fontWeight: 700 }}>Final Decision &amp; Closure</h2>
                 <p style={{ fontSize: 13.5, color: 'var(--ink-500)' }}>Complete ticket summary and audit trail.</p>
               </div>
-              <StatusPill state={ticket.state} />
+              <StatusPill state={ticket.state} reviews={ticket.reviews} />
             </div>
 
             {/* Decision banner */}
@@ -1414,12 +1573,12 @@ export default function TicketWorkspace() {
             )}
 
             {/* Risk summary */}
-            {assessment && (
+            {effectiveRisk && (
               <div className="card" style={{ padding: '16px 20px' }}>
                 <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>Risk Summary</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <RiskBadge level={assessment.overallRisk} compact />
-                  <p style={{ fontSize: 13.5, color: 'var(--ink-600)', lineHeight: 1.6, flex: 1 }}>{assessment.summary}</p>
+                  <RiskBadge level={effectiveRisk} compact />
+                  {assessment?.summary && <p style={{ fontSize: 13.5, color: 'var(--ink-600)', lineHeight: 1.6, flex: 1 }}>{assessment.summary}</p>}
                 </div>
               </div>
             )}
@@ -1575,7 +1734,6 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
   const [notes, setNotes] = useState<Record<SplitTrack, string>>({ legal: '', security: '' })
   const [files, setFiles] = useState<Record<SplitTrack, File | null>>({ legal: null, security: null })
   const [saving, setSaving] = useState(false)
-  const hasExisting = (track: SplitTrack) => ticket.reviews.some((r) => r.role === track)
   function toggle(track: SplitTrack) { setTracks((prev) => ({ ...prev, [track]: !prev[track] })) }
 
   async function confirm() {
@@ -1583,8 +1741,8 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
     setSaving(true)
     try {
       const newReviews = [...ticket.reviews]
-      if (tracks.legal && !hasExisting('legal')) newReviews.push({ role: 'legal', verdict: 'pending', reviewerId: null })
-      if (tracks.security && !hasExisting('security')) newReviews.push({ role: 'security', verdict: 'pending', reviewerId: null })
+      if (tracks.legal && !newReviews.some((r) => r.role === 'legal')) newReviews.push({ role: 'legal', verdict: 'pending', reviewerId: null })
+      if (tracks.security && !newReviews.some((r) => r.role === 'security')) newReviews.push({ role: 'security', verdict: 'pending', reviewerId: null })
 
       if (isSupabaseConfigured) {
         // Add per-team return comments
@@ -1596,7 +1754,8 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
             await uploadAttachment(ticket.id, files[track]!, 'evidence', undefined, user.id)
           }
         }
-        const updated = await transitionTicket(ticket.id, 'in_legal_review', 'Parallel split initiated')
+        const tracksEnabledRoles = (['legal', 'security'] as SplitTrack[]).filter((t) => tracks[t])
+        const updated = await transitionTicket(ticket.id, 'in_legal_review', 'Parallel split initiated', tracksEnabledRoles)
         updateTicket(ticket.id, { ...updated, reviews: newReviews })
       } else {
         if (tracks.legal && notes.legal.trim()) demoAddReturnComment(ticket.id, `[Legal] ${notes.legal}`, 'data_management', user.fullName)
@@ -1627,20 +1786,19 @@ function SplitRouteDialog({ ticket, onClose }: { ticket: import('../data/types')
             <div key={track} style={{
               border: `2px solid ${tracks[track] ? 'var(--brand-400)' : 'var(--line)'}`,
               borderRadius: 'var(--r-md)', overflow: 'hidden',
-              opacity: hasExisting(track) ? 0.6 : 1,
             }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: tracks[track] ? 'var(--brand-50)' : 'var(--surface-1)', cursor: hasExisting(track) ? 'not-allowed' : 'pointer' }}>
-                <input type="checkbox" checked={tracks[track]} disabled={hasExisting(track)} onChange={() => toggle(track)} style={{ width: 16, height: 16, accentColor: 'var(--brand-600)' }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: tracks[track] ? 'var(--brand-50)' : 'var(--surface-1)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={tracks[track]} onChange={() => toggle(track)} style={{ width: 16, height: 16, accentColor: 'var(--brand-600)' }} />
                 <div>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink-900)', textTransform: 'capitalize' }}>
-                    {track} review {hasExisting(track) && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-400)' }}>(already assigned)</span>}
+                    {track} review
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--ink-400)' }}>
                     {track === 'legal' ? 'Contract, regulatory, and legal compliance' : 'Security controls, encryption, and risk evaluation'}
                   </div>
                 </div>
               </label>
-              {tracks[track] && !hasExisting(track) && (
+              {tracks[track] && (
                 <div style={{ padding: '12px 14px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--ink-600)', marginBottom: 4, textTransform: 'uppercase' }}>
@@ -1694,14 +1852,16 @@ function SecurityReturnAction({ ticket, userName }: { ticket: import('../data/ty
   async function confirm() {
     if (!notes.trim()) return
     setSaving(true)
+    const hasParallelLegalSlot = ticket.reviews.some((r) => r.role === 'legal' && r.verdict === 'pending')
+    const returnState: TicketState = hasParallelLegalSlot ? 'in_legal_review' : 'in_data_management'
     try {
       if (isSupabaseConfigured) {
         await saveReviewDecision(ticket.id, 'security', 'return', notes, user.id)
         if (notes.trim()) await addReturnComment(ticket.id, notes, [], user.id, user.role)
-        const updated = await transitionTicket(ticket.id, 'in_data_management', notes)
+        const updated = await transitionTicket(ticket.id, returnState, notes)
         updateTicket(ticket.id, updated)
       } else {
-        updateTicket(ticket.id, { state: 'in_data_management' })
+        updateTicket(ticket.id, { state: returnState })
         if (notes.trim()) demoAddReturnComment(ticket.id, notes, 'security', userName)
       }
       showToast('Returned to Data Management.', 'success')
@@ -1743,6 +1903,113 @@ function SecurityReturnAction({ ticket, userName }: { ticket: import('../data/ty
   )
 }
 
+// ─── Anonymization Check Card ─────────────────────────────────────────────────
+
+function AnonymizationCheckCard({ ticket }: { ticket: import('../data/types').Ticket }) {
+  const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [result, setResult] = useState('')
+  const [streamText, setStreamText] = useState('')
+
+  async function runCheck() {
+    setStatus('running')
+    setStreamText('')
+    setResult('')
+
+    const attachmentNames = ticket.attachments.map((a) => a.filename).join(', ') || 'No documents uploaded'
+    const context = JSON.stringify({
+      title: ticket.title,
+      description: ticket.description,
+      attachments: ticket.attachments.map((a) => ({ name: a.filename, summary: a.extractedSummary ?? null })),
+      canAnonymizeDetails: (ticket.payload as import('../data/types').VendorOnboardingPayload)?.questionnaire?.purposeNecessity?.canAnonymizeDetails ?? '',
+    }, null, 2)
+
+    const prompt = `The requester declared that the data in this request CAN be anonymized. Your job is to verify whether the uploaded documents support this claim.
+
+Ticket context:
+${context}
+
+Uploaded documents: ${attachmentNames}
+
+Based ONLY on the document summaries and ticket context above, determine:
+1. Is there evidence in the uploaded documents that anonymization has been or can be applied?
+2. What specific anonymization techniques are mentioned (pseudonymization, k-anonymity, data masking, etc.)?
+3. Your verdict: CONFIRMED / NOT CONFIRMED / INCONCLUSIVE — and a brief reason.
+
+Be concise. 3-4 sentences max. If no documents are uploaded, state that verification requires document evidence.`
+
+    try {
+      const { streamReviewerAssist } = await import('../api/aiReviewerAssist')
+      let full = ''
+      for await (const token of streamReviewerAssist('data_management', 'requester', context, [{ role: 'user', content: prompt }])) {
+        full += token
+        setStreamText(full)
+      }
+      setResult(full)
+      setStatus('done')
+    } catch {
+      setStatus('error')
+    } finally {
+      setStreamText('')
+    }
+  }
+
+  const verdictColor = result.includes('CONFIRMED') && !result.includes('NOT CONFIRMED')
+    ? 'var(--emerald-700)'
+    : result.includes('NOT CONFIRMED')
+    ? 'var(--red-700)'
+    : 'var(--amber-700)'
+
+  return (
+    <div className="ai-surface" style={{ padding: '14px 16px', borderRadius: 'var(--r-lg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Sparkles size={14} color="var(--brand-700)" />
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-700)' }}>Anonymization Verification</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--brand-50)', color: 'var(--brand-800)', fontWeight: 600 }}>
+          Requester declared: data can be anonymized
+        </span>
+      </div>
+      <p style={{ fontSize: 12.5, color: 'var(--ink-500)', marginBottom: 12, lineHeight: 1.5 }}>
+        AI will analyze uploaded documents to verify whether the anonymization claim is substantiated by evidence.
+      </p>
+      {status === 'idle' && (
+        <button className="btn btn-ai btn-sm" onClick={() => void runCheck()}>
+          <Sparkles size={12} style={{ marginRight: 6 }} /> Run Anonymization Check
+        </button>
+      )}
+      {status === 'running' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--brand-100)', borderTop: '2.5px solid var(--brand-600)', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} aria-hidden="true" />
+            <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--brand-700)' }}>Analyzing documents…</span>
+          </div>
+          {streamText && (
+            <div style={{ fontSize: 13, color: 'var(--ink-500)', whiteSpace: 'pre-wrap', lineHeight: 1.65, padding: '8px 10px', background: 'var(--brand-50)', borderRadius: 'var(--r-md)' }}>
+              {streamText}
+              <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'var(--brand-700)', verticalAlign: 'text-bottom', marginLeft: 1, animation: 'blink 1s step-end infinite' }} />
+            </div>
+          )}
+        </div>
+      )}
+      {status === 'done' && result && (
+        <div>
+          <div style={{ fontSize: 13, color: 'var(--ink-800)', whiteSpace: 'pre-wrap', lineHeight: 1.65, padding: '10px 12px', background: 'var(--brand-50)', border: '1px solid var(--brand-100)', borderRadius: 'var(--r-md)', marginBottom: 8 }}>
+            {result}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: verdictColor }}>
+              {result.includes('CONFIRMED') && !result.includes('NOT CONFIRMED') ? '✓ Anonymization Confirmed' : result.includes('NOT CONFIRMED') ? '✗ Not Confirmed' : '⚠ Inconclusive'}
+            </span>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { setStatus('idle'); setResult('') }}>Re-run</button>
+          </div>
+        </div>
+      )}
+      {status === 'error' && (
+        <div style={{ fontSize: 12.5, color: 'var(--red-700)' }}>AI check failed. <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => void runCheck()}>Retry</button></div>
+      )}
+    </div>
+  )
+}
+
 // ─── Review Actions ───────────────────────────────────────────────────────────
 
 function ReviewActions({ ticket, role, userName }: { ticket: import('../data/types').Ticket; role: 'data_management' | 'legal' | 'security'; userName: string }) {
@@ -1752,8 +2019,21 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const hasParallelSecuritySlot = ticket.reviews.some((r) => r.role === 'security' && r.verdict === 'pending')
+
   function nextState(verdict: 'approve' | 'return' | 'reject'): TicketState {
-    if (verdict === 'return') return 'returned_to_requester'
+    if (verdict === 'return') {
+      if (role === 'legal') {
+        // If security still has a pending parallel review slot, hand off to them
+        if (hasParallelSecuritySlot) return 'in_security_review'
+        return 'in_data_management'
+      }
+      if (role === 'security') {
+        const hasParallelLegalSlot = ticket.reviews.some((r) => r.role === 'legal' && r.verdict === 'pending')
+        return hasParallelLegalSlot ? 'in_legal_review' : 'in_data_management'
+      }
+      return 'returned_to_requester'
+    }
     if (verdict === 'reject') return 'rejected'
     const cfg = getWorkflowSettings()
     if (role === 'data_management') {
@@ -1796,22 +2076,22 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
   return (
     <>
       <LoadingOverlay show={saving} label="Saving decision…" />
-      <button className="btn" onClick={() => { setPending('return'); setNotes('') }}>Return to requester</button>
-      <button className="btn btn-danger" onClick={() => { setPending('reject'); setNotes('') }}>Reject</button>
-      <button className="btn btn-primary" onClick={() => { setPending('approve'); setNotes('') }}>Approve</button>
+      <button className="btn" onClick={() => { setPending('return'); setNotes('') }}>
+        {role === 'legal' || role === 'security' ? '↩ Return to Data Management' : 'Return to requester'}
+      </button>
 
       {pending && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={(e) => { if (e.target === e.currentTarget) setPending(null) }}>
           <div style={{ background: 'var(--surface-0)', borderRadius: 'var(--r-lg)', padding: '28px 28px 24px', width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-              {pending === 'approve' ? 'Confirm approval' : pending === 'return' ? 'Return to requester' : 'Reject request'}
+              {pending === 'approve' ? 'Confirm approval' : pending === 'return' ? (role === 'legal' || role === 'security' ? 'Return to Data Management' : 'Return to requester') : 'Reject request'}
             </h2>
             <p style={{ fontSize: 13.5, color: 'var(--ink-500)', marginBottom: 18, lineHeight: 1.6 }}>
               {pending === 'approve'
                 ? `Approving will advance the ticket to ${nextState('approve').replace(/_/g, ' ')}.`
                 : pending === 'return'
-                ? 'Provide clear instructions so the requester knows what to address.'
+                ? (role === 'legal' || role === 'security' ? 'Provide your findings so Data Management can complete the review.' : 'Provide clear instructions so the requester knows what to address.')
                 : 'This decision is final and will be recorded in the audit log.'}
             </p>
             <div style={{ marginBottom: 20 }}>
@@ -1824,10 +2104,10 @@ function ReviewActions({ ticket, role, userName }: { ticket: import('../data/typ
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => { setPending(null); setNotes('') }} disabled={saving}>Cancel</button>
               <button
-                className={`btn ${pending === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+                className={`btn ${pending === 'approve' ? 'btn-primary' : pending === 'return' ? 'btn-primary' : 'btn-danger'}`}
                 onClick={() => void confirmDecision()}
                 disabled={saving || (pending === 'return' && !notes.trim())}>
-                {saving ? 'Saving…' : pending === 'approve' ? 'Confirm approval' : pending === 'return' ? 'Send return' : 'Confirm rejection'}
+                {saving ? 'Saving…' : pending === 'approve' ? 'Confirm approval' : pending === 'return' ? (role === 'legal' || role === 'security' ? 'Confirm return to DM' : 'Send return') : 'Confirm rejection'}
               </button>
             </div>
           </div>

@@ -6,7 +6,7 @@ import { useStore } from '../hooks/useStore'
 import { REQUEST_TYPE_LABELS, PRE_ASSESSMENTS } from '../data/seed'
 import { StatusPill, EmptyState, RiskBadge } from '../components/primitives'
 import { ConfirmDialog } from '../components/overlays'
-import { formatDate } from '../lib/utils'
+import { formatDateTime } from '../lib/utils'
 import { isDataverseConfigured as isSupabaseConfigured } from '../lib/dataverse'
 import { deleteTicket as apiDeleteTicket } from '../api/tickets'
 import type { ReactNode } from 'react'
@@ -35,9 +35,9 @@ export default function Dashboard() {
   // Role-specific ticket slices
   const myTickets = tickets.filter((t) => {
     if (user.role === 'requester') return t.requesterId === user.id
-    if (user.role === 'data_management') return ['in_data_management', 'submitted'].includes(t.state)
+    if (user.role === 'data_management') return ['in_data_management', 'submitted', 'in_legal_review', 'in_security_review', 'approved', 'rejected'].includes(t.state)
     if (user.role === 'legal') return t.state === 'in_legal_review'
-    if (user.role === 'security') return t.state === 'in_security_review'
+    if (user.role === 'security') return t.state === 'in_security_review' || (t.state === 'in_legal_review' && t.reviews.some((r) => r.role === 'security' && r.verdict === 'pending'))
     return true
   })
 
@@ -131,6 +131,7 @@ export default function Dashboard() {
                   <tbody>
                     {myTickets.slice(0, 8).map((t, i) => {
                       const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === t.id)
+                      const riskLevel = ((t.preAssessmentData as Record<string, unknown> | undefined)?.risk_level as string | undefined ?? assessment?.overallRisk) as import('../data/types').RiskLevel | undefined
                       return (
                         <tr key={t.id}
                           style={{ borderBottom: i < Math.min(myTickets.length, 8) - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
@@ -143,13 +144,13 @@ export default function Dashboard() {
                             <div style={{ fontSize: 11.5, color: 'var(--ink-400)', marginTop: 2 }}>{REQUEST_TYPE_LABELS[t.type]}</div>
                           </td>
                           <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            <StatusPill state={t.state} size="sm" />
+                            <StatusPill state={t.state} size="sm" reviews={t.reviews} />
                           </td>
                           <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                            {assessment ? <RiskBadge level={assessment.overallRisk} compact /> : <span style={{ color: 'var(--ink-300)', fontSize: 12 }}>—</span>}
+                            {riskLevel ? <RiskBadge level={riskLevel} compact /> : <span style={{ color: 'var(--ink-300)', fontSize: 12 }}>—</span>}
                           </td>
                           <td style={{ padding: '14px 20px', fontSize: 12.5, color: 'var(--ink-400)', whiteSpace: 'nowrap' }}>
-                            {t.submittedAt ? formatDate(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
+                            {t.submittedAt ? formatDateTime(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
                           </td>
                           {user.role === 'admin' && (
                             <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
@@ -253,6 +254,7 @@ export default function Dashboard() {
                 <tbody>
                   {myTickets.slice(0, 10).map((t, i) => {
                     const assessment = PRE_ASSESSMENTS.find((a) => a.ticketId === t.id)
+                    const riskLevel = ((t.preAssessmentData as Record<string, unknown> | undefined)?.risk_level as string | undefined ?? assessment?.overallRisk) as import('../data/types').RiskLevel | undefined
                     return (
                       <tr key={t.id}
                         style={{ borderBottom: i < Math.min(myTickets.length, 10) - 1 ? '1px solid var(--line)' : 'none', cursor: 'pointer' }}
@@ -262,13 +264,13 @@ export default function Dashboard() {
                         <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ink-500)', whiteSpace: 'nowrap' }}>{t.id}</td>
                         <td style={{ padding: '14px 20px', fontWeight: 500, color: 'var(--ink-900)' }}>{t.title}</td>
                         <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                          <StatusPill state={t.state} size="sm" />
+                          <StatusPill state={t.state} size="sm" reviews={t.reviews} />
                         </td>
                         <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
-                          {assessment ? <RiskBadge level={assessment.overallRisk} compact /> : <span style={{ color: 'var(--ink-300)' }}>—</span>}
+                          {riskLevel ? <RiskBadge level={riskLevel} compact /> : <span style={{ color: 'var(--ink-300)' }}>—</span>}
                         </td>
                         <td style={{ padding: '14px 20px', fontSize: 12.5, color: 'var(--ink-400)', whiteSpace: 'nowrap' }}>
-                          {t.submittedAt ? formatDate(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
+                          {t.submittedAt ? formatDateTime(t.submittedAt) : <span style={{ color: 'var(--ink-300)' }}>Draft</span>}
                         </td>
                         {user.role === 'admin' && (
                           <td style={{ padding: '14px 20px', whiteSpace: 'nowrap' }}>
