@@ -50,7 +50,8 @@ function SupabaseSignIn() {
     setError(null)
     setLoading(true)
     try {
-      await apiSignIn(email, password)
+      const user = await apiSignIn(email, password)
+      authStore.setState({ user, isSignedIn: true, loading: false })
       navigate('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sign-in failed')

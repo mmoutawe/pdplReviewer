@@ -1,42 +1,12 @@
-import {
-  dvList, dvCreate, dvUpdate, dvDelete, dvUploadFile, dvDownloadFile,
-  T,
-} from '../lib/dataverse'
+import { apiGet, apiPostForm, apiPatch, apiDelete } from '../lib/api'
 import type { ProjectDocument } from '../data/types'
 
-type DvRow = Record<string, unknown>
-
-function toProjectDocument(r: DvRow): ProjectDocument {
-  return {
-    id:                 r['pdplr_projectdocumentid'] as string,
-    project_id:         (r['pdplr_projectid'] as string) ?? null,
-    vendor_id:          (r['pdplr_vendorref'] as string) ?? null,
-    parent_document_id: (r['pdplr_parentdocumentid'] as string) ?? null,
-    title:              r['pdplr_title'] as string,
-    document_type:      r['pdplr_documenttype'] as ProjectDocument['document_type'],
-    version:            r['pdplr_version'] as number ?? 1,
-    status:             r['pdplr_status'] as ProjectDocument['status'],
-    file_path:          r['pdplr_filepath'] as string,
-    file_type:          r['pdplr_filetype'] as string,
-    file_size:          r['pdplr_filesize'] as number ?? 0,
-    description:        (r['pdplr_description'] as string) ?? null,
-    tags:               r['pdplr_tags'] ? (r['pdplr_tags'] as string).split(',').filter(Boolean) : null,
-    effective_date:     (r['pdplr_effectivedate'] as string) ?? null,
-    expiry_date:        (r['pdplr_expirydate'] as string) ?? null,
-    uploaded_by:        (r['pdplr_uploadedby'] as string) ?? null,
-    created_at:         r['createdon'] as string,
-    updated_at:         r['modifiedon'] as string,
-  }
-}
-
 export async function fetchDocuments(filters?: { projectId?: string; vendorId?: string }): Promise<ProjectDocument[]> {
-  const parts: string[] = []
-  if (filters?.projectId) parts.push(`pdplr_projectid eq '${filters.projectId}'`)
-  if (filters?.vendorId)  parts.push(`pdplr_vendorref eq '${filters.vendorId}'`)
-
-  const query = `$orderby=createdon desc${parts.length ? `&$filter=${parts.join(' and ')}` : ''}`
-  const rows = await dvList<DvRow>(T.projectDocuments, query)
-  return rows.map(toProjectDocument)
+  const params = new URLSearchParams()
+  if (filters?.projectId) params.set('projectId', filters.projectId)
+  if (filters?.vendorId)  params.set('vendorId',  filters.vendorId)
+  const qs = params.toString()
+  return apiGet<ProjectDocument[]>(`/documents${qs ? `?${qs}` : ''}`)
 }
 
 export async function uploadDocument(
@@ -48,38 +18,31 @@ export async function uploadDocument(
     project_id?: string
     vendor_id?: string
   },
-  uploadedBy?: string,
+  _uploadedBy?: string,
 ): Promise<ProjectDocument> {
-  const docId = crypto.randomUUID()
-
-  const row = await dvCreate<DvRow>(T.projectDocuments, {
-    pdplr_projectdocumentid: docId,
-    pdplr_title:             meta.title,
-    pdplr_documenttype:      meta.document_type,
-    pdplr_description:       meta.description ?? null,
-    pdplr_projectid:         meta.project_id ?? null,
-    pdplr_vendorref:          meta.vendor_id ?? null,
-    pdplr_filepath:          `${meta.project_id ?? 'general'}/${docId}/${file.name}`,
-    pdplr_filetype:          file.type || 'application/octet-stream',
-    pdplr_filesize:          file.size,
-    pdplr_version:           1,
-    pdplr_status:            'draft',
-    pdplr_uploadedby:        uploadedBy ?? null,
-  })
-
-  await dvUploadFile(T.projectDocuments, docId, 'pdplr_filecontent', file)
-
-  return toProjectDocument(row)
+  const form = new FormData()
+  form.append('file', file)
+  form.append('title', meta.title)
+  form.append('document_type', meta.document_type)
+  if (meta.description) form.append('description', meta.description)
+  if (meta.project_id)  form.append('project_id',  meta.project_id)
+  if (meta.vendor_id)   form.append('vendor_id',   meta.vendor_id)
+  return apiPostForm<ProjectDocument>('/documents', form)
 }
 
 export async function downloadDocument(doc: ProjectDocument): Promise<void> {
-  await dvDownloadFile(T.projectDocuments, doc.id, 'pdplr_filecontent', doc.file_path.split('/').pop() ?? doc.title)
+  const a = document.createElement('a')
+  a.href = `/api/documents/${doc.id}/download`
+  a.download = doc.title
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
 }
 
 export async function deleteDocument(doc: ProjectDocument): Promise<void> {
-  await dvDelete(T.projectDocuments, doc.id)
+  await apiDelete(`/documents/${doc.id}`)
 }
 
 export async function updateDocumentStatus(id: string, status: ProjectDocument['status']): Promise<void> {
-  await dvUpdate(T.projectDocuments, id, { pdplr_status: status })
+  await apiPatch(`/documents/${id}`, { status })
 }

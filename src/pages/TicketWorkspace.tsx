@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
 import { Sparkles, AlertTriangle, RefreshCw, RotateCcw, Pencil, Send, Search, FileText, CheckCircle, XCircle, GitBranch, CornerUpLeft } from 'lucide-react'
 import { useMobile } from '../hooks/useMobile'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -771,7 +771,6 @@ export default function TicketWorkspace() {
                 </div>
               )}
 
-              {/* ── Document Analysis — Findings ── */}
               {(() => {
                 const aiFindings = (reviewerData?.document_findings as Array<{ title: string; detail: string; severity: string }> | undefined) ?? []
                 const seedFindings = assessment?.findings ?? []
@@ -810,11 +809,11 @@ export default function TicketWorkspace() {
                     </div>
                   </div>
                 )
-              })()}
+              })() as ReactNode}
 
               {/* ── Controller / Processor Roles ── */}
-              {reviewerData?.controller_processor_roles && !reviewerLoading && (
-                <ControllerProcessorRolesCard data={reviewerData.controller_processor_roles} />
+              {!!reviewerData?.controller_processor_roles && !reviewerLoading && (
+                <ControllerProcessorRolesCard data={reviewerData.controller_processor_roles as Record<string, unknown>} />
               )}
 
               {reviewerData && !reviewerLoading && <ReviewerAssessmentView data={reviewerData} requestType={ticket.type} />}

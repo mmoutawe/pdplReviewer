@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       pdplreviewer
+      POSTGRES_USER:     pdpl
+      POSTGRES_PASSWORD: ${PGPASSWORD:-change-me-in-production}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pdpl -d pdplreviewer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST:       db
+      PGPORT:       5432
+      PGDATABASE:   pdplreviewer
+      PGUSER:       pdpl
+      PGPASSWORD:   ${PGPASSWORD:-change-me-in-production}
+      JWT_SECRET:   ${JWT_SECRET:-change-me-in-production}
+      PORT:         3000
+      APP_URL:      ${APP_URL:-http://localhost}
+      UPLOAD_DIR:   /app/uploads
+      # OpenAI — set one pair in your .env file
+      OPENAI_API_KEY:            ${OPENAI_API_KEY:-}
+      OPENAI_DEPLOYMENT:         ${OPENAI_DEPLOYMENT:-gpt-4o}
+      AZURE_OPENAI_KEY:          ${AZURE_OPENAI_KEY:-}
+      AZURE_OPENAI_ENDPOINT:     ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_DEPLOYMENT:   ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_API_VERSION:  ${AZURE_OPENAI_API_VERSION:-2025-04-01-preview}
+    volumes:
+      - uploads:/app/uploads
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-80}:80"
+
+volumes:
+  pg_data:
+  uploads:

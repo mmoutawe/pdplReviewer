@@ -1,45 +1,52 @@
-import { dvList, dvGet, T, toPolicy, toVendor, toProject, toAuditEvent } from '../lib/dataverse'
+import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api'
 import type { Policy, Vendor, Project, AuditEvent } from '../data/types'
 
-type DvRow = Record<string, unknown>
-
-// ── Policies ──────────────────────────────────────────────
+// ── Policies ──────────────────────────────────────────────────────────────────
 
 export async function fetchPolicies(): Promise<Policy[]> {
-  const rows = await dvList<DvRow>(T.policies, '$orderby=pdplr_code asc')
-  return rows.map(toPolicy)
+  return apiGet<Policy[]>('/policies')
 }
 
 export async function fetchPolicyById(id: string): Promise<Policy | null> {
-  const row = await dvGet<DvRow>(T.policies, id)
-  return row ? toPolicy(row) : null
+  try { return await apiGet<Policy>(`/policies/${id}`) }
+  catch { return null }
 }
 
-// ── Vendors ───────────────────────────────────────────────
+export async function createPolicy(p: Omit<Policy, 'id' | 'embeddingsBuilt' | 'citationCount'>): Promise<Policy> {
+  return apiPost<Policy>('/policies', p)
+}
+
+export async function updatePolicy(id: string, p: Partial<Policy>): Promise<Policy> {
+  return apiPatch<Policy>(`/policies/${id}`, p)
+}
+
+export async function deletePolicy(id: string): Promise<void> {
+  await apiDelete(`/policies/${id}`)
+}
+
+// ── Vendors ───────────────────────────────────────────────────────────────────
 
 export async function fetchVendors(): Promise<Vendor[]> {
-  const rows = await dvList<DvRow>(T.vendors, '$orderby=pdplr_tradename asc')
-  return rows.map(toVendor)
+  return apiGet<Vendor[]>('/vendors')
 }
 
 export async function fetchVendorById(id: string): Promise<Vendor | null> {
-  const row = await dvGet<DvRow>(T.vendors, id)
-  return row ? toVendor(row) : null
+  try { return await apiGet<Vendor>(`/vendors/${id}`) }
+  catch { return null }
 }
 
-// ── Projects ──────────────────────────────────────────────
+// ── Projects ──────────────────────────────────────────────────────────────────
 
 export async function fetchProjects(): Promise<Project[]> {
-  const rows = await dvList<DvRow>(T.projects, '$orderby=pdplr_name asc')
-  return rows.map(toProject)
+  return apiGet<Project[]>('/projects')
 }
 
 export async function fetchProjectById(id: string): Promise<Project | null> {
-  const row = await dvGet<DvRow>(T.projects, id)
-  return row ? toProject(row) : null
+  try { return await apiGet<Project>(`/projects/${id}`) }
+  catch { return null }
 }
 
-// ── Audit ─────────────────────────────────────────────────
+// ── Audit Events ──────────────────────────────────────────────────────────────
 
 export async function fetchAuditEvents(filters?: {
   targetId?: string
@@ -47,14 +54,11 @@ export async function fetchAuditEvents(filters?: {
   action?: string
   limit?: number
 }): Promise<AuditEvent[]> {
-  const parts: string[] = []
-  if (filters?.targetId) parts.push(`pdplr_targetid eq '${filters.targetId}'`)
-  if (filters?.actorId)  parts.push(`pdplr_actorid eq '${filters.actorId}'`)
-  if (filters?.action)   parts.push(`pdplr_action eq '${filters.action}'`)
-
-  const filter = parts.length ? `&$filter=${parts.join(' and ')}` : ''
-  const top    = `&$top=${filters?.limit ?? 500}`
-
-  const rows = await dvList<DvRow>(T.auditEvents, `$orderby=pdplr_ts desc${filter}${top}`)
-  return rows.map(toAuditEvent)
+  const params = new URLSearchParams()
+  if (filters?.targetId) params.set('targetId', filters.targetId)
+  if (filters?.actorId)  params.set('actorId',  filters.actorId)
+  if (filters?.action)   params.set('action',   filters.action)
+  if (filters?.limit)    params.set('limit',    String(filters.limit))
+  const qs = params.toString()
+  return apiGet<AuditEvent[]>(`/audit-events${qs ? `?${qs}` : ''}`)
 }

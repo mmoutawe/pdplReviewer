@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { apiStreamMessages } from '../lib/api'
 
 export interface AssistMessage {
   role: 'user' | 'assistant'
@@ -11,7 +10,7 @@ const ROLE_GUIDANCE: Record<string, string> = {
   legal:           'You are advising the Legal Reviewer focused on PDPL articles, cross-border transfers, contracts, DPAs, and lawful basis.',
   security:        'You are advising the Security Reviewer focused on encryption, access control, hosting, ISO 27001, PDPL Article 19 controls.',
   admin:           'You are advising the Admin who has oversight of the full workflow.',
-  requester:       'You are helping the requester understand the reviewer\'s request and what evidence to provide.',
+  requester:       "You are helping the requester understand the reviewer's request and what evidence to provide.",
 }
 
 export const ROLE_INITIAL_MESSAGES: Record<string, string> = {
@@ -22,12 +21,7 @@ export const ROLE_INITIAL_MESSAGES: Record<string, string> = {
   requester:       'I can help you understand what the reviewer is asking for and guide you on what evidence or information to provide.',
 }
 
-function buildSystemPrompt(
-  reviewerRole: string,
-  replierRole: string,
-  ticketContext: string,
-  seed?: string,
-): string {
+function buildSystemPrompt(reviewerRole: string, replierRole: string, ticketContext: string, seed?: string): string {
   const guidance = ROLE_GUIDANCE[reviewerRole] ?? ROLE_GUIDANCE.data_management
   return `${guidance}
 
@@ -44,10 +38,6 @@ Your responsibilities:
 5. Never invent facts that aren't in the context. Flag missing information.`
 }
 
-/**
- * Streams a reviewer assist response token-by-token.
- * Pass the full conversation history (excluding the UI-only initial greeting).
- */
 export async function* streamReviewerAssist(
   reviewerRole: string,
   replierRole: string,
@@ -55,52 +45,11 @@ export async function* streamReviewerAssist(
   history: AssistMessage[],
   seed?: string,
 ): AsyncGenerator<string> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
-
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: buildSystemPrompt(reviewerRole, replierRole, ticketContext, seed) },
-        ...history,
-      ],
-      stream: true,
-
-      max_completion_tokens: 1024,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
-  }
-
-  const reader  = response.body!.getReader()
-  const decoder = new TextDecoder()
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const chunk = decoder.decode(value, { stream: true })
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue
-      const jsonStr = line.slice(6).trim()
-      if (jsonStr === '[DONE]') return
-      try {
-        const data  = JSON.parse(jsonStr)
-        const token = data.choices?.[0]?.delta?.content
-        if (token) yield token
-      } catch {
-        // malformed SSE chunk — skip
-      }
-    }
-  }
+  yield* apiStreamMessages(
+    [
+      { role: 'system', content: buildSystemPrompt(reviewerRole, replierRole, ticketContext, seed) },
+      ...history,
+    ],
+    1024,
+  )
 }

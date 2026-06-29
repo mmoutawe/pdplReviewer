@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const viteEnv = (import.meta as any).env as Record<string, string | undefined>
+import { apiStreamMessages } from '../lib/api'
 
 export interface PolicyChatMessage {
   role: 'user' | 'assistant'
@@ -10,8 +9,6 @@ export interface PolicySection {
   title: string
   content: string
 }
-
-// ── Role system prompts ───────────────────────────────────────────────────────
 
 const ROLE_SYSTEM_PROMPTS: Record<string, string> = {
   requester: `You are a PDPL compliance advisor helping business users at a Saudi FinTech company understand document sharing requirements. You provide clear, practical guidance on:
@@ -74,8 +71,6 @@ const RAG_SUFFIX = `
 
 IMPORTANT: You are strictly limited to answering questions about PDPL compliance, data protection, and company internal policies. If a question is outside this scope, politely redirect the user to the relevant department. Always respond in the same language the user writes in.`
 
-// ── Keyword-based policy retrieval ───────────────────────────────────────────
-
 export function retrievePolicySections(
   query: string,
   policies: Array<{ code: string; title: string; summary: string; body: string; status: string }>,
@@ -111,8 +106,6 @@ function buildSystemPrompt(role: string, policySections: PolicySection[]): strin
   return `${guidance}${ragBlock}${RAG_SUFFIX}`
 }
 
-// ── Initial greeting per role ─────────────────────────────────────────────────
-
 export const POLICY_CHAT_INITIAL_MESSAGES: Record<string, string> = {
   requester:       'Hi! I can help you understand PDPL requirements around document sharing, consent, and data subject rights. What would you like to know?',
   data_management: 'Data management assist ready. Ask me about data classification, minimization techniques, or review checklists.',
@@ -122,59 +115,16 @@ export const POLICY_CHAT_INITIAL_MESSAGES: Record<string, string> = {
   external:        'Welcome! I can answer general questions about PDPL compliance and what it means for organizations working with us. How can I help?',
 }
 
-// ── Streaming chat ────────────────────────────────────────────────────────────
-
 export async function* streamPolicyChat(
   role: string,
   history: PolicyChatMessage[],
   policySections: PolicySection[],
 ): AsyncGenerator<string> {
-  const apiKey     = viteEnv.VITE_AZURE_OPENAI_KEY
-  const base       = viteEnv.VITE_AZURE_OPENAI_ENDPOINT?.replace(/\/$/, '')
-  const deployment = viteEnv.VITE_AZURE_OPENAI_DEPLOYMENT ?? 'gpt-5.1-chat'
-  if (!apiKey) throw new Error('VITE_AZURE_OPENAI_KEY not set')
-  if (!base)   throw new Error('VITE_AZURE_OPENAI_ENDPOINT not set')
-
-  const url = `${base}/openai/deployments/${deployment}/chat/completions?api-version=2025-04-01-preview`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: buildSystemPrompt(role, policySections) },
-        ...history,
-      ],
-      stream: true,
-
-      max_completion_tokens: 1024,
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Azure OpenAI error ${response.status}: ${err}`)
-  }
-
-  const reader  = response.body!.getReader()
-  const decoder = new TextDecoder()
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const chunk = decoder.decode(value, { stream: true })
-    for (const line of chunk.split('\n')) {
-      if (!line.startsWith('data: ')) continue
-      const jsonStr = line.slice(6).trim()
-      if (jsonStr === '[DONE]') return
-      try {
-        const data  = JSON.parse(jsonStr)
-        const token = data.choices?.[0]?.delta?.content
-        if (token) yield token
-      } catch {
-        // malformed SSE chunk — skip
-      }
-    }
-  }
+  yield* apiStreamMessages(
+    [
+      { role: 'system', content: buildSystemPrompt(role, policySections) },
+      ...history,
+    ],
+    1024,
+  )
 }
