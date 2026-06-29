@@ -319,21 +319,46 @@ function RenderControllerProcessorRoles({ value }: { value: CPRoles }) {
   )
 }
 
+function normalizeApprovalGuidance(value: unknown): ApprovalDecision | null {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const v = value as Record<string, unknown>
+    if (typeof v.recommendation === 'string' || typeof v.rationale === 'string') {
+      return { recommendation: String(v.recommendation ?? ''), rationale: String(v.rationale ?? '') }
+    }
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const lower = value.toLowerCase()
+    const rec = lower.includes('escalate-legal') || lower.includes('escalate legal') ? 'escalate-legal'
+      : lower.includes('escalate-security') || lower.includes('escalate security') ? 'escalate-security'
+      : lower.includes('return') ? 'return'
+      : lower.includes('reject') ? 'reject'
+      : 'approve'
+    return { recommendation: rec, rationale: value }
+  }
+  return null
+}
+
 function sectionContent(key: string, value: unknown): ReactNode {
-  if ((key === 'approval_guidance' || key === 'approval_decision') && typeof value === 'object' && value !== null)
-    return <RenderApproval value={value as ApprovalDecision} />
+  if (key === 'approval_guidance' || key === 'approval_decision') {
+    const normalized = normalizeApprovalGuidance(value)
+    return normalized ? <RenderApproval value={normalized} /> : null
+  }
   if (key === 'compliance_checks' && Array.isArray(value))
     return <RenderComplianceChecks value={value as ComplianceCheck[]} />
   if (key === 'risk_assessment' && Array.isArray(value) && value.length > 0 && typeof (value as unknown[])[0] === 'object')
     return <RenderRiskAssessment value={value as RiskItem[]} />
+  if (key === 'risk_assessment' && Array.isArray(value))
+    return <RenderBulletList value={value.map(String)} />
   if (key === 'controller_processor_roles' && typeof value === 'object' && value !== null && !Array.isArray(value))
     return <RenderControllerProcessorRoles value={value as CPRoles} />
   if (key === 'recommendations')
     return <RenderRecommendations value={value} />
   if (Array.isArray(value))
-    return <RenderBulletList value={value as string[]} />
+    return <RenderBulletList value={(value as unknown[]).map((v) => typeof v === 'string' ? v : JSON.stringify(v))} />
   if (typeof value === 'string')
     return <p style={{ fontSize: 13.5, color: 'var(--ink-800)', margin: 0, lineHeight: 1.65 }}>{value}</p>
+  if (typeof value === 'object' && value !== null)
+    return <p style={{ fontSize: 13.5, color: 'var(--ink-800)', margin: 0, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{JSON.stringify(value, null, 2)}</p>
   return null
 }
 

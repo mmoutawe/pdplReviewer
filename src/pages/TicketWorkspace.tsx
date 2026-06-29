@@ -78,6 +78,9 @@ function getDefaultWizardStep(state: TicketState): number {
 
 type SplitTrack = 'legal' | 'security'
 
+// Per-ticket reviewer-assessment cache — survives route navigation within the same browser session
+const _reviewerDataCache: Record<string, Record<string, unknown>> = {}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function TicketWorkspace() {
@@ -92,7 +95,9 @@ export default function TicketWorkspace() {
   const [wizardStep, setWizardStep] = useState(() =>
     ticket ? getDefaultWizardStep(ticket.state) : 3
   )
-  const [reviewerData, setReviewerData] = useState<Record<string, unknown> | null>(null)
+  const [reviewerData, setReviewerData] = useState<Record<string, unknown> | null>(() =>
+    ticket?.id ? (_reviewerDataCache[ticket.id] ?? null) : null
+  )
   const [reviewerLoading, setReviewerLoading] = useState(false)
   const [reviewerError, setReviewerError] = useState<string | null>(null)
   const [checklistData, setChecklistData] = useState<ChecklistResult | null>(null)
@@ -120,6 +125,8 @@ export default function TicketWorkspace() {
   const [libraryTemplates, setLibraryTemplates] = useState<ReviewerTemplate[]>([])
   const [attachLibraryLoading, setAttachLibraryLoading] = useState(false)
   const [evaluatingEntryId, setEvaluatingEntryId] = useState<string | null>(null)
+  // Local AI scores keyed by entry ID — survive ticket polling refreshes
+  const [aiScores, setAiScores] = useState<Record<string, { score: number; reasoning: string }>>({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [threadReplying, setThreadReplying] = useState(false)
 
@@ -145,9 +152,9 @@ export default function TicketWorkspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticket?.state])
 
-  // Reset AI assessment data when navigating to a different ticket
+  // When switching tickets, restore from cache (keeps results stable across navigation)
   useEffect(() => {
-    setReviewerData(null)
+    setReviewerData(ticket?.id ? (_reviewerDataCache[ticket.id] ?? null) : null)
     setReviewerError(null)
   }, [ticket?.id])
 
@@ -165,7 +172,10 @@ export default function TicketWorkspace() {
       returnThread: ticket.returnThread, tags: ticket.tags,
       attachments: attachmentContext.length > 0 ? attachmentContext : undefined,
     })
-      .then((data) => { setReviewerData(data) })
+      .then((data) => {
+        if (ticket?.id) _reviewerDataCache[ticket.id] = data
+        setReviewerData(data)
+      })
       .catch((err) => { setReviewerError(err instanceof Error ? err.message : 'Failed to generate reviewer assessment.') })
       .finally(() => { setReviewerLoading(false) })
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -232,6 +242,7 @@ export default function TicketWorkspace() {
         returnThread: ticket.returnThread, tags: ticket.tags,
         attachments: attachmentContext.length > 0 ? attachmentContext : undefined,
       })
+      if (ticket?.id) _reviewerDataCache[ticket.id] = data
       setReviewerData(data)
     } catch (err) {
       setReviewerError(err instanceof Error ? err.message : 'Failed to generate reviewer assessment.')
@@ -331,11 +342,8 @@ export default function TicketWorkspace() {
         ticketContext: `${ticket.title}: ${ticket.description ?? ''}`,
         attachments: ticket.attachments.filter((a) => entry.attachmentIds?.includes(a.id)).map((a) => ({ filename: a.filename, extractedSummary: a.extractedSummary })),
       })
-      updateTicket(ticket.id, {
-        returnThread: ticket.returnThread.map((e) =>
-          e.id === entryId ? { ...e, aiScore: { score: result.overall_score, reasoning: result.summary } } : e
-        ),
-      })
+      // Store in local state — survives polling refreshes that would overwrite ticket.returnThread
+      setAiScores((prev) => ({ ...prev, [entryId]: { score: result.overall_score, reasoning: result.summary } }))
       showToast('AI evaluation complete.', 'success')
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'AI evaluation failed.', 'error')
@@ -449,7 +457,7 @@ export default function TicketWorkspace() {
                     <h3 style={{ fontSize: 14, fontWeight: 600 }}>Reviewer Feedback</h3>
                   </div>
                   <CommentThread
-                    entries={ticket.returnThread}
+                    entries={ticket.returnThread.map((e) => aiScores[e.id] ? { ...e, aiScore: aiScores[e.id] } : e)}
                     attachments={[...ticket.attachments, ...requesterAttachments]}
                     readOnly
                   />
@@ -646,7 +654,7 @@ export default function TicketWorkspace() {
                     </h2>
                   </div>
                   <CommentThread
-                    entries={ticket.returnThread}
+                    entries={ticket.returnThread.map((e) => aiScores[e.id] ? { ...e, aiScore: aiScores[e.id] } : e)}
                     attachments={ticket.attachments}
                     readOnly={false}
                     onReply={async (msg) => {
@@ -858,7 +866,7 @@ export default function TicketWorkspace() {
                   <p style={{ fontSize: 12, color: 'var(--ink-400)', margin: 0 }}>AI-generated compliance analysis for this ticket</p>
                 </div>
                 {reviewerData && !reviewerLoading && (
-                  <button className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { setReviewerData(null); void generateReviewerAI() }}><RefreshCw size={12} /> Regenerate</button>
+                  <button className="btn btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { if (ticket?.id) delete _reviewerDataCache[ticket.id]; setReviewerData(null); void generateReviewerAI() }}><RefreshCw size={12} /> Regenerate</button>
                 )}
               </div>
               {reviewerLoading && (

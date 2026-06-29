@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Building2 } from 'lucide-react'
 import { vendorById, TICKETS } from '../data/seed'
 import { EmptyState } from '../components/primitives'
+import { fetchVendors } from '../api/vendors'
+import { isDataverseConfigured } from '../lib/dataverse'
+import type { Vendor } from '../data/types'
 import { RiskMeter } from '../components/forms'
 import { formatDate, riskColor } from '../lib/utils'
 import type { ProjectDocumentType, ProjectDocumentStatus } from '../data/types'
@@ -102,7 +105,17 @@ function UploadVersionDialog({ docTitle, onClose, onUpload }: {
 export default function VendorProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const v = vendorById(id ?? '')
+  const [v, setV] = useState<Vendor | undefined>(vendorById(id ?? ''))
+  const [dvLoading, setDvLoading] = useState(isDataverseConfigured && !vendorById(id ?? ''))
+
+  useEffect(() => {
+    if (!isDataverseConfigured || !id || vendorById(id)) return
+    setDvLoading(true)
+    fetchVendors()
+      .then((vs) => setV(vs.find((x) => x.id === id)))
+      .catch(() => {})
+      .finally(() => setDvLoading(false))
+  }, [id])
 
   useEffect(() => { document.title = v ? `${v.tradeName} — PDPL Reviewer` : 'Vendor — PDPL Reviewer' }, [v])
 
@@ -141,6 +154,7 @@ export default function VendorProfile() {
     })
   }
 
+  if (dvLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading vendor…</div>
   if (!v) return <EmptyState title="Vendor not found" icon={<Building2 size={26} color="var(--teal-600)" />}
     action={<button className="btn btn-primary" onClick={() => navigate('/vendors')}>Back to vendors</button>} />
 

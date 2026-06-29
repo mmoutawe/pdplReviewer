@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Folder } from 'lucide-react'
 import { projectById, TICKETS, userById } from '../data/seed'
 import { EmptyState, StatusPill, SLAIndicator, Avatar } from '../components/primitives'
+import { fetchProjects } from '../api/projects'
+import { isDataverseConfigured } from '../lib/dataverse'
+import type { Project } from '../data/types'
 import { formatDate } from '../lib/utils'
 import type { ProjectDocumentType, ProjectDocumentStatus } from '../data/types'
 import { DOCUMENT_TYPE_LABELS, DOCUMENT_STATUS_LABELS } from '../data/types'
@@ -98,7 +101,17 @@ function UploadVersionDialog({ docTitle, onClose, onUpload }: {
 export default function ProjectProfile() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const proj = projectById(id ?? '')
+  const [proj, setProj] = useState<Project | undefined>(projectById(id ?? ''))
+  const [dvLoading, setDvLoading] = useState(isDataverseConfigured && !projectById(id ?? ''))
+
+  useEffect(() => {
+    if (!isDataverseConfigured || !id || projectById(id)) return
+    setDvLoading(true)
+    fetchProjects()
+      .then((ps) => setProj(ps.find((x) => x.id === id)))
+      .catch(() => {})
+      .finally(() => setDvLoading(false))
+  }, [id])
 
   useEffect(() => { document.title = proj ? `${proj.name} — PDPL Reviewer` : 'Project — PDPL Reviewer' }, [proj])
 
@@ -136,6 +149,7 @@ export default function ProjectProfile() {
     })
   }
 
+  if (dvLoading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-400)', fontSize: 14 }}>Loading project…</div>
   if (!proj) return <EmptyState title="Project not found" icon={<Folder size={26} color="var(--teal-600)" />}
     action={<button className="btn btn-primary" onClick={() => navigate('/projects')}>Back to projects</button>} />
 
