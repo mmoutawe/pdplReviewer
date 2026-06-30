@@ -17,7 +17,9 @@ export default function ExternalRegister() {
   const { token } = useParams<{ token: string }>()
   const navigate = useNavigate()
 
-  const invite = !isSupabaseConfigured ? externalInviteByToken(token ?? '') : null
+  // Always check demo seed first — demo tokens work even when Dataverse is configured
+  const demoInvite = externalInviteByToken(token ?? '')
+  const invite = demoInvite ?? null
   const isExpired = invite ? new Date(invite.expiresAt) < new Date() : false
   const isUsed = invite?.status === 'registered' || invite?.status === 'revoked'
 
@@ -36,18 +38,23 @@ export default function ExternalRegister() {
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirm) { setError('Passwords do not match.'); return }
 
+    // Demo invite found — always use demo registration path
+    if (demoInvite) {
+      setSaving(true)
+      setTimeout(() => {
+        registerExternalUser(demoInvite, fullName)
+        navigate('/requests', { replace: true })
+      }, 600)
+      return
+    }
+
+    // Live mode: no demo invite found — Dataverse / Azure Function path not yet implemented
     if (isSupabaseConfigured) {
-      // TODO: call Azure Function to create Entra B2B user
       setError('Live registration not yet configured. Contact your data management team.')
       return
     }
 
-    if (!invite) { setError('Invalid invite token.'); return }
-    setSaving(true)
-    setTimeout(() => {
-      registerExternalUser(invite, fullName)
-      navigate('/requests', { replace: true })
-    }, 600)
+    setError('Invalid invite token.')
   }
 
   return (
@@ -62,7 +69,7 @@ export default function ExternalRegister() {
 
         <div className="card" style={{ padding: '32px 36px' }}>
           {/* No invite found */}
-          {!isSupabaseConfigured && !invite && (
+          {!invite && (
             <StatusBlock
               icon="✕"
               title="Invalid invitation"
@@ -91,7 +98,7 @@ export default function ExternalRegister() {
           )}
 
           {/* Valid — show registration form */}
-          {((invite && !isExpired && !isUsed) || isSupabaseConfigured) && (
+          {invite && !isExpired && !isUsed && (
             <>
               <div style={{ textAlign: 'center', marginBottom: 24 }}>
                 <div style={{ fontSize: 32, marginBottom: 10 }}>🔓</div>
