@@ -1159,7 +1159,14 @@ export default function TicketWorkspace() {
                         cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                       }}
-                      onClick={() => setShowAIDocGen(true)}>
+                      onClick={() => {
+                        setShowAIDocGen(true)
+                        // Pre-fetch templates for the Fill Template tab if not loaded yet
+                        if (isSupabaseConfigured && libraryTemplates.length === 0) {
+                          setAttachLibraryLoading(true)
+                          fetchTemplates().then((t) => setLibraryTemplates(t)).finally(() => setAttachLibraryLoading(false))
+                        }
+                      }}>
                       <Sparkles size={12} />✨ AI Generate
                     </button>
                   )}
@@ -1238,6 +1245,7 @@ export default function TicketWorkspace() {
                   vendor={vendor ?? null}
                   project={project ?? null}
                   assessment={assessment}
+                  templates={libraryTemplates}
                   onGenerated={(att) => {
                     setReviewerAttachments((prev) => [...prev, att])
                     setAttachTab('upload')
